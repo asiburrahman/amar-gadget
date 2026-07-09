@@ -8,6 +8,29 @@ const redis = redisUrl && redisToken
   ? new Redis({ url: redisUrl, token: redisToken })
   : null;
 
+/**
+ * Extracts the real client IP address securely, prioritizing proxy headers 
+ * from Vercel, Cloudflare, and standard load balancers.
+ */
+export function getClientIp(headers: Headers): string {
+  const cfConnectingIp = headers.get("cf-connecting-ip");
+  if (cfConnectingIp) return cfConnectingIp;
+
+  const vercelIp = headers.get("x-vercel-forwarded-for");
+  if (vercelIp) return vercelIp;
+
+  const xForwardedFor = headers.get("x-forwarded-for");
+  if (xForwardedFor) {
+    const ips = xForwardedFor.split(",").map((ip) => ip.trim());
+    if (ips[0]) return ips[0];
+  }
+
+  const xRealIp = headers.get("x-real-ip");
+  if (xRealIp) return xRealIp;
+
+  return "127.0.0.1";
+}
+
 export async function rateLimit(ip: string, limit = 100, windowInSeconds = 60) {
   if (!redis) {
     if (process.env.NODE_ENV === "production") {
