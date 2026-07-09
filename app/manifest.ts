@@ -1,0 +1,1 @@
+import { MetadataRoute } from "next"; export default function manifest(): MetadataRoute.Manifest { return { name: "Amar Gadget", short_name: "AmarGadget", start_url: "/", display: "standalone" }; }

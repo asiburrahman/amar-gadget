@@ -1,0 +1,1 @@
+export default function Page({ params }: { params: { slug: string } }) { return <div>Product: {params.slug}</div>; }
