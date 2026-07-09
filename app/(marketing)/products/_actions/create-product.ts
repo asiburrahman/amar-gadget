@@ -35,6 +35,19 @@ export async function createProductAction(
   }
 
   try {
+    // Production sanity check: Verify Category exists to avoid constraint crashes
+    const categoryExists = await prisma.category.findUnique({
+      where: { id: validated.data.categoryId },
+    });
+
+    if (!categoryExists) {
+      return {
+        success: false,
+        message: "Validation failed",
+        errors: { categoryId: ["Selected category does not exist"] },
+      };
+    }
+
     await prisma.product.create({
       data: {
         ...validated.data,
