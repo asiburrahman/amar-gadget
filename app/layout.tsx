@@ -5,19 +5,19 @@ import "./globals.css";
 
 const fontSans = Geist({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-geist-sans",
   display: "swap",
 });
 
 const fontInter = Inter({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-inter-sans",
   display: "swap",
 });
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-geist-mono",
   display: "swap",
 });
 
