@@ -109,34 +109,48 @@ export async function processOrderCheckout({
 
 ---
 
-## Phase 3: Secure JWT & RBAC Middleware
-Handle identity validation, HTTP-only JWT verification, and Role-Based Access Control (RBAC) securely in Next.js middleware.
+## Phase 3: Secure JWT & RBAC Middleware (Proxy)
+Handle identity validation, HTTP-only JWT verification, and Role-Based Access Control (RBAC) securely in Next.js 16 edge proxies.
 
 ### Step-by-Step Implementation:
-1. Intercept incoming requests using Next.js Edge Middleware.
+1. Intercept incoming requests using the Next.js 16 `proxy.ts` file convention.
 2. Read JWT tokens stored exclusively in `httpOnly` secure cookies.
-3. Validate claims using the dynamic key-verification mechanism (e.g. using `jose`).
+3. Validate claims using the dynamic key-verification mechanism (e.g. using `jose`), guarding against runtime execution when `JWT_SECRET` is missing.
 4. Reject access for endpoints requesting higher roles than the current payload possesses.
 
-### Real Code Example (middleware.ts):
+### Real Code Example (proxy.ts):
 ```typescript
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const JWT_SECRET_KEY = new TextEncoder().encode(process.env.JWT_SECRET);
+const isBuildTime =
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.SKIP_ENV_VALIDATION === "true";
 
-export async function middleware(request: NextRequest) {
+// Hard-crash at runtime if JWT_SECRET is not configured
+if (!isBuildTime && !process.env.JWT_SECRET) {
+  throw new Error("❌ JWT_SECRET environment variable is missing at runtime!");
+}
+
+const JWT_SECRET_KEY = new TextEncoder().encode(
+  process.env.JWT_SECRET || "fallback-secret-for-build-purposes-only-32chars"
+);
+
+export async function proxy(request: NextRequest) {
   const token = request.cookies.get("auth_token")?.value;
+  const path = request.nextUrl.pathname;
 
   if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    if (path.startsWith("/admin") || path.startsWith("/member") || path.startsWith("/user")) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+    return NextResponse.next();
   }
 
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET_KEY);
     const userRole = payload.role as string;
-    const path = request.nextUrl.pathname;
 
     // Check RBAC paths
     if (path.startsWith("/admin") && userRole !== "ADMIN") {
@@ -151,7 +165,9 @@ export async function middleware(request: NextRequest) {
     response.headers.set("x-user-role", userRole);
     return response;
   } catch (error) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("auth_token");
+    return response;
   }
 }
 

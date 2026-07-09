@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
+const isBuildTime =
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.SKIP_ENV_VALIDATION === "true";
+
+// Hard-crash at runtime if JWT_SECRET is not configured
+if (!isBuildTime && !process.env.JWT_SECRET) {
+  throw new Error("❌ JWT_SECRET environment variable is missing at runtime!");
+}
+
 const JWT_SECRET_KEY = new TextEncoder().encode(
   process.env.JWT_SECRET || "fallback-secret-for-build-purposes-only-32chars"
 );
@@ -21,7 +30,7 @@ export async function proxy(request: NextRequest) {
     const { payload } = await jwtVerify(token, JWT_SECRET_KEY);
     const userRole = payload.role as string;
 
-    // Role-Based Access Control Checks
+    // Strict Role-Based Access Control Checks
     if (path.startsWith("/admin") && userRole !== "ADMIN") {
       return NextResponse.redirect(new URL("/unauthorized", request.url));
     }
