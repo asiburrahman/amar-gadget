@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface CartItem {
   id: string;
@@ -51,16 +51,29 @@ export const useCartStore = create<CartState>()(
   )
 );
 
-// Hydration helper hook to prevent SSR hydration errors in Next.js
+/**
+ * Hydration helper hook to prevent SSR hydration errors in Next.js.
+ * Utilizes a React ref to store the selector, preventing infinite render loops
+ * caused by inline anonymous selector functions.
+ */
 export function useHydratedStore<T, F>(
   store: (selector: (state: T) => F) => F,
   selector: (state: T) => F
 ): F | undefined {
   const [data, setData] = useState<F>();
 
+  // Hold the selector in a mutable ref to prevent execution loops on dependency updates
+  const selectorRef = useRef(selector);
+  
   useEffect(() => {
-    setData(store(selector));
-  }, [store, selector]);
+    selectorRef.current = selector;
+  });
+
+  useEffect(() => {
+    // Safely retrieve the current selector value once on mount
+    const value = store((state) => selectorRef.current(state));
+    setData(value);
+  }, [store]);
 
   return data;
 }
