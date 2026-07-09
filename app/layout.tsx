@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, JetBrains_Mono, Inter } from "next/font/google";
 import "@/config/env"; // Enforce environment validation on bootstrap
 import "./globals.css";
 
@@ -15,9 +15,9 @@ const fontInter = Inter({
   display: "swap",
 });
 
-const fontMono = Geist_Mono({
+const fontMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-geist-mono",
+  variable: "--font-jetbrains-mono",
   display: "swap",
 });
 
