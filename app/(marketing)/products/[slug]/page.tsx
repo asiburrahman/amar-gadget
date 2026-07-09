@@ -1,5 +1,13 @@
 import { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { cache } from "react";
+
+// Cache database fetch to avoid duplicate queries between generateMetadata and Page render
+const getProduct = cache(async (id: string) => {
+  return prisma.product.findUnique({
+    where: { id },
+  });
+});
 
 export async function generateMetadata({
   params,
@@ -7,10 +15,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-
-  const product = await prisma.product.findUnique({
-    where: { id: slug },
-  });
+  const product = await getProduct(slug);
 
   if (!product) return {};
 
@@ -31,10 +36,7 @@ export default async function ProductDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-
-  const product = await prisma.product.findUnique({
-    where: { id: slug },
-  });
+  const product = await getProduct(slug);
 
   if (!product) {
     return (
@@ -44,7 +46,6 @@ export default async function ProductDetailPage({
     );
   }
 
-  // Render structured schema data (JSON-LD) for search crawlers
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
