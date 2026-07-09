@@ -1,7 +1,7 @@
 @theme {
   --font-sans: var(--font-geist-sans), var(--font-inter-sans), system-ui, sans-serif;
   --font-inter: var(--font-inter-sans), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), monospace;
+  --font-mono: var(--font-jetbrains-mono), monospace;
 
   /* Responsive font sizing using fluid CSS clamp */
   --text-xs: clamp(0.75rem, 0.72rem + 0.15vw, 0.8rem);
