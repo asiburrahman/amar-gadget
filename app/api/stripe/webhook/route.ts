@@ -30,12 +30,19 @@ export async function POST(req: Request) {
   if (event.type === "payment_intent.succeeded") {
     const paymentIntent = event.data.object as Stripe.PaymentIntent;
 
-    // Idempotent order processing
+    // Retrieve order by paymentIntentId
     const existingOrder = await prisma.order.findFirst({
       where: { paymentIntentId: paymentIntent.id },
     });
 
-    if (existingOrder && existingOrder.status !== "PAID") {
+    // Handle race condition: Webhook arrives before client order creation transaction commits.
+    // Returning 404 tells Stripe the resource is missing, prompting automatic retries.
+    if (!existingOrder) {
+      console.warn(`⚠️ Order not found for paymentIntent: ${paymentIntent.id}. Triggering Stripe retry.`);
+      return NextResponse.json({ error: "Order not found yet, retrying..." }, { status: 404 });
+    }
+
+    if (existingOrder.status !== "PAID") {
       await prisma.order.update({
         where: { id: existingOrder.id },
         data: { status: "PAID" },
