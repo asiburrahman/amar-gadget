@@ -36,7 +36,7 @@ export default function RootLayout({
       lang="en"
       className={`${fontSans.variable} ${fontInter.variable} ${fontMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-200">
+      <body className="min-h-full flex flex-col bg-background text-foreground font-sans transition-colors duration-200">
         {children}
       </body>
     </html>
