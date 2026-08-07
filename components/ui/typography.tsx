@@ -67,7 +67,7 @@ export function H4({ children, className, ...props }: HeadingProps) {
 export function P({ children, className, ...props }: ParagraphProps) {
   return (
     <p
-      className={cn("leading-relaxed [&:not(:first-child)]:mt-6 font-inter text-base", className)}
+      className={cn("text-base leading-relaxed [&:not(:first-child)]:mt-6 font-inter", className)}
       {...props}
     >
       {children}
