@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, JetBrains_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "@/config/env"; // Enforce environment validation on bootstrap
-import "./globals.css";
+import "@/styles/globals.css";
 
 const fontSans = Geist({
   subsets: ["latin"],
@@ -15,7 +15,7 @@ const fontInter = Inter({
   display: "swap",
 });
 
-const fontMono = JetBrains_Mono({
+const fontMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains-mono",
   display: "swap",
@@ -36,9 +36,10 @@ export default function RootLayout({
       lang="en"
       className={`${fontSans.variable} ${fontInter.variable} ${fontMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground font-sans transition-colors duration-200">
+      <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-200">
         {children}
       </body>
     </html>
   );
 }
+

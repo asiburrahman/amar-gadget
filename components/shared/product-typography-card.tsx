@@ -19,7 +19,7 @@ export function ProductTypographyCard({
 }: ProductCardProps) {
   const CardContent = (
     <>
-      <div className="aspect-square relative w-full overflow-hidden rounded bg-muted">
+      <div className="relative aspect-square w-full overflow-hidden rounded bg-muted" style={{ position: 'relative' }}>
         <Image
           src={imageUrl}
           alt={title}
