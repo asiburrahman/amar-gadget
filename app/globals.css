@@ -9,6 +9,9 @@
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
   --color-muted: hsl(var(--muted));
+  --color-border: hsl(var(--border));
+  --color-electro-yellow: #fed700;
+  --color-electro-dark: #333e48;
 }
 
 body {

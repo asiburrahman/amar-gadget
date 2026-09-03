@@ -1,17 +1,24 @@
 :root {
   --background: 0 0% 100%;
-  --foreground: 222.2 47.4% 11.2%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --muted: 210 40% 96.1%;
+  --foreground: 207 19% 24%; /* #333e48 */
+  --muted-foreground: 215 16% 47%;
+  --primary: 49 100% 50%; /* Electro Yellow #fed700 */
+  --primary-foreground: 207 19% 24%; /* Dark text on yellow */
+  --muted: 210 20% 96%;
+  --border: 210 14% 89%;
+  --accent-yellow: #fed700;
+  --dark-charcoal: #333e48;
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
+  --background: 222 84% 5%;
   --foreground: 210 40% 98%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20% 65%;
+  --primary: 49 100% 50%;
+  --primary-foreground: 207 19% 24%;
+  --muted: 217 33% 18%;
+  --border: 217 33% 20%;
+  --accent-yellow: #fed700;
+  --dark-charcoal: #ffffff;
 }
+
