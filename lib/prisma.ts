@@ -11,17 +11,25 @@ const databaseUrl =
   "postgresql://db_owner:dummy_password@ep-dummy-pooler.c-9.us-east-1.aws.neon.tech/neondb";
 
 // Instantiate the PrismaNeon adapter directly with the connection string config object
-const adapter = new PrismaNeon({ connectionString: databaseUrl });
+const createPrismaClient = () => {
+  try {
+    const adapter = new PrismaNeon({ connectionString: databaseUrl });
+    return new PrismaClient({
+      adapter,
+      log:
+        process.env.NODE_ENV === "development"
+          ? ["query", "warn", "error"]
+          : ["error"],
+    });
+  } catch (error) {
+    console.error("PrismaNeon initialization fallback:", error);
+    return new PrismaClient({
+      log: ["error"],
+    });
+  }
+};
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "warn", "error"]
-        : ["error"],
-  });
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
