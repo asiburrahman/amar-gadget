@@ -8,11 +8,19 @@ nixPkgs = ["nodejs_20", "openssl"]
 cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["npx prisma generate", "npm run build"]
+cmds = [
+  "npx prisma generate",
+  "npm run build",
+  "mkdir -p .next/standalone/.next",
+  "cp -r .next/static .next/standalone/.next/static",
+  "cp -r public .next/standalone/public"
+]
 
 [start]
-cmd = "npm run start"
+cmd = "node .next/standalone/server.js"
 
 [variables]
 NODE_ENV = "production"
+PORT = "3000"
+HOSTNAME = "0.0.0.0"
 SKIP_ENV_VALIDATION = "1"
