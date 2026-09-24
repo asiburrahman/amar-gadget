@@ -1,19 +1,18 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaNeonHttp } from "@prisma/adapter-neon";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Fallback dummy connection string for build-time static analysis
+// Fallback connection string
 const databaseUrl =
   process.env.DATABASE_URL ||
-  "postgresql://db_owner:dummy_password@ep-dummy-pooler.c-9.us-east-1.aws.neon.tech/neondb";
+  "postgresql://neondb_owner:npg_XcFmCt0vhko4@ep-blue-frog-atpqk11x-pooler.c-9.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require";
 
-// Instantiate the PrismaNeon adapter directly with the connection string config object
 const createPrismaClient = () => {
   try {
-    const adapter = new PrismaNeon({ connectionString: databaseUrl });
+    const adapter = new PrismaNeonHttp(databaseUrl, {});
     return new PrismaClient({
       adapter,
       log:
@@ -22,7 +21,7 @@ const createPrismaClient = () => {
           : ["error"],
     });
   } catch (error) {
-    console.error("PrismaNeon initialization fallback:", error);
+    console.error("PrismaNeonHttp initialization fallback:", error);
     return new PrismaClient({
       log: ["error"],
     });
@@ -34,3 +33,4 @@ export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = createPrismaClient();
 }
+
