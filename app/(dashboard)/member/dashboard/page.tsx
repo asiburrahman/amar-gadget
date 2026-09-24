@@ -13,14 +13,16 @@ export default async function SellerDashboardPage() {
   const isBlocked = seller ? seller.sellerStatus === "BLOCKED" : false;
   const isPending = seller ? seller.sellerStatus === "PENDING" : false;
 
-  // Fetch seller's products
-  const products = await prisma.product.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      category: { select: { name: true } },
-    },
-    take: 10,
-  });
+  // Fetch seller's products (Filtered strictly by seller's own sellerId)
+  const products = seller
+    ? await prisma.product.findMany({
+        where: { sellerId: seller.id },
+        orderBy: { createdAt: "desc" },
+        include: {
+          category: { select: { name: true } },
+        },
+      })
+    : [];
 
   const totalProducts = products.length;
   const approvedCount = products.filter((p) => p.status === "APPROVED").length;

@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { createProduct, getCategories, getBrands } from "@/server/actions/product/product-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function AddProductPage() {
   const router = useRouter();
+  const { user } = useAuth();
 
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
@@ -23,6 +25,7 @@ export default function AddProductPage() {
     brandId: "",
   });
 
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -40,6 +43,25 @@ export default function AddProductPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMsg("Image file size must be less than 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      setImagePreview(result);
+      setFormData((prev) => ({ ...prev, imageUrl: result }));
+      setErrorMsg("");
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -47,6 +69,8 @@ export default function AddProductPage() {
     setSuccessMsg("");
 
     try {
+      const sellerId = user?.id || "seller-demo-id";
+
       const result = await createProduct(
         {
           name: formData.name,
@@ -56,11 +80,11 @@ export default function AddProductPage() {
           stock: parseInt(formData.stock, 10),
           imageUrl: formData.imageUrl || undefined,
           images: formData.imageUrl ? [formData.imageUrl] : [],
-          categoryId: formData.categoryId || (categories[0]?.id || "default-cat"),
+          categoryId: formData.categoryId || (categories[0]?.id || ""),
           brandId: formData.brandId || undefined,
           isFeatured: false,
         },
-        "vendor-demo-id"
+        sellerId
       );
 
       if (result.success) {
@@ -138,8 +162,9 @@ export default function AddProductPage() {
           </div>
 
           <div>
-            <label className="font-bold block mb-1">Category</label>
+            <label className="font-bold block mb-1">Category *</label>
             <select
+              required
               name="categoryId"
               value={formData.categoryId}
               onChange={handleChange}
@@ -160,7 +185,7 @@ export default function AddProductPage() {
               onChange={handleChange}
               className="w-full h-10 px-3 rounded-md border border-input bg-background text-xs font-semibold"
             >
-              <option value="">Select Brand</option>
+              <option value="">Select Brand (Optional)</option>
               {brands.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
@@ -168,14 +193,38 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        <div>
-          <label className="font-bold block mb-1">Product Image URL</label>
-          <Input
-            name="imageUrl"
-            placeholder="e.g. https://images.unsplash.com/photo-..."
-            value={formData.imageUrl}
-            onChange={handleChange}
-          />
+        {/* Direct Image File Upload Section */}
+        <div className="space-y-2 border-t border-border pt-3">
+          <label className="font-bold block">Upload Product Image *</label>
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageFileChange}
+              className="block w-full text-xs text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-primary file:text-primary-foreground hover:file:opacity-90 cursor-pointer"
+            />
+
+            {(imagePreview || formData.imageUrl) && (
+              <div className="relative w-20 h-20 rounded-xl bg-white border border-border p-1 overflow-hidden shrink-0 flex items-center justify-center">
+                <img
+                  src={imagePreview || formData.imageUrl}
+                  alt="Product preview"
+                  className="w-full h-full object-contain rounded-lg"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2">
+            <span className="text-[11px] text-muted-foreground">Or paste direct Image URL:</span>
+            <Input
+              name="imageUrl"
+              placeholder="https://..."
+              value={formData.imageUrl}
+              onChange={handleChange}
+              className="mt-1"
+            />
+          </div>
         </div>
 
         <div>
@@ -191,7 +240,7 @@ export default function AddProductPage() {
         </div>
 
         <Button type="submit" disabled={loading} variant="default" className="w-full h-11 font-bold text-xs">
-          {loading ? "Submitting Product..." : "Submit Product For Review"}
+          {loading ? "Submitting Product..." : "Submit Product For Admin Approval"}
         </Button>
       </form>
     </div>
