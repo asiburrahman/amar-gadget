@@ -76,10 +76,14 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Login error:", error);
     return NextResponse.json(
-      { success: false, message: "Internal server error during login." },
+      { 
+        success: false, 
+        message: "Internal server error during login.",
+        detail: error?.message || String(error) 
+      },
       { status: 500 }
     );
   }

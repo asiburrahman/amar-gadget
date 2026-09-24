@@ -59,10 +59,14 @@ export async function POST(req: Request) {
       email: newUser.email,
       message: "Account created! A 6-digit OTP code has been sent to your email.",
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Registration error:", error);
     return NextResponse.json(
-      { success: false, message: "Internal server error during registration." },
+      { 
+        success: false, 
+        message: "Internal server error during registration.",
+        detail: error?.message || String(error)
+      },
       { status: 500 }
     );
   }
