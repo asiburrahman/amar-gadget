@@ -111,10 +111,18 @@ export async function getProductBySlug(slug: string) {
   }
 }
 
-export async function createProduct(input: CreateProductInput, sellerId: string) {
+export async function createProduct(input: CreateProductInput, sellerId?: string) {
   try {
-    const seller = await prisma.user.findUnique({ where: { id: sellerId } });
-    if (seller && seller.sellerStatus !== "APPROVED") {
+    let targetSeller = sellerId ? await prisma.user.findUnique({ where: { id: sellerId } }) : null;
+    if (!targetSeller) {
+      targetSeller = await prisma.user.findFirst({ where: { role: "MEMBER" } });
+    }
+
+    if (!targetSeller) {
+      return { success: false, error: "No active seller account found in system." };
+    }
+
+    if (targetSeller.sellerStatus !== "APPROVED") {
       return {
         success: false,
         error: "Your seller account is currently pending Admin Approval or suspended. You cannot submit products until approved.",
@@ -136,14 +144,15 @@ export async function createProduct(input: CreateProductInput, sellerId: string)
         images: validated.images || [],
         categoryId: validated.categoryId,
         brandId: validated.brandId || null,
-        sellerId,
+        sellerId: targetSeller.id,
         status: "PENDING_APPROVAL",
         isFeatured: validated.isFeatured || false,
       },
     });
 
     revalidatePath("/products");
-    revalidatePath("/member/products");
+    revalidatePath("/member/dashboard");
+    revalidatePath("/admin");
     revalidatePath("/admin/products");
 
     return { success: true, data: product };
