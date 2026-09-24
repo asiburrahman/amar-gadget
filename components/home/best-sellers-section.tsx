@@ -2,139 +2,135 @@
 
 import React from "react";
 import Link from "next/link";
-import { useCartStore } from "@/stores/cart-store";
-import { ShoppingCart } from "@/components/icons/ShoppingCart";
-import { Star } from "@/components/icons/Star";
+import { ProductCard } from "@/components/shared/product-card";
 
-export const BestSellersSection: React.FC = () => {
-  const addItem = useCartStore((state) => state.addItem);
+interface ProductItem {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  discountPrice?: number | null;
+  stock: number;
+  imageUrl?: string;
+  category?: string;
+  rating?: number;
+}
 
-  const bestSellers = [
+interface BestSellersSectionProps {
+  products?: ProductItem[];
+}
+
+export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products = [] }) => {
+  // Fallback items if database products not yet loaded
+  const defaultProducts: ProductItem[] = [
     {
       id: "bs-1",
       category: "Tablets",
-      title: "Tablet Slim Air 10.5 Inch WiFi 128GB",
-      price: 520.00,
-      rating: 5,
-      imageUrl: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=300&auto=format&fit=crop&q=80",
+      name: "Apple iPad Air 11-Inch M2 Chip 256GB WiFi",
+      description: "Stunning Liquid Retina display with M2 power",
+      price: 88000,
+      discountPrice: 82500,
+      stock: 12,
+      rating: 4.8,
+      imageUrl: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=600&auto=format&fit=crop&q=80",
     },
     {
       id: "bs-2",
       category: "Laptops",
-      title: "Notebook Pro 15 M2 Metal Body Ultra",
-      price: 1200.00,
-      rating: 5,
-      imageUrl: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300&auto=format&fit=crop&q=80",
+      name: 'Apple MacBook Air 15" M3 Chip 16GB / 512GB',
+      description: "Liquid Retina display with 18-hour battery life",
+      price: 182000,
+      discountPrice: 174900,
+      stock: 8,
+      rating: 4.9,
+      imageUrl: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=600&auto=format&fit=crop&q=80",
     },
     {
       id: "bs-3",
       category: "Accessories",
-      title: "Ultra Speed USB 3.0 Flash Drive 128GB",
-      price: 110.00,
-      rating: 4,
-      imageUrl: "https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?w=300&auto=format&fit=crop&q=80",
+      name: "Logitech MX Master 3S Wireless Performance Mouse",
+      description: "8K DPI track-on-glass optical sensor",
+      price: 13900,
+      discountPrice: 12500,
+      stock: 14,
+      rating: 4.9,
+      imageUrl: "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=600&auto=format&fit=crop&q=80",
     },
     {
       id: "bs-4",
       category: "Audio",
-      title: "Active Noise Canceling Studio Wireless",
-      price: 79.00,
-      rating: 5,
-      imageUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&auto=format&fit=crop&q=80",
+      name: "Sony WH-1000XM5 Noise Canceling Headphones",
+      description: "Industry-leading noise canceling headphones",
+      price: 38500,
+      discountPrice: 34900,
+      stock: 15,
+      rating: 4.9,
+      imageUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
     },
     {
       id: "bs-5",
-      category: "Smartwatches",
-      title: "SmartWatch Active 2 Heart Rate Monitor",
-      price: 170.00,
-      rating: 5,
-      imageUrl: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=300&auto=format&fit=crop&q=80",
+      category: "Smart Watches",
+      name: "Samsung Galaxy Watch 6 Classic 47mm LTE",
+      description: "Rotating stainless steel bezel with ECG sensor",
+      price: 34990,
+      discountPrice: 31900,
+      stock: 10,
+      rating: 4.7,
+      imageUrl: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
     },
     {
       id: "bs-6",
-      category: "VR Headsets",
-      title: "Virtual Reality Immersive 3D Goggles",
-      price: 250.00,
-      rating: 4,
-      imageUrl: "https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=300&auto=format&fit=crop&q=80",
+      category: "Smartphones",
+      name: "Apple iPhone 16 Pro Max 256GB",
+      description: "Natural Titanium finish with A18 Pro chip",
+      price: 165000,
+      discountPrice: 159990,
+      stock: 6,
+      rating: 4.9,
+      imageUrl: "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=600&auto=format&fit=crop&q=80",
     },
   ];
 
+  const displayProducts = products.length > 0 ? products.slice(0, 6) : defaultProducts;
+
   return (
-    <section className="py-8 bg-white border-b border-gray-200">
+    <section className="py-10 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         
         {/* Section Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <h2 className="text-xl font-extrabold text-[#333e48]">
-            Best Sellers
-          </h2>
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              Best Sellers
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Top requested & approved flagship electronics in Bangladesh
+            </p>
+          </div>
 
           <Link
             href="/products?sort=bestsellers"
-            className="text-xs font-bold text-gray-500 hover:text-black transition-colors"
+            className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline transition-all flex items-center gap-1"
           >
             View All &rarr;
           </Link>
         </div>
 
-        {/* 6 Products Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {bestSellers.map((item) => (
-            <div
+        {/* Spacious Products Grid with Redesigned ProductCards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {displayProducts.map((item) => (
+            <ProductCard
               key={item.id}
-              className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col justify-between hover:shadow-md transition-all group"
-            >
-              <div>
-                <span className="text-[10px] font-semibold text-gray-400 block mb-1">
-                  {item.category}
-                </span>
-
-                <Link
-                  href={`/products/${item.id}`}
-                  className="text-xs font-bold text-[#333e48] hover:text-black line-clamp-2 leading-snug mb-2 block transition-colors"
-                >
-                  {item.title}
-                </Link>
-
-                {/* Rating */}
-                <div className="flex items-center space-x-0.5 text-[#fed700] mb-2">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className={`w-3 h-3 ${i < item.rating ? "fill-[#fed700]" : "text-gray-300"}`} />
-                  ))}
-                </div>
-
-                {/* Image */}
-                <div className="w-full h-32 relative mb-3 flex items-center justify-center">
-                  <img
-                    src={item.imageUrl}
-                    alt={item.title}
-                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform"
-                  />
-                </div>
-              </div>
-
-              {/* Price & Add button */}
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <span className="text-xs font-extrabold text-[#333e48]">
-                  ${item.price.toFixed(2)}
-                </span>
-                <button
-                  onClick={() =>
-                    addItem({
-                      id: item.id,
-                      name: item.title,
-                      price: item.price,
-                      quantity: 1,
-                    })
-                  }
-                  className="w-7 h-7 rounded-full bg-[#fed700] hover:bg-[#eec800] text-[#333e48] flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
-                  title="Add to cart"
-                >
-                  <ShoppingCart className="w-3.5 h-3.5 text-[#333e48]" />
-                </button>
-              </div>
-            </div>
+              id={item.id}
+              name={item.name}
+              description={item.description}
+              price={item.price}
+              discountPrice={item.discountPrice}
+              stock={item.stock}
+              imageUrl={item.imageUrl}
+              category={item.category}
+              rating={item.rating ?? 5}
+            />
           ))}
         </div>
 
@@ -142,3 +138,4 @@ export const BestSellersSection: React.FC = () => {
     </section>
   );
 };
+

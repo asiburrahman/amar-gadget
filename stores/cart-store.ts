@@ -2,25 +2,39 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useState, useEffect, useRef } from "react";
 
-interface CartItem {
+export interface CartItem {
   id: string;
   name: string;
   price: number;
+  discountPrice?: number | null;
+  imageUrl?: string | null;
+  stock?: number;
+  category?: string;
+  brand?: string;
   quantity: number;
 }
 
 interface CartState {
   items: CartItem[];
+  couponCode: string | null;
+  discountPercentage: number;
   addItem: (item: CartItem) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
+  applyCoupon: (code: string, discountPct: number) => void;
+  removeCoupon: () => void;
   clearCart: () => void;
+  getSubtotal: () => number;
+  getDiscountAmount: () => number;
+  getTotal: () => number;
 }
 
 export const useCartStore = create<CartState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       items: [],
+      couponCode: null,
+      discountPercentage: 0,
       addItem: (newItem) =>
         set((state) => {
           const exists = state.items.find((item) => item.id === newItem.id);
@@ -45,24 +59,35 @@ export const useCartStore = create<CartState>()(
             item.id === id ? { ...item, quantity: Math.max(1, quantity) } : item
           ),
         })),
-      clearCart: () => set({ items: [] }),
+      applyCoupon: (code, discountPct) =>
+        set({ couponCode: code, discountPercentage: discountPct }),
+      removeCoupon: () => set({ couponCode: null, discountPercentage: 0 }),
+      clearCart: () => set({ items: [], couponCode: null, discountPercentage: 0 }),
+      getSubtotal: () => {
+        return get().items.reduce((sum, item) => {
+          const effectivePrice = item.discountPrice || item.price;
+          return sum + effectivePrice * item.quantity;
+        }, 0);
+      },
+      getDiscountAmount: () => {
+        const subtotal = get().getSubtotal();
+        return (subtotal * get().discountPercentage) / 100;
+      },
+      getTotal: () => {
+        const subtotal = get().getSubtotal();
+        const discount = get().getDiscountAmount();
+        return Math.max(0, subtotal - discount);
+      },
     }),
-    { name: "cart-storage" }
+    { name: "amar-gadget-cart" }
   )
 );
 
-/**
- * Hydration helper hook to prevent SSR hydration errors in Next.js.
- * Utilizes a React ref to store the selector, preventing infinite render loops
- * caused by inline anonymous selector functions.
- */
 export function useHydratedStore<T, F>(
   store: (selector: (state: T) => F) => F,
   selector: (state: T) => F
 ): F | undefined {
   const [data, setData] = useState<F>();
-
-  // Hold the selector in a mutable ref to prevent execution loops on dependency updates
   const selectorRef = useRef(selector);
   
   useEffect(() => {
@@ -70,10 +95,9 @@ export function useHydratedStore<T, F>(
   });
 
   useEffect(() => {
-    // Safely retrieve the current selector value once on mount
     const value = store((state) => selectorRef.current(state));
     setData(value);
   }, [store]);
 
   return data;
-}
+}

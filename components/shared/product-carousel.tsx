@@ -180,7 +180,7 @@ export const ProductCarousel = ({
       >
         <div className="inline-flex space-x-4">
           {products.map((product) => (
-            <div key={product.id} className="flex-shrink-0 w-[200px]">
+            <div key={product.id} className="flex-shrink-0 w-[240px] sm:w-[260px] whitespace-normal">
               <ProductCard
                 {...product}
                 onAddToCart={onAddToCart}

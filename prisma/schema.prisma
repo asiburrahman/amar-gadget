@@ -1,5 +1,5 @@
 datasource db {
-  provider  = "postgresql"
+  provider = "postgresql"
 }
 
 generator client {
@@ -7,41 +7,74 @@ generator client {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  name      String?
-  password  String?
-  role      String    @default("USER")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
-  orders    Order[]
+  id          String      @id @default(uuid())
+  email       String      @unique
+  name        String?
+  password    String?
+  avatar      String?
+  phone       String?
+  role        String      @default("USER") // USER, MEMBER (Seller), ADMIN
+  isVerified  Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  products    Product[]
+  orders      Order[]
+  reviews     Review[]
+  wishlists   Wishlist[]
+  addresses   Address[]
 }
 
 model Category {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  slug      String    @unique
-  products  Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          String      @id @default(uuid())
+  name        String      @unique
+  slug        String      @unique
+  image       String?
+  products    Product[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Brand {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  slug        String      @unique
+  logo        String?
+  products    Product[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
 model Product {
-  id          String      @id @default(uuid())
-  name        String
-  description String?
-  price       Decimal     @db.Decimal(10, 2)
-  stock       Int
-  imageUrl    String?
-  status      String      @default("PENDING_APPROVAL")
-  sellerId    String
-  seller      User        @relation(fields: [sellerId], references: [id])
-  categoryId  String
-  category    Category    @relation(fields: [categoryId], references: [id])
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  orderItems  OrderItem[]
+  id            String      @id @default(uuid())
+  name          String
+  slug          String      @unique
+  description   String?
+  price         Decimal     @db.Decimal(10, 2)
+  discountPrice Decimal?    @db.Decimal(10, 2)
+  stock         Int
+  imageUrl      String?
+  images        String[]    @default([])
+  isFeatured    Boolean     @default(false)
+  status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED
+  rating        Float       @default(0)
+  reviewCount   Int         @default(0)
+  
+  sellerId      String
+  seller        User        @relation(fields: [sellerId], references: [id])
+  
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id])
+  
+  brandId       String?
+  brand         Brand?       @relation(fields: [brandId], references: [id])
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  orderItems    OrderItem[]
+  reviews       Review[]
+  wishlists     Wishlist[]
 }
 
 model Order {
@@ -49,10 +82,17 @@ model Order {
   userId          String
   user            User        @relation(fields: [userId], references: [id])
   total           Decimal     @db.Decimal(10, 2)
-  status          String      @default("PENDING")
+  status          String      @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  paymentMethod   String      @default("COD") // COD, STRIPE
+  paymentStatus   String      @default("UNPAID") // UNPAID, PAID, FAILED
   paymentIntentId String?
+  shippingAddress String?
+  trackingNumber  String?
+  couponCode      String?
+  
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+  
   items           OrderItem[]
 }
 
@@ -67,3 +107,73 @@ model OrderItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int
+  comment   String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Address {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  fullName   String
+  phone      String
+  street     String
+  city       String
+  district   String
+  zipCode    String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Coupon {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  discount    Decimal   @db.Decimal(10, 2) // Percent or fixed amount
+  isPercentage Boolean  @default(true)
+  minSpend    Decimal?  @db.Decimal(10, 2)
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+}
+
+model Banner {
+  id          String   @id @default(uuid())
+  title       String
+  subtitle    String?
+  imageUrl    String
+  linkUrl     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model OtpToken {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+

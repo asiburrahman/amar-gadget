@@ -1,16 +1,26 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { FormInput } from "@/components/shared/form-input";
 import { H1 } from "@/components/ui/typography";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function LoginPage() {
+  const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      if (user.role === "ADMIN") window.location.href = "/admin";
+      else if (user.role === "MEMBER") window.location.href = "/member/dashboard";
+      else window.location.href = "/user/dashboard";
+    }
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +49,7 @@ export default function LoginPage() {
       setTimeout(() => {
         const userRole = data.user?.role?.toUpperCase();
         if (userRole === "ADMIN") {
-          window.location.href = "/admin/analytics";
+          window.location.href = "/admin";
         } else if (userRole === "MEMBER") {
           window.location.href = "/member/dashboard";
         } else {

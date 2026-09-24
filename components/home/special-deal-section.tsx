@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useCartStore } from "@/stores/cart-store";
 import { ShoppingCart } from "@/components/icons/ShoppingCart";
+import { ProductCard } from "@/components/shared/product-card";
 
 interface ProductItem {
   id: string;
@@ -307,64 +308,20 @@ export const SpecialDealSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Product Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Product Cards Grid - 3 Spacious Columns */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {currentProducts.map((product) => (
-              <div
+              <ProductCard
                 key={product.id}
-                className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col justify-between hover:shadow-lg transition-all group relative"
-              >
-                <div>
-                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                    {product.category}
-                  </span>
-
-                  <Link
-                    href={`/products/${product.id}`}
-                    className="text-xs font-bold text-[#333e48] hover:text-black line-clamp-2 leading-snug mb-3 block transition-colors"
-                  >
-                    {product.title}
-                  </Link>
-
-                  {/* Image */}
-                  <div className="w-full h-36 relative mb-3 flex items-center justify-center">
-                    <img
-                      src={product.imageUrl}
-                      alt={product.title}
-                      className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform"
-                    />
-                  </div>
-                </div>
-
-                {/* Footer Price & Add To Cart Button */}
-                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                  <div className="flex items-baseline space-x-1">
-                    <span className="text-sm font-extrabold text-[#333e48]">
-                      ${product.price.toFixed(2)}
-                    </span>
-                    {product.originalPrice && (
-                      <span className="text-xs text-gray-400 line-through">
-                        ${product.originalPrice.toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() =>
-                      addItem({
-                        id: product.id,
-                        name: product.title,
-                        price: product.price,
-                        quantity: 1,
-                      })
-                    }
-                    className="w-8 h-8 rounded-full bg-[#fed700] hover:bg-[#eec800] text-[#333e48] flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
-                    title="Add to cart"
-                  >
-                    <ShoppingCart className="w-4 h-4 text-[#333e48]" />
-                  </button>
-                </div>
-              </div>
+                id={product.id}
+                name={product.title}
+                price={product.price}
+                discountPrice={product.originalPrice}
+                stock={10}
+                imageUrl={product.imageUrl}
+                category={product.category}
+                rating={4.8}
+              />
             ))}
           </div>
 

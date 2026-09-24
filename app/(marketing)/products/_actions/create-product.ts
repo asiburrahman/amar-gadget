@@ -48,11 +48,14 @@ export async function createProductAction(
       };
     }
 
+    const slug = validated.data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
+
     await prisma.product.create({
       data: {
         ...validated.data,
+        slug,
         sellerId: userId,
-        status: userRole === "ADMIN" ? "PUBLISHED" : "PENDING_APPROVAL",
+        status: userRole === "ADMIN" ? "APPROVED" : "PENDING_APPROVAL",
       },
     });
 

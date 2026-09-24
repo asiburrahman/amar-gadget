@@ -1,4 +1,5 @@
 export interface ProductSchemaInput {
+  id?: string;
   name: string;
   description: string;
   image: string;
@@ -7,6 +8,8 @@ export interface ProductSchemaInput {
   availability?: "InStock" | "OutOfStock" | "PreOrder";
   sku?: string;
   brandName?: string;
+  categoryName?: string;
+  stock?: number;
 }
 
 export interface BreadcrumbItemInput {

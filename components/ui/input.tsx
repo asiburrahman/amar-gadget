@@ -1,23 +1,15 @@
 import React from "react";
 
-interface InputProps {
-  type?: string;
-  placeholder?: string;
-  value?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  disabled?: boolean;
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: boolean;
-  className?: string;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
-  required?: boolean;
-  autoComplete?: string;
 }
 
 export const Input = ({
   type = "text",
   placeholder = "",
-  value = "",
+  value,
   onChange,
   disabled = false,
   error = false,
@@ -26,6 +18,9 @@ export const Input = ({
   iconPosition = "left",
   required = false,
   autoComplete = "off",
+  name,
+  step,
+  ...props
 }: InputProps) => {
   return (
     <div className="relative w-full">
@@ -36,6 +31,8 @@ export const Input = ({
       )}
       <input
         type={type}
+        name={name}
+        step={step}
         placeholder={placeholder}
         value={value}
         onChange={onChange}
@@ -52,6 +49,7 @@ export const Input = ({
           transition-all duration-200
           ${className}
         `}
+        {...props}
       />
       {icon && iconPosition === "right" && (
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center text-muted-foreground">
@@ -60,4 +58,4 @@ export const Input = ({
       )}
     </div>
   );
-};
+};

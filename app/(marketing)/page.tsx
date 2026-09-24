@@ -1,6 +1,5 @@
-"use client";
-
 import React from "react";
+import { prisma } from "@/lib/prisma";
 import { SEOGuard } from "@/components/shared/seo-guard";
 import { HeroSection } from "@/components/home/hero-section";
 import { PromoBanners } from "@/components/home/promo-banners";
@@ -13,7 +12,53 @@ import { BottomWidgets } from "@/components/home/bottom-widgets";
 import { NewsletterBar } from "@/components/home/newsletter-bar";
 import { ElectroFooter } from "@/components/footer/electro-footer";
 
-export default function Home() {
+export const revalidate = 60; // Revalidate every minute
+
+export default async function Home() {
+  let approvedProducts: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    price: number;
+    discountPrice?: number | null;
+    stock: number;
+    imageUrl?: string;
+    category?: string;
+    rating?: number;
+  }> = [];
+
+  try {
+    const products = await prisma.product.findMany({
+      where: {
+        status: "APPROVED",
+      },
+      include: {
+        category: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    approvedProducts = products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description ?? undefined,
+      price: Number(p.price),
+      discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
+      stock: p.stock,
+      imageUrl: p.imageUrl ?? undefined,
+      category: p.category?.name ?? undefined,
+      rating: p.rating ?? 5,
+    }));
+  } catch (error) {
+    console.error("Error loading homepage dynamic products:", error);
+  }
+
   return (
     <SEOGuard>
       <div className="flex-1 flex flex-col bg-white text-slate-900">
@@ -27,14 +72,14 @@ export default function Home() {
           {/* 3. Special Offer Deal (Xbox Controller + Countdown) & Tabbed Products */}
           <SpecialDealSection />
 
-          {/* 4. Best Sellers Row */}
-          <BestSellersSection />
+          {/* 4. Best Sellers Row - Dynamic Approved Products */}
+          <BestSellersSection products={approvedProducts} />
 
           {/* 5. Wide Shop & Save Big Banner */}
           <BannerAd />
 
-          {/* 6. Recently Viewed Products */}
-          <RecentlyViewed />
+          {/* 6. Recently Viewed Products - Dynamic Approved Products */}
+          <RecentlyViewed products={approvedProducts} />
 
           {/* 7. Brand / Partner Logos Bar */}
           <BrandLogos />
@@ -51,4 +96,4 @@ export default function Home() {
       </div>
     </SEOGuard>
   );
-}
+}

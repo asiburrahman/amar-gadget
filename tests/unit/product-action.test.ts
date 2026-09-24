@@ -63,6 +63,7 @@ describe("createProductAction", () => {
     expect(prisma.product.create).toHaveBeenCalledWith({
       data: {
         name: "New iPhone",
+        slug: expect.any(String),
         price: 120000,
         stock: 10,
         categoryId: "00000000-0000-0000-0000-000000000000",

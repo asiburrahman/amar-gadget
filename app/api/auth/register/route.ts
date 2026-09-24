@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations/auth";
-import { hashPassword, signJwtToken } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth";
+import { sendOtpEmail } from "@/lib/mail/send-otp";
 
 export async function POST(req: Request) {
   try {
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, password, role } = validated.data;
+    const { name, email, password, role, avatar } = validated.data;
 
     // 1. Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -43,39 +44,21 @@ export async function POST(req: Request) {
         name,
         email: email.toLowerCase(),
         password: hashedPassword,
+        avatar: avatar || null,
         role: role || "USER",
+        isVerified: false,
       },
     });
 
-    // 3. Generate signed JWT token
-    const token = await signJwtToken({
-      id: newUser.id,
-      email: newUser.email,
-      name: newUser.name,
-      role: newUser.role,
-    });
+    // 3. Generate and send OTP verification code to email
+    await sendOtpEmail(newUser.email);
 
-    // 4. Attach HTTP-only auth_token cookie
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
-      message: "Registration successful!",
-      user: {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-      },
+      requiresOtp: true,
+      email: newUser.email,
+      message: "Account created! A 6-digit OTP code has been sent to your email.",
     });
-
-    response.cookies.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 604800, // 7 days
-      path: "/",
-    });
-
-    return response;
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(

@@ -1,12 +1,12 @@
 import React from "react";
 
 interface ButtonProps {
-  variant: "default" | "secondary" | "outline" | "ghost" | "destructive" | "link";
-  size: "sm" | "md" | "lg";
+  variant?: "default" | "secondary" | "outline" | "ghost" | "destructive" | "link";
+  size?: "sm" | "md" | "lg";
   children: React.ReactNode;
   disabled?: boolean;
   loading?: boolean;
-  onClick?: () => void;
+  onClick?: (e?: any) => void;
   className?: string;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
@@ -26,7 +26,7 @@ export const Button = ({
   type = "button",
 }: ButtonProps) => {
   // Variant configurations
-  type VariantConfig = Record<ButtonProps["variant"], { bg: string; text: string; border: string; hoverBg: string; hoverText: string }>;
+  type VariantConfig = Record<NonNullable<ButtonProps["variant"]>, { bg: string; text: string; border: string; hoverBg: string; hoverText: string }>;
   const variantConfig: VariantConfig = {
     default: {
       bg: "bg-primary",
@@ -132,7 +132,7 @@ export const Button = ({
       {icon && iconPosition === "left" && (
         <span className={sizeProps.icon}>{icon}</span>
       )}
-      <span className="flex-1">{children}</span>
+      <span className="whitespace-nowrap">{children}</span>
       {icon && iconPosition === "right" && (
         <span className={sizeProps.icon}>{icon}</span>
       )}
