@@ -53,8 +53,17 @@ export default async function SellerDashboardPage() {
     : [];
 
   const serializedProducts = products.map((p) => ({
-    ...p,
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
     price: Number(p.price),
+    discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
+    stock: p.stock,
+    imageUrl: p.imageUrl,
+    status: p.status,
+    createdAt: p.createdAt.toISOString(),
+    category: p.category ? { name: p.category.name } : null,
   }));
 
   const serializedOrderItems = orderItemsRaw.map((item) => ({
