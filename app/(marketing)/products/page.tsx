@@ -26,7 +26,10 @@ export default async function ProductsPage() {
   try {
     const products = await prisma.product.findMany({
       where: {
-        NOT: { status: "REJECTED" },
+        status: "APPROVED",
+        seller: {
+          sellerStatus: "APPROVED",
+        },
       },
       include: {
         category: {

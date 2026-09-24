@@ -193,3 +193,78 @@ export async function getOrderById(orderId: string) {
     return { success: false, error: "Error fetching order", data: null };
   }
 }
+
+export async function getSellerOrders(sellerId: string) {
+  try {
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        product: { sellerId },
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        order: {
+          include: {
+            user: { select: { name: true, email: true, phone: true } },
+          },
+        },
+        product: { select: { id: true, name: true, imageUrl: true, price: true } },
+      },
+    });
+
+    const data = orderItems.map((item) => ({
+      id: item.id,
+      orderId: item.orderId,
+      productId: item.productId,
+      quantity: item.quantity,
+      price: Number(item.price),
+      createdAt: item.createdAt,
+      product: {
+        ...item.product,
+        price: Number(item.product.price),
+      },
+      order: {
+        ...item.order,
+        total: Number(item.order.total),
+      },
+    }));
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error("Error fetching seller orders:", error);
+    return { success: false, error: "Failed to fetch vendor orders", data: [] };
+  }
+}
+
+export async function updateOrderStatusBySeller(orderId: string, newStatus: string, sellerId: string) {
+  try {
+    // Ensure order belongs to seller's products
+    const orderItem = await prisma.orderItem.findFirst({
+      where: {
+        orderId,
+        product: { sellerId },
+      },
+    });
+
+    if (!orderItem) {
+      return { success: false, error: "Order not found or permission denied." };
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: newStatus,
+        ...(newStatus === "DELIVERED" ? { paymentStatus: "PAID" } : {}),
+      },
+    });
+
+    revalidatePath("/member/dashboard");
+    revalidatePath("/admin/orders");
+    revalidatePath("/user/orders");
+
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("Error updating order status by seller:", error);
+    return { success: false, error: error.message || "Failed to update order status." };
+  }
+}
+

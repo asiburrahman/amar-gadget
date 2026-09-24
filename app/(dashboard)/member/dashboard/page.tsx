@@ -34,6 +34,54 @@ export default async function SellerDashboardPage() {
       })
     : [];
 
+  // Fetch orders placed for seller's products
+  const orderItemsRaw = seller
+    ? await prisma.orderItem.findMany({
+        where: {
+          product: { sellerId: seller.id },
+        },
+        orderBy: { createdAt: "desc" },
+        include: {
+          order: {
+            include: {
+              user: { select: { name: true, email: true, phone: true } },
+            },
+          },
+          product: { select: { id: true, name: true, imageUrl: true, price: true } },
+        },
+      })
+    : [];
+
+  const serializedProducts = products.map((p) => ({
+    ...p,
+    price: Number(p.price),
+  }));
+
+  const serializedOrderItems = orderItemsRaw.map((item) => ({
+    id: item.id,
+    orderId: item.orderId,
+    productId: item.productId,
+    quantity: item.quantity,
+    price: Number(item.price),
+    createdAt: item.createdAt.toISOString(),
+    product: {
+      id: item.product.id,
+      name: item.product.name,
+      imageUrl: item.product.imageUrl,
+      price: Number(item.product.price),
+    },
+    order: {
+      id: item.order.id,
+      status: item.order.status,
+      paymentMethod: item.order.paymentMethod,
+      paymentStatus: item.order.paymentStatus,
+      shippingAddress: item.order.shippingAddress,
+      trackingNumber: item.order.trackingNumber,
+      createdAt: item.order.createdAt.toISOString(),
+      user: item.order.user,
+    },
+  }));
+
   const serializedSeller = seller
     ? {
         id: seller.id,
@@ -43,5 +91,11 @@ export default async function SellerDashboardPage() {
       }
     : null;
 
-  return <SellerDashboardClient seller={serializedSeller} products={products} />;
+  return (
+    <SellerDashboardClient
+      seller={serializedSeller}
+      products={serializedProducts}
+      orderItems={serializedOrderItems}
+    />
+  );
 }

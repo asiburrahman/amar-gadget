@@ -23,6 +23,11 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
       where.status = "APPROVED";
     }
 
+    // Always require active approved seller status for public marketplace query
+    where.seller = {
+      sellerStatus: "APPROVED",
+    };
+
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },

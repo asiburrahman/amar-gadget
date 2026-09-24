@@ -31,6 +31,9 @@ export default async function Home() {
     const products = await prisma.product.findMany({
       where: {
         status: "APPROVED",
+        seller: {
+          sellerStatus: "APPROVED",
+        },
       },
       include: {
         category: {
