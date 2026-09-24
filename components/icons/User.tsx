@@ -5,9 +5,11 @@ interface UserProps {
   size?: number;
 }
 
-export const User = ({ className = "", size = 24 }: UserProps) => (
+export const User = ({ className = "", size }: UserProps) => (
   <svg
-    className={`h-${size} w-${size} ${className}`}
+    width={size}
+    height={size}
+    className={className || "w-4 h-4"}
     viewBox="0 0 24 24"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"

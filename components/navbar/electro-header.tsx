@@ -149,10 +149,10 @@ export const ElectroHeader: React.FC = () => {
               </div>
             </Link>
 
-            {/* Hamburger icon next to logo */}
+            {/* Hamburger icon next to logo (Mobile only) */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="text-[#333e48] hover:text-black p-1 focus:outline-hidden cursor-pointer"
+              className="lg:hidden text-[#333e48] hover:text-black p-1 focus:outline-hidden cursor-pointer"
               aria-label="Open Menu"
             >
               <Menu className="w-6 h-6 text-[#333e48]" />

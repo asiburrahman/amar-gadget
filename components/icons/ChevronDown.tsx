@@ -5,9 +5,11 @@ interface ChevronDownProps {
   size?: number;
 }
 
-export const ChevronDown = ({ className = "", size = 24 }: ChevronDownProps) => (
+export const ChevronDown = ({ className = "", size }: ChevronDownProps) => (
   <svg
-    className={`h-${size} w-${size} ${className}`}
+    width={size}
+    height={size}
+    className={className || "w-4 h-4"}
     viewBox="0 0 24 24"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"

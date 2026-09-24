@@ -5,9 +5,11 @@ interface MenuProps {
   size?: number;
 }
 
-export const Menu = ({ className = "", size = 24 }: MenuProps) => (
+export const Menu = ({ className = "", size }: MenuProps) => (
   <svg
-    className={`h-${size} w-${size} ${className}`}
+    width={size}
+    height={size}
+    className={className || "w-5 h-5"}
     viewBox="0 0 24 24"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
