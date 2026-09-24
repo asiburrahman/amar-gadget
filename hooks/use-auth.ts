@@ -9,6 +9,7 @@ export interface AuthUser {
   role: string;
   avatar: string | null;
   isVerified: boolean;
+  sellerStatus?: string | null;
 }
 
 export function useAuth() {

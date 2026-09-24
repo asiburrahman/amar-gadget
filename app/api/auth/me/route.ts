@@ -26,6 +26,7 @@ export async function GET() {
         role: true,
         avatar: true,
         isVerified: true,
+        sellerStatus: true,
       },
     });
 

@@ -100,6 +100,33 @@ export default function AddProductPage() {
     }
   };
 
+  const isApproved = user ? user.sellerStatus === "APPROVED" : true;
+  const isBlocked = user ? user.sellerStatus === "BLOCKED" : false;
+
+  if (user && !isApproved) {
+    return (
+      <div className="min-h-screen bg-background p-6 md:p-10 max-w-2xl mx-auto space-y-6">
+        <div className="p-6 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive space-y-3 text-center">
+          <span className="text-4xl block">⛔</span>
+          <h2 className="text-xl font-extrabold">Product Creation Restricted</h2>
+          <p className="text-xs text-muted-foreground">
+            {isBlocked
+              ? "Your seller account has been suspended or blocked by Admin. You cannot add products."
+              : "Your seller account is currently pending Admin Approval. Product creation will be unlocked once approved."}
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={() => router.push("/member/dashboard")}
+              className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg"
+            >
+              Return to Seller Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 max-w-3xl mx-auto space-y-6">
       <div className="border-b border-border pb-4">
