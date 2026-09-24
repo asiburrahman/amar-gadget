@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
 
+export const dynamic = "force-dynamic";
+
 export default async function CustomerDashboardPage() {
   const orders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
