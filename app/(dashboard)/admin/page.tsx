@@ -33,8 +33,11 @@ export default async function AdminDashboardPage() {
         </div>
 
         <div className="flex gap-3">
+          <Link href="/admin/sellers" className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold rounded-lg transition shadow-xs">
+            👥 Manage Sellers / Vendors
+          </Link>
           <Link href="/admin/products" className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition">
-            Manage All Products ({stats.totalProducts})
+            📦 Manage Products ({stats.totalProducts})
           </Link>
           <Link href="/" className="px-4 py-2 border border-border text-foreground text-xs font-bold rounded-lg hover:bg-muted transition">
             View Live Store

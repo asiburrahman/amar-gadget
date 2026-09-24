@@ -4,6 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/formatter";
 
 export default async function SellerDashboardPage() {
+  // Fetch seller details
+  const seller = await prisma.user.findFirst({
+    where: { role: "MEMBER" },
+  });
+
+  const isApproved = seller ? seller.sellerStatus === "APPROVED" : true;
+  const isBlocked = seller ? seller.sellerStatus === "BLOCKED" : false;
+  const isPending = seller ? seller.sellerStatus === "PENDING" : false;
+
   // Fetch seller's products
   const products = await prisma.product.findMany({
     orderBy: { createdAt: "desc" },
@@ -19,6 +28,27 @@ export default async function SellerDashboardPage() {
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 space-y-8">
+      {/* Seller Account Status Alert Banners */}
+      {isPending && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 space-y-1">
+          <div className="flex items-center gap-2 font-bold text-sm">
+            <span>⏳</span>
+            <span>Seller Account Pending Admin Approval</span>
+          </div>
+          <p className="text-xs">Your seller account is currently under moderation review by the Super Admin. You cannot publish new products until your account is approved.</p>
+        </div>
+      )}
+
+      {isBlocked && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 space-y-1">
+          <div className="flex items-center gap-2 font-bold text-sm">
+            <span>⛔</span>
+            <span>Seller Account Suspended / Blocked</span>
+          </div>
+          <p className="text-xs">Your vendor permissions have been temporarily restricted by the Admin. Please contact platform support.</p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-6">
         <div>
@@ -30,9 +60,15 @@ export default async function SellerDashboardPage() {
         </div>
 
         <div className="flex gap-3">
-          <Link href="/member/add-product" className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition">
-            + Add New Product
-          </Link>
+          {isApproved ? (
+            <Link href="/member/add-product" className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition">
+              + Add New Product
+            </Link>
+          ) : (
+            <button disabled className="px-4 py-2 bg-slate-300 dark:bg-slate-800 text-slate-500 text-xs font-bold rounded-lg cursor-not-allowed">
+              + Add New Product (Locked)
+            </button>
+          )}
           <Link href="/products" className="px-4 py-2 border border-border text-foreground text-xs font-bold rounded-lg hover:bg-muted transition">
             View Live Storefront
           </Link>

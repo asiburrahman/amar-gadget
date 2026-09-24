@@ -113,6 +113,14 @@ export async function getProductBySlug(slug: string) {
 
 export async function createProduct(input: CreateProductInput, sellerId: string) {
   try {
+    const seller = await prisma.user.findUnique({ where: { id: sellerId } });
+    if (seller && seller.sellerStatus !== "APPROVED") {
+      return {
+        success: false,
+        error: "Your seller account is currently pending Admin Approval or suspended. You cannot submit products until approved.",
+      };
+    }
+
     const validated = createProductSchema.parse(input);
     const slug = validated.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
 

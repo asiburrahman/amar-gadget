@@ -50,28 +50,59 @@ export async function updateProductStatus(productId: string, status: "APPROVED" 
   }
 }
 
-export async function createCategory(name: string, image?: string) {
+export async function updateSellerStatus(sellerId: string, sellerStatus: "APPROVED" | "BLOCKED" | "PENDING" | "REJECTED") {
   try {
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const category = await prisma.category.create({
-      data: { name, slug, image: image || null },
+    const user = await prisma.user.update({
+      where: { id: sellerId },
+      data: { sellerStatus },
     });
-    revalidatePath("/admin/categories");
-    return { success: true, data: category };
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/sellers");
+    revalidatePath("/member/dashboard");
+    revalidatePath("/products");
+
+    return { success: true, data: user };
   } catch (error: any) {
-    return { success: false, error: error.message || "Failed to create category" };
+    return { success: false, error: error.message || "Failed to update seller status" };
   }
 }
 
-export async function createBrand(name: string, logo?: string) {
+export async function adminUpdateProductPrice(productId: string, price: number, discountPrice?: number | null) {
   try {
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const brand = await prisma.brand.create({
-      data: { name, slug, logo: logo || null },
+    const product = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        price,
+        discountPrice: discountPrice !== undefined ? discountPrice : null,
+      },
     });
-    revalidatePath("/admin/brands");
-    return { success: true, data: brand };
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/products");
+    revalidatePath("/products");
+    revalidatePath(`/products/${product.slug}`);
+
+    return { success: true, data: product };
   } catch (error: any) {
-    return { success: false, error: error.message || "Failed to create brand" };
+    return { success: false, error: error.message || "Failed to update product price" };
   }
 }
+
+export async function adminDeleteProduct(productId: string) {
+  try {
+    await prisma.product.delete({
+      where: { id: productId },
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/products");
+    revalidatePath("/member/dashboard");
+    revalidatePath("/products");
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to delete product" };
+  }
+}
+

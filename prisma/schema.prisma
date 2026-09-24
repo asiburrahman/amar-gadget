@@ -7,16 +7,17 @@ generator client {
 }
 
 model User {
-  id          String      @id @default(uuid())
-  email       String      @unique
-  name        String?
-  password    String?
-  avatar      String?
-  phone       String?
-  role        String      @default("USER") // USER, MEMBER (Seller), ADMIN
-  isVerified  Boolean     @default(false)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id           String      @id @default(uuid())
+  email        String      @unique
+  name         String?
+  password     String?
+  avatar       String?
+  phone        String?
+  role         String      @default("USER") // USER, MEMBER (Seller), ADMIN
+  sellerStatus String      @default("APPROVED") // APPROVED, PENDING, BLOCKED, REJECTED
+  isVerified   Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   products    Product[]
   orders      Order[]
