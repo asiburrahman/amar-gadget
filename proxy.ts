@@ -6,9 +6,8 @@ const isBuildTime =
   process.env.NEXT_PHASE === "phase-production-build" ||
   process.env.SKIP_ENV_VALIDATION === "true";
 
-// Hard-crash at runtime if JWT_SECRET is not configured
 if (!isBuildTime && !process.env.JWT_SECRET) {
-  throw new Error("❌ JWT_SECRET environment variable is missing at runtime!");
+  console.warn("⚠️ JWT_SECRET environment variable is missing at runtime! Falling back to default.");
 }
 
 const JWT_SECRET_KEY = new TextEncoder().encode(
