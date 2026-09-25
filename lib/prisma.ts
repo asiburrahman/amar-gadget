@@ -5,14 +5,19 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Fallback connection string
-const databaseUrl =
-  process.env.DATABASE_URL ||
-  "postgresql://neondb_owner:npg_XcFmCt0vhko4@ep-blue-frog-atpqk11x-pooler.c-9.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require";
+const getDatabaseUrl = () => {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL ||
+    "postgresql://neondb_owner:npg_XcFmCt0vhko4@ep-blue-frog-atpqk11x-pooler.c-9.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require"
+  );
+};
 
 const createPrismaClient = () => {
+  const dbUrl = getDatabaseUrl();
   try {
-    const adapter = new PrismaNeonHttp(databaseUrl, {});
+    const adapter = new PrismaNeonHttp(dbUrl, {});
     return new PrismaClient({
       adapter,
       log:
@@ -21,7 +26,7 @@ const createPrismaClient = () => {
           : ["error"],
     });
   } catch (error) {
-    console.error("PrismaNeonHttp initialization fallback:", error);
+    console.error("PrismaNeonHttp adapter fallback to standard PrismaClient:", error);
     return new PrismaClient({
       log: ["error"],
     });
