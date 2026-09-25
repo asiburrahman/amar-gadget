@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       allowedOrigins: [
+        "amargadget.gmksolution.com",
+        "*.gmksolution.com",
+        "gmksolution.com",
         "*.trycloudflare.com",
         "trycloudflare.com",
         "localhost:3000",
