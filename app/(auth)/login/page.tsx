@@ -22,8 +22,18 @@ export default function LoginPage() {
     }
   }, [user]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Clear any leaked query parameters from the address bar immediately
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleSubmit = async (e?: React.FormEvent | React.KeyboardEvent | React.MouseEvent) => {
+    if (e && "preventDefault" in e) {
+      e.preventDefault();
+    }
+    if (isLoading) return;
     setIsLoading(true);
     setErrorMessage("");
     setSuccessMessage("");
@@ -64,6 +74,13 @@ export default function LoginPage() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-card p-8 rounded-2xl border border-border shadow-xl space-y-6">
@@ -99,34 +116,27 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Authentic Login Form */}
-        <form
-          action="#"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSubmit(e);
-          }}
-          className="space-y-4"
-        >
+        {/* Secure Form Container (Pure AJAX, never appends credentials to URL) */}
+        <div className="space-y-4">
           <FormInput
             label="Email Address"
             type="email"
-            name="email"
             autoComplete="email"
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={handleKeyDown}
             required
           />
 
           <FormInput
             label="Password"
             type="password"
-            name="password"
             autoComplete="current-password"
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
             required
           />
 
@@ -141,12 +151,9 @@ export default function LoginPage() {
           </div>
 
           <button
-            type="submit"
+            type="button"
             disabled={isLoading}
-            onClick={(e) => {
-              e.preventDefault();
-              handleSubmit(e);
-            }}
+            onClick={() => handleSubmit()}
             className="w-full h-11 rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
           >
             {isLoading ? (
@@ -158,7 +165,7 @@ export default function LoginPage() {
               "Sign In to Account"
             )}
           </button>
-        </form>
+        </div>
 
         {/* Registration Redirection */}
         <div className="text-center text-xs text-muted-foreground border-t pt-4">
