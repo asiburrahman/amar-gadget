@@ -73,7 +73,7 @@ export const BottomWidgets: React.FC = () => {
       title: "Pro Laser Color Multifunction Printer",
       price: 480.00,
       rating: 4,
-      imageUrl: "https://images.unsplash.com/photo-1612815150566-985e79c31923?w=150&auto=format&fit=crop&q=80",
+      imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80",
     },
   ];
 
