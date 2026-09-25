@@ -100,10 +100,19 @@ export default function LoginPage() {
         )}
 
         {/* Authentic Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form
+          action="#"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit(e);
+          }}
+          className="space-y-4"
+        >
           <FormInput
             label="Email Address"
             type="email"
+            name="email"
+            autoComplete="email"
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -113,6 +122,8 @@ export default function LoginPage() {
           <FormInput
             label="Password"
             type="password"
+            name="password"
+            autoComplete="current-password"
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -132,6 +143,10 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
+            onClick={(e) => {
+              e.preventDefault();
+              handleSubmit(e);
+            }}
             className="w-full h-11 rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
           >
             {isLoading ? (

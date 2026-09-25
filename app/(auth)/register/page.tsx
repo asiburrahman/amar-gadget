@@ -147,7 +147,14 @@ export default function RegisterPage() {
         )}
 
         {/* Registration Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        <form
+          action="#"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit(e);
+          }}
+          className="space-y-4 text-xs"
+        >
           {/* Avatar Input & Preview */}
           <div className="space-y-2">
             <label className="font-bold text-foreground block">Profile Photo (Upload or URL)</label>
@@ -180,6 +187,8 @@ export default function RegisterPage() {
 
           <FormInput
             label="Full Name *"
+            name="name"
+            autoComplete="name"
             placeholder="e.g. Asibur Rahman"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -189,6 +198,8 @@ export default function RegisterPage() {
           <FormInput
             label="Email Address *"
             type="email"
+            name="email"
+            autoComplete="email"
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -199,6 +210,8 @@ export default function RegisterPage() {
             <FormInput
               label="Password *"
               type="password"
+              name="password"
+              autoComplete="new-password"
               placeholder="e.g. Password123!"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -233,7 +246,11 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={isLoading || !isPasswordValid}
+            disabled={isLoading}
+            onClick={(e) => {
+              e.preventDefault();
+              handleSubmit(e);
+            }}
             className="w-full h-11 rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
           >
             {isLoading ? (
