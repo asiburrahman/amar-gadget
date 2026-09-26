@@ -2,6 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: [
+    "planet-leone-monsters-garbage.trycloudflare.com",
+    "*.trycloudflare.com",
+    "trycloudflare.com",
+    "amargadget.gmksolution.com",
+    "*.gmksolution.com",
+    "gmksolution.com",
+  ],
   experimental: {
     serverActions: {
       allowedOrigins: [
