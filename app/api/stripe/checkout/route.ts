@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Cart items required for Stripe Checkout." }, { status: 400 });
     }
 
-    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://192.168.50.210:3000";
+    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "https://tables-webmaster-blond-die.trycloudflare.com";
 
     const lineItems = items.map((item: any) => ({
       price_data: {

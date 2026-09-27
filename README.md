@@ -14,7 +14,7 @@ pnpm dev
 bun dev
 ```
 
-Open [http://192.168.50.210:3000](http://192.168.50.210:3000) with your browser to see the result.
+Open [https://tables-webmaster-blond-die.trycloudflare.com](https://tables-webmaster-blond-die.trycloudflare.com) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
