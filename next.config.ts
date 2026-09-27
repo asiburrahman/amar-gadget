@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "amargadget.gmksolution.com",
     "*.gmksolution.com",
     "gmksolution.com",
+    "192.168.50.210:3000",
   ],
   experimental: {
     serverActions: {
