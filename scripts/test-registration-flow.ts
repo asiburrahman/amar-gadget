@@ -6,7 +6,7 @@ async function main() {
   const name = "Automated Test User";
 
   console.log(`1. Testing registration for: ${email}...`);
-  const regRes = await fetch("http://localhost:3000/api/auth/register", {
+  const regRes = await fetch("http://192.168.50.210:3000/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -35,7 +35,7 @@ async function main() {
   console.log("Found OTP code:", otpRecord.code);
 
   console.log("3. Verifying OTP...");
-  const verifyRes = await fetch("http://localhost:3000/api/auth/verify-otp", {
+  const verifyRes = await fetch("http://192.168.50.210:3000/api/auth/verify-otp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -51,7 +51,7 @@ async function main() {
   }
 
   console.log("4. Logging in as new user...");
-  const loginRes = await fetch("http://localhost:3000/api/auth/login", {
+  const loginRes = await fetch("http://192.168.50.210:3000/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -71,7 +71,7 @@ async function main() {
   console.log("Auth Cookie Received:", !!setCookie);
 
   console.log("6. Verifying /api/auth/me with auth token...");
-  const meRes = await fetch("http://localhost:3000/api/auth/me", {
+  const meRes = await fetch("http://192.168.50.210:3000/api/auth/me", {
     headers: {
       cookie: setCookie || "",
     },

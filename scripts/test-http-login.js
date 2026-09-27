@@ -5,7 +5,7 @@ const payload = JSON.stringify({
   password: "AdminPassword123!"
 });
 
-const req = http.request("http://localhost:3000/api/auth/login", {
+const req = http.request("http://192.168.50.210:3000/api/auth/login", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
