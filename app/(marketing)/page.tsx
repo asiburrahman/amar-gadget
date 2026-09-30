@@ -12,7 +12,7 @@ import { BottomWidgets } from "@/components/home/bottom-widgets";
 import { NewsletterBar } from "@/components/home/newsletter-bar";
 import { ElectroFooter } from "@/components/footer/electro-footer";
 
-export const revalidate = 60; // Revalidate every minute
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
   let approvedProducts: DynamicProductItem[] = [];
@@ -23,9 +23,6 @@ export default async function Home() {
       prisma.product.findMany({
         where: {
           status: "APPROVED",
-          seller: {
-            sellerStatus: "APPROVED",
-          },
         },
         include: {
           category: {

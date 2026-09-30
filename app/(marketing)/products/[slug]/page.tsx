@@ -7,6 +7,8 @@ import { ProductDetailActions } from "./_components/product-detail-actions";
 import { formatCurrency } from "@/lib/formatter";
 import { generateProductSchema } from "@/lib/seo/schema";
 
+export const dynamic = "force-dynamic";
+
 const getProduct = cache(async (identifier: string) => {
   let product: any = null;
 

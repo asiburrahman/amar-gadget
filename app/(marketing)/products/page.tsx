@@ -23,6 +23,8 @@ interface ProductItem {
   rating?: number;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function ProductsPage() {
   let productData: ProductItem[] = [];
 
@@ -30,9 +32,6 @@ export default async function ProductsPage() {
     const products = await prisma.product.findMany({
       where: {
         status: "APPROVED",
-        seller: {
-          sellerStatus: "APPROVED",
-        },
       },
       include: {
         category: {
