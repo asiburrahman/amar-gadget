@@ -3,9 +3,8 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 export default function Loading() {
   return (
     <LoadingSpinner
-      message="Loading Amar Gadget..."
-      subMessage="Connecting to marketplace"
-      fullScreen={true}
+      message="Loading Category Products..."
+      subMessage="Finding matching gadgets in this collection"
     />
   );
 }
