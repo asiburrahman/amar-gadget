@@ -36,6 +36,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV NODE_OPTIONS="--no-network-family-autoselection --max-old-space-size=1024"
 ARG DATABASE_URL="postgresql://neondb_owner:npg_XcFmCt0vhko4@ep-blue-frog-atpqk11x-pooler.c-9.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require"
 ENV DATABASE_URL=$DATABASE_URL
 ENV JWT_SECRET="super-secret-jwt-token-string-at-least-32-chars-long"
