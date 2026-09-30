@@ -7,23 +7,14 @@ import { ProductDetailActions } from "./_components/product-detail-actions";
 import { formatCurrency } from "@/lib/formatter";
 import { generateProductSchema } from "@/lib/seo/schema";
 
-const getProduct = cache(async (identifier: string) => {
-  let product = await prisma.product.findUnique({
-    where: { slug: identifier },
-    include: {
-      category: true,
-      brand: true,
-      seller: { select: { id: true, name: true, email: true } },
-      reviews: {
-        include: { user: { select: { name: true, avatar: true } } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
+import { findFallbackProduct } from "@/lib/mock-catalog";
 
-  if (!product) {
+const getProduct = cache(async (identifier: string) => {
+  let product: any = null;
+
+  try {
     product = await prisma.product.findUnique({
-      where: { id: identifier },
+      where: { slug: identifier },
       include: {
         category: true,
         brand: true,
@@ -34,6 +25,45 @@ const getProduct = cache(async (identifier: string) => {
         },
       },
     });
+
+    if (!product) {
+      product = await prisma.product.findUnique({
+        where: { id: identifier },
+        include: {
+          category: true,
+          brand: true,
+          seller: { select: { id: true, name: true, email: true } },
+          reviews: {
+            include: { user: { select: { name: true, avatar: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.error("Prisma lookup failed for product:", identifier, error);
+  }
+
+  if (!product) {
+    const fallback = findFallbackProduct(identifier);
+    if (fallback) {
+      product = {
+        id: fallback.id,
+        slug: fallback.slug,
+        name: fallback.name,
+        description: fallback.description,
+        price: fallback.price,
+        discountPrice: fallback.discountPrice ?? null,
+        stock: fallback.stock,
+        imageUrl: fallback.imageUrl,
+        rating: fallback.rating,
+        reviewCount: fallback.reviewCount,
+        category: fallback.category,
+        brand: fallback.brand ?? null,
+        seller: fallback.seller ?? { id: "seller-official", name: "Amar Gadget Official Store", email: "support@amargadget.com" },
+        reviews: fallback.reviews ?? [],
+      };
+    }
   }
 
   return product;
