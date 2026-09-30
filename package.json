@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start -H 0.0.0.0 -p 3000",
+    "tunnel": "cloudflared tunnel --url http://192.168.50.210:3000 --http-host-header 192.168.50.210:3000",
+    "tunnel:local": "cloudflared tunnel --url http://localhost:3000",
     "postinstall": "prisma generate",
     "lint": "eslint",
     "test": "jest"

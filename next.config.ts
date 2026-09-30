@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   allowedDevOrigins: [
-    "identify-sheets-equality-local.trycloudflare.com",
+    "bedding-card-verification-viewed.trycloudflare.com",
     "tables-webmaster-blond-die.trycloudflare.com",
     "*.trycloudflare.com",
     "trycloudflare.com",
@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       allowedOrigins: [
-        "identify-sheets-equality-local.trycloudflare.com",
+        "bedding-card-verification-viewed.trycloudflare.com",
         "amargadget.gmksolution.com",
         "*.gmksolution.com",
         "gmksolution.com",
