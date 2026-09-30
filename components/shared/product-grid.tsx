@@ -7,9 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface ProductGridProps {
   products: Array<{
     id: string;
+    slug?: string;
     name: string;
     description?: string;
     price: number;
+    discountPrice?: number | null;
     stock: number;
     imageUrl?: string;
     category?: string;

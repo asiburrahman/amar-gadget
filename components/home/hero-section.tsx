@@ -2,19 +2,51 @@
 
 import React from "react";
 import Link from "next/link";
+import { formatCurrency } from "@/lib/formatter";
 
-export const HeroSection: React.FC = () => {
-  const categories = [
-    { name: "Value of the Day", href: "/deals", isBold: true, hasSub: false },
-    { name: "Top 100 Offers", href: "/deals", isBold: true, hasSub: false },
-    { name: "New Arrivals", href: "/products?filter=new", isBold: true, hasSub: false },
-    { name: "Smartphones & Tablets", href: "/products?category=smartphones", isBold: false, hasSub: true },
+interface HeroSectionProps {
+  featuredProduct?: {
+    id: string;
+    slug?: string;
+    name: string;
+    price: number;
+    discountPrice?: number | null;
+    imageUrl?: string;
+  } | null;
+  categories?: Array<{ id: string; name: string }>;
+}
+
+export const HeroSection: React.FC<HeroSectionProps> = ({
+  featuredProduct,
+  categories = [],
+}) => {
+  const defaultCategories = [
+    { name: "All Products", href: "/products", isBold: true, hasSub: false },
+    { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
+    { name: "Smartphones", href: "/products?category=smartphones", isBold: false, hasSub: true },
     { name: "Laptops & Computers", href: "/products?category=laptops", isBold: false, hasSub: true },
     { name: "Audio & Headphones", href: "/products?category=audio", isBold: false, hasSub: true },
-    { name: "Smart Watches & Wearables", href: "/products?category=wearables", isBold: false, hasSub: true },
-    { name: "Gaming & Consoles", href: "/products?category=gaming", isBold: false, hasSub: true },
-    { name: "Cameras & Drones", href: "/products?category=cameras", isBold: false, hasSub: true },
+    { name: "Smart Watches", href: "/products?category=wearables", isBold: false, hasSub: true },
+    { name: "Accessories", href: "/products?category=accessories", isBold: false, hasSub: true },
   ];
+
+  const categoryList =
+    categories.length > 0
+      ? [
+          { name: "All Products", href: "/products", isBold: true, hasSub: false },
+          { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
+          ...categories.map((c) => ({
+            name: c.name,
+            href: `/products?categoryId=${c.id}`,
+            isBold: false,
+            hasSub: false,
+          })),
+        ]
+      : defaultCategories;
+
+  const targetLink = featuredProduct
+    ? `/products/${featuredProduct.slug || featuredProduct.id}`
+    : "/products";
 
   return (
     <section className="bg-[#f5f5f5] pt-0 pb-0 border-b border-gray-200">
@@ -23,7 +55,7 @@ export const HeroSection: React.FC = () => {
         {/* Left Category Sidebar Navigation Bar */}
         <div className="hidden lg:flex flex-col justify-between bg-white rounded-b-xl border border-gray-200 border-t-0 shadow-xs overflow-hidden h-full">
           <ul className="divide-y divide-gray-100 text-[13px]">
-            {categories.map((cat, idx) => (
+            {categoryList.slice(0, 9).map((cat, idx) => (
               <li key={idx}>
                 <Link
                   href={cat.href}
@@ -52,21 +84,23 @@ export const HeroSection: React.FC = () => {
             </h1>
 
             <p className="text-xs font-bold text-[#333e48] uppercase tracking-wider leading-relaxed">
-              UNDER FAVORABLE SMARTWATCHES
+              {featuredProduct?.name || "FLAGSHIP GADGETS & ELECTRONICS"}
             </p>
 
             <div className="pt-2">
               <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400 block mb-1">
-                FROM
+                STARTING FROM
               </span>
               <div className="flex items-baseline justify-center md:justify-start space-x-1 mb-5">
-                <span className="text-4xl lg:text-5xl font-black text-[#333e48] tracking-tight">
-                  <sup>$</sup>749<sup>99</sup>
+                <span className="text-3xl lg:text-4xl font-black text-[#333e48] tracking-tight">
+                  {featuredProduct
+                    ? formatCurrency(featuredProduct.discountPrice || featuredProduct.price)
+                    : "Best Deals in BD"}
                 </span>
               </div>
 
               <Link
-                href="/products/smartwatch-s3"
+                href={targetLink}
                 className="inline-flex items-center justify-center bg-[#fed700] hover:bg-[#eec800] text-[#333e48] font-bold text-sm px-9 py-3.5 rounded-full shadow-sm transition-all hover:scale-105"
               >
                 Start Buying
@@ -81,11 +115,14 @@ export const HeroSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Banner Smartwatches Image */}
+          {/* Banner Image */}
           <div className="mt-8 md:mt-0 relative w-full max-w-md h-72 md:h-96 flex justify-center items-center">
             <img
-              src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80"
-              alt="Smart Watch Flagship"
+              src={
+                featuredProduct?.imageUrl ||
+                "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80"
+              }
+              alt={featuredProduct?.name || "Featured Product"}
               className="object-contain max-h-full drop-shadow-2xl hover:scale-105 transition-transform duration-500"
             />
           </div>

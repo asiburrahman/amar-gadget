@@ -12,12 +12,15 @@ export async function generateMetadata(): Promise<Metadata> {
 
 interface ProductItem {
   id: string;
+  slug?: string;
   name: string;
   description?: string;
   price: number;
+  discountPrice?: number | null;
   stock: number;
   imageUrl?: string;
   category?: string;
+  rating?: number;
 }
 
 export default async function ProductsPage() {
@@ -45,75 +48,18 @@ export default async function ProductsPage() {
 
     productData = products.map((product) => ({
       id: product.id,
+      slug: product.slug,
       name: product.name,
       description: product.description ?? undefined,
       price: Number(product.price),
+      discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
       stock: product.stock,
       imageUrl: product.imageUrl ?? undefined,
       category: product.category?.name ?? undefined,
+      rating: product.rating ?? 5,
     }));
   } catch (error) {
-    console.error("Database lookup fallback on Products page:", error);
-  }
-
-  // Fallback featured products if database is empty
-  if (productData.length === 0) {
-    productData = [
-      {
-        id: "p-1",
-        name: "Apple iPhone 16 Pro Max 256GB",
-        description: "Natural Titanium finish with A18 Pro chip and telephoto camera.",
-        price: 165000,
-        stock: 12,
-        imageUrl: "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=600&auto=format&fit=crop&q=80",
-        category: "Smartphones",
-      },
-      {
-        id: "p-2",
-        name: 'Apple MacBook Air 15" M3 Chip 16GB / 512GB',
-        description: "Liquid Retina display with 18-hour battery life and fanless design.",
-        price: 182000,
-        stock: 8,
-        imageUrl: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=600&auto=format&fit=crop&q=80",
-        category: "Laptops",
-      },
-      {
-        id: "p-3",
-        name: "Sony WH-1000XM5 Noise Canceling Headphones",
-        description: "Industry-leading noise canceling with dual processors and 30hr battery.",
-        price: 38500,
-        stock: 15,
-        imageUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
-        category: "Audio",
-      },
-      {
-        id: "p-4",
-        name: "Samsung Galaxy Watch 6 Classic 47mm LTE",
-        description: "Rotating bezel with advanced sleep tracking and ECG sensor.",
-        price: 34990,
-        stock: 5,
-        imageUrl: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
-        category: "Smart Watches",
-      },
-      {
-        id: "p-5",
-        name: "Keychron K2 Pro Wireless Mechanical Keyboard",
-        description: "QMK/VIA programmable custom mechanical keyboard with RGB backlighting.",
-        price: 12500,
-        stock: 20,
-        imageUrl: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=600&auto=format&fit=crop&q=80",
-        category: "Accessories",
-      },
-      {
-        id: "p-6",
-        name: "Logitech MX Master 3S Wireless Performance Mouse",
-        description: "8K DPI track-on-glass sensor with Quiet Clicks and MagSpeed scrolling.",
-        price: 13900,
-        stock: 14,
-        imageUrl: "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=600&auto=format&fit=crop&q=80",
-        category: "Accessories",
-      },
-    ];
+    console.error("Database lookup on Products page error:", error);
   }
 
   return (
@@ -138,7 +84,7 @@ export default async function ProductsPage() {
         <div className="flex items-center justify-between mb-8 pb-4 border-b">
           <div>
             <h2 className="text-xl font-bold text-foreground">All Gadgets</h2>
-            <p className="text-xs text-muted-foreground">Showing {productData.length} items</p>
+            <p className="text-xs text-muted-foreground">Showing {productData.length} items from database</p>
           </div>
         </div>
 

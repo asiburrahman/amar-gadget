@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { FALLBACK_PRODUCTS } from "@/lib/mock-catalog";
 
 export async function GET(req: NextRequest) {
   try {
@@ -32,51 +31,20 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    let products: any[] = [];
-    let total = 0;
-
-    try {
-      [products, total] = await Promise.all([
-        prisma.product.findMany({
-          where: whereClause,
-          include: {
-            category: { select: { id: true, name: true } },
-            brand: { select: { id: true, name: true } },
-            seller: { select: { id: true, name: true } },
-          },
-          orderBy: { createdAt: "desc" },
-          take: limit,
-          skip: skip,
-        }),
-        prisma.product.count({ where: whereClause }),
-      ]);
-    } catch (dbErr) {
-      console.error("Database query failed in /api/products:", dbErr);
-    }
-
-    // Fallback if database returns no records
-    if (!products || products.length === 0) {
-      let filtered = [...FALLBACK_PRODUCTS];
-
-      if (search) {
-        const query = search.toLowerCase();
-        filtered = filtered.filter(
-          (p) =>
-            p.name.toLowerCase().includes(query) ||
-            p.description.toLowerCase().includes(query)
-        );
-      }
-
-      if (categoryId) {
-        const catQuery = categoryId.toLowerCase();
-        filtered = filtered.filter((p) =>
-          p.category.name.toLowerCase().includes(catQuery)
-        );
-      }
-
-      total = filtered.length;
-      products = filtered.slice(skip, skip + limit);
-    }
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where: whereClause,
+        include: {
+          category: { select: { id: true, name: true } },
+          brand: { select: { id: true, name: true } },
+          seller: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: skip,
+      }),
+      prisma.product.count({ where: whereClause }),
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -90,8 +58,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to retrieve products",
-        products: FALLBACK_PRODUCTS.slice(0, 10),
+        message: "Failed to retrieve products from database",
+        products: [],
       },
       { status: 500 }
     );

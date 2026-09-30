@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { findFallbackProduct } from "@/lib/mock-catalog";
 
 export async function GET(
   req: NextRequest,
@@ -12,11 +11,22 @@ export async function GET(
       return NextResponse.json({ success: false, message: "Product slug is required" }, { status: 400 });
     }
 
-    let product: any = null;
+    let product = await prisma.product.findUnique({
+      where: { slug },
+      include: {
+        category: { select: { id: true, name: true } },
+        brand: { select: { id: true, name: true } },
+        seller: { select: { id: true, name: true, email: true } },
+        reviews: {
+          include: { user: { select: { name: true, avatar: true } } },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
 
-    try {
+    if (!product) {
       product = await prisma.product.findUnique({
-        where: { slug },
+        where: { id: slug },
         include: {
           category: { select: { id: true, name: true } },
           brand: { select: { id: true, name: true } },
@@ -27,35 +37,26 @@ export async function GET(
           },
         },
       });
-
-      if (!product) {
-        product = await prisma.product.findUnique({
-          where: { id: slug },
-          include: {
-            category: { select: { id: true, name: true } },
-            brand: { select: { id: true, name: true } },
-            seller: { select: { id: true, name: true, email: true } },
-            reviews: {
-              include: { user: { select: { name: true, avatar: true } } },
-              orderBy: { createdAt: "desc" },
-            },
-          },
-        });
-      }
-    } catch (dbErr) {
-      console.error("Database query failed in /api/products/[slug]:", dbErr);
     }
 
     if (!product) {
-      const fallback = findFallbackProduct(slug);
-      if (fallback) {
-        product = fallback;
-      }
+      product = await prisma.product.findFirst({
+        where: { slug: { equals: slug, mode: "insensitive" } },
+        include: {
+          category: { select: { id: true, name: true } },
+          brand: { select: { id: true, name: true } },
+          seller: { select: { id: true, name: true, email: true } },
+          reviews: {
+            include: { user: { select: { name: true, avatar: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
     }
 
     if (!product) {
       return NextResponse.json(
-        { success: false, message: "Product not found" },
+        { success: false, message: "Product not found in database" },
         { status: 404 }
       );
     }

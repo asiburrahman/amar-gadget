@@ -12,6 +12,7 @@ import { useWishlistStore } from "@/stores/wishlist-store";
 
 interface ProductCardProps {
   id: string;
+  slug?: string;
   name: string;
   description?: string;
   price: number;
@@ -27,6 +28,7 @@ interface ProductCardProps {
 
 export const ProductCard = ({
   id,
+  slug,
   name,
   description,
   price,
@@ -96,7 +98,7 @@ export const ProductCard = ({
       <div className="flex flex-col flex-1">
         {/* Product Image Stage - Fixed Uniform 1:1 Aspect Ratio Box across ALL cards */}
         <div className="relative w-full aspect-square overflow-hidden bg-white dark:bg-slate-900 p-2 flex items-center justify-center border-b border-slate-100 dark:border-slate-800/60">
-          <Link href={`/products/${id}`} className="block relative w-full h-full">
+          <Link href={`/products/${slug || id}`} className="block relative w-full h-full">
             {imageUrl ? (
               <Image
                 src={imageUrl}
@@ -159,7 +161,7 @@ export const ProductCard = ({
               </div>
             </div>
 
-            <Link href={`/products/${id}`} className="block group/title">
+            <Link href={`/products/${slug || id}`} className="block group/title">
               <h3 className="font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-100 group-hover/title:text-amber-600 dark:group-hover/title:text-amber-400 line-clamp-2 leading-snug transition-colors">
                 {name}
               </h3>

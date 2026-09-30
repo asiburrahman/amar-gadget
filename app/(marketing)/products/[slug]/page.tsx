@@ -7,12 +7,11 @@ import { ProductDetailActions } from "./_components/product-detail-actions";
 import { formatCurrency } from "@/lib/formatter";
 import { generateProductSchema } from "@/lib/seo/schema";
 
-import { findFallbackProduct } from "@/lib/mock-catalog";
-
 const getProduct = cache(async (identifier: string) => {
   let product: any = null;
 
   try {
+    // 1. Try finding by slug
     product = await prisma.product.findUnique({
       where: { slug: identifier },
       include: {
@@ -26,6 +25,7 @@ const getProduct = cache(async (identifier: string) => {
       },
     });
 
+    // 2. If not found by slug, try by ID
     if (!product) {
       product = await prisma.product.findUnique({
         where: { id: identifier },
@@ -40,30 +40,26 @@ const getProduct = cache(async (identifier: string) => {
         },
       });
     }
-  } catch (error) {
-    console.error("Prisma lookup failed for product:", identifier, error);
-  }
 
-  if (!product) {
-    const fallback = findFallbackProduct(identifier);
-    if (fallback) {
-      product = {
-        id: fallback.id,
-        slug: fallback.slug,
-        name: fallback.name,
-        description: fallback.description,
-        price: fallback.price,
-        discountPrice: fallback.discountPrice ?? null,
-        stock: fallback.stock,
-        imageUrl: fallback.imageUrl,
-        rating: fallback.rating,
-        reviewCount: fallback.reviewCount,
-        category: fallback.category,
-        brand: fallback.brand ?? null,
-        seller: fallback.seller ?? { id: "seller-official", name: "Amar Gadget Official Store", email: "support@amargadget.com" },
-        reviews: fallback.reviews ?? [],
-      };
+    // 3. Fallback for case-insensitive slug variations
+    if (!product) {
+      product = await prisma.product.findFirst({
+        where: {
+          slug: { equals: identifier, mode: "insensitive" },
+        },
+        include: {
+          category: true,
+          brand: true,
+          seller: { select: { id: true, name: true, email: true } },
+          reviews: {
+            include: { user: { select: { name: true, avatar: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
     }
+  } catch (error) {
+    console.error("Database product lookup error:", identifier, error);
   }
 
   return product;
