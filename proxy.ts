@@ -20,21 +20,21 @@ export async function proxy(request: NextRequest) {
 
   if (!token) {
     if (path.startsWith("/admin") || path.startsWith("/member") || path.startsWith("/user")) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL("/login", request.nextUrl));
     }
     return NextResponse.next();
   }
 
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET_KEY);
-    const userRole = payload.role as string;
+    const userRole = (payload.role as string)?.toUpperCase();
 
     // Strict Role-Based Access Control Checks
     if (path.startsWith("/admin") && userRole !== "ADMIN") {
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
+      return NextResponse.redirect(new URL("/unauthorized", request.nextUrl));
     }
     if (path.startsWith("/member") && !["ADMIN", "MEMBER"].includes(userRole)) {
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
+      return NextResponse.redirect(new URL("/unauthorized", request.nextUrl));
     }
 
     const response = NextResponse.next();
@@ -43,7 +43,7 @@ export async function proxy(request: NextRequest) {
     return response;
   } catch (error) {
     console.error("JWT Verification failed inside Edge proxy:", error);
-    const response = NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.redirect(new URL("/login", request.nextUrl));
     response.cookies.delete("auth_token");
     return response;
   }

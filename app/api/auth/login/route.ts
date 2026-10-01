@@ -67,9 +67,15 @@ export async function POST(req: Request) {
       },
     });
 
+    const forwardedProto = req.headers.get("x-forwarded-proto");
+    const isHttps =
+      forwardedProto === "https" ||
+      req.headers.get("cf-visitor")?.includes('"scheme":"https"') ||
+      req.url.startsWith("https://");
+
     response.cookies.set("auth_token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isHttps,
       sameSite: "lax",
       maxAge: 604800, // 7 days
       path: "/",
