@@ -392,31 +392,53 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
         </div>
       </div>
 
-      {/* 3. OPTIONAL ACTIVE CATEGORY BAR */}
-      {activeCategory && (
-        <div className="bg-slate-50/80 border border-gray-200 rounded-lg px-5 py-3 mt-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-slate-600">
-            <span className="font-bold text-[#333e48]">Active Tab:</span>
-            <span className="bg-white border px-2.5 py-0.5 rounded-full font-bold text-primary shadow-2xs">
-              {activeCategory.name}
-            </span>
-            <span className="text-gray-400 font-medium">
-              ({activeCategory.products.length}{" "}
-              {activeCategory.products.length === 1 ? "Product" : "Products"})
+      {/* 3. ALL PRODUCTS IN SELECTED CATEGORY GRID */}
+      <div className="mt-8 bg-white border border-[#eaeaea] rounded-lg p-4 sm:p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-5 border-b-2 border-gray-200 gap-2">
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-base sm:text-xl font-black text-[#333e48] relative">
+              {activeCategory ? `All ${activeCategory.name} Products` : "All Top Deals & Gadgets"}
+              <span className="absolute -bottom-[14px] left-0 w-16 h-[3px] bg-[#fed700] rounded-full" />
+            </h3>
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#fed700]/25 text-[#333e48] border border-[#fed700]/40">
+              {currentProducts.length} {currentProducts.length === 1 ? "Item" : "Items"}
             </span>
           </div>
 
-          <Link
-            href={`/categories/${activeCategory.slug}`}
-            className="font-extrabold text-[#333e48] hover:text-black flex items-center gap-1.5 transition-colors group"
-          >
-            <span>View Full {activeCategory.name} Category Page</span>
-            <span className="text-[#fed700] font-black group-hover:translate-x-1 transition-transform">
-              &rarr;
-            </span>
-          </Link>
+          <span className="text-xs text-gray-500 font-medium">
+            100% Genuine with Official Warranty in Bangladesh
+          </span>
         </div>
-      )}
+
+        {currentProducts.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            {currentProducts.map((p) => (
+              <div
+                key={p.id}
+                className="border border-gray-200 rounded-lg hover:border-[#fed700] hover:shadow-md transition-all duration-200 bg-white overflow-hidden flex flex-col justify-between"
+              >
+                <StandardProductItem
+                  product={p}
+                  onAddToCart={handleAddToCart}
+                  onToggleWishlist={handleToggleWishlist}
+                  isAdded={addedNoticeId === p.id}
+                  isWishlisted={isInWishlist(p.id)}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16 px-4">
+            <span className="text-3xl block mb-2">⚡</span>
+            <p className="text-sm font-bold text-[#333e48]">
+              No products available in {activeCategory?.name || "this category"} yet
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              New official stock will be added soon.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

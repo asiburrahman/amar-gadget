@@ -1,7 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { ProductGrid } from "@/components/shared/product-grid";
 import { H1, P } from "@/components/ui/typography";
 import {
   ElectroCategoryShowcase,
@@ -18,72 +17,6 @@ export async function generateMetadata(): Promise<Metadata> {
       "Browse tech categories: Smartphones, Laptops, Audio, Smart Watches, Accessories, and Electronics organized with official warranty in Bangladesh.",
   };
 }
-
-const getCategoryMeta = (name: string, slug: string) => {
-  const lower = `${name} ${slug}`.toLowerCase();
-  if (lower.includes("phone") || lower.includes("mobile") || lower.includes("tablet")) {
-    return {
-      icon: "📱",
-      tagline: "Flagship iPhones, Galaxy, Pixel & iPads with official warranty",
-      gradient: "from-blue-500/10 via-indigo-500/5 to-transparent",
-      accent: "text-blue-600 bg-blue-500/10 border-blue-500/20",
-    };
-  }
-  if (lower.includes("laptop") || lower.includes("computer") || lower.includes("macbook")) {
-    return {
-      icon: "💻",
-      tagline: "MacBook M3, ultrabooks, workstations & high-performance computing",
-      gradient: "from-purple-500/10 via-pink-500/5 to-transparent",
-      accent: "text-purple-600 bg-purple-500/10 border-purple-500/20",
-    };
-  }
-  if (lower.includes("audio") || lower.includes("headphone") || lower.includes("earbud") || lower.includes("sound")) {
-    return {
-      icon: "🎧",
-      tagline: "Active noise-canceling headphones, TWS earbuds & Hi-Fi speakers",
-      gradient: "from-amber-500/10 via-orange-500/5 to-transparent",
-      accent: "text-amber-600 bg-amber-500/10 border-amber-500/20",
-    };
-  }
-  if (lower.includes("watch") || lower.includes("wearable") || lower.includes("band")) {
-    return {
-      icon: "⌚",
-      tagline: "Apple Watch, Galaxy Watch, fitness trackers & health wearables",
-      gradient: "from-emerald-500/10 via-teal-500/5 to-transparent",
-      accent: "text-emerald-600 bg-emerald-500/10 border-emerald-500/20",
-    };
-  }
-  if (lower.includes("gaming") || lower.includes("console")) {
-    return {
-      icon: "🎮",
-      tagline: "PlayStation 5, Xbox Series X, gaming mechanical peripherals",
-      gradient: "from-rose-500/10 via-red-500/5 to-transparent",
-      accent: "text-rose-600 bg-rose-500/10 border-rose-500/20",
-    };
-  }
-  if (lower.includes("camera") || lower.includes("drone")) {
-    return {
-      icon: "📷",
-      tagline: "Mirrorless cameras, action cams, 4K drones & creator gear",
-      gradient: "from-cyan-500/10 via-sky-500/5 to-transparent",
-      accent: "text-cyan-600 bg-cyan-500/10 border-cyan-500/20",
-    };
-  }
-  if (lower.includes("accessori") || lower.includes("keyboard") || lower.includes("mouse") || lower.includes("charger")) {
-    return {
-      icon: "🔌",
-      tagline: "Mechanical keyboards, ergonomic mice, fast GaN chargers & cables",
-      gradient: "from-orange-500/10 via-amber-500/5 to-transparent",
-      accent: "text-orange-600 bg-orange-500/10 border-orange-500/20",
-    };
-  }
-  return {
-    icon: "⚡",
-    tagline: "Genuine consumer tech and electronics with authorized warranty",
-    gradient: "from-primary/10 via-primary/5 to-transparent",
-    accent: "text-primary bg-primary/10 border-primary/20",
-  };
-};
 
 export default async function CategoriesPage() {
   let categories: any[] = [];
@@ -189,104 +122,13 @@ export default async function CategoriesPage() {
         </div>
       </section>
 
-      {/* 2. THE ELECTRO TABBED CATEGORY SHOWCASE (Matches User Screenshot) */}
+      {/* 2. ALL-IN-ONE ELECTRO TABBED CATEGORY SHOWCASE */}
       <section className="container mx-auto px-4 py-8 max-w-7xl">
         <ElectroCategoryShowcase
           categories={showcaseCategories}
           allProducts={allProducts}
         />
       </section>
-
-      {/* 3. Category-Wise Segregated Detailed Sections (Electro Style) */}
-      <section className="container mx-auto px-4 pt-4 pb-2 max-w-7xl">
-        <div className="flex items-center justify-between border-b-2 border-gray-200 pb-3">
-          <h2 className="text-xl sm:text-2xl font-black text-[#333e48] relative">
-            Browse All Products by Category
-            <span className="absolute -bottom-[14px] left-0 w-20 h-[3px] bg-[#fed700] rounded-full" />
-          </h2>
-          <span className="text-xs text-gray-500 font-medium hidden sm:inline-block">
-            Showing all {totalApprovedProducts} verified devices
-          </span>
-        </div>
-      </section>
-
-      <main className="container mx-auto px-4 py-6 max-w-7xl space-y-12">
-        {categories.map((cat) => {
-          const meta = getCategoryMeta(cat.name, cat.slug);
-          const formattedProducts = cat.products.map((p: any) => ({
-            id: p.id,
-            slug: p.slug,
-            name: p.name,
-            description: p.description ?? undefined,
-            price: Number(p.price),
-            discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
-            stock: p.stock,
-            imageUrl: p.imageUrl ?? undefined,
-            category: p.category?.name ?? cat.name,
-            rating: p.rating ?? 5,
-          }));
-
-          return (
-            <section
-              key={cat.id}
-              id={`category-${cat.slug}`}
-              className="scroll-mt-28 rounded-2xl border border-gray-200 bg-white p-5 sm:p-7 shadow-xs relative overflow-hidden"
-            >
-              {/* Category Header Row */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 mb-6 border-b border-gray-100 gap-4">
-                <div className="flex items-start sm:items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-xl bg-slate-50 border border-gray-200 shadow-2xs flex items-center justify-center text-2xl shrink-0">
-                    {meta.icon}
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <Link
-                        href={`/categories/${cat.slug}`}
-                        className="text-xl sm:text-2xl font-black text-[#333e48] hover:text-[#0066cc] transition-colors tracking-tight flex items-center gap-1.5 group"
-                      >
-                        <span>{cat.name}</span>
-                        <span className="text-sm text-[#0066cc] opacity-0 group-hover:opacity-100 transition-opacity">
-                          ↗
-                        </span>
-                      </Link>
-                      <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#fed700]/20 text-[#333e48] border border-[#fed700]/40">
-                        {formattedProducts.length} {formattedProducts.length === 1 ? "Product" : "Products"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1 max-w-xl">
-                      {meta.tagline}
-                    </p>
-                  </div>
-                </div>
-
-                {/* View Category Detail Link - Strictly routes to /categories/[slug] */}
-                <Link
-                  href={`/categories/${cat.slug}`}
-                  className="inline-flex items-center gap-2 text-xs font-bold text-[#333e48] bg-[#fed700] hover:bg-[#eec800] px-4 py-2.5 rounded-xl transition-all duration-200 self-start sm:self-auto shrink-0 shadow-2xs hover:scale-102"
-                >
-                  <span>View All {cat.name}</span>
-                  <span className="font-extrabold">&rarr;</span>
-                </Link>
-              </div>
-
-              {/* Category Products */}
-              {formattedProducts.length > 0 ? (
-                <ProductGrid products={formattedProducts} />
-              ) : (
-                <div className="text-center py-12 px-4 rounded-xl border border-dashed border-gray-200 bg-slate-50/50">
-                  <span className="text-3xl block mb-2">{meta.icon}</span>
-                  <p className="text-sm font-bold text-[#333e48]">
-                    No products currently listed in {cat.name}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    New items in this category are being inspected by our team and will be available soon.
-                  </p>
-                </div>
-              )}
-            </section>
-          );
-        })}
-      </main>
     </div>
   );
 }
