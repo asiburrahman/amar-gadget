@@ -13,7 +13,7 @@ interface HeroSectionProps {
     discountPrice?: number | null;
     imageUrl?: string;
   } | null;
-  categories?: Array<{ id: string; name: string }>;
+  categories?: Array<{ id: string; name: string; slug?: string }>;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
@@ -21,23 +21,24 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   categories = [],
 }) => {
   const defaultCategories = [
-    { name: "All Products", href: "/products", isBold: true, hasSub: false },
+    { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
     { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
-    { name: "Smartphones", href: "/products?category=smartphones", isBold: false, hasSub: true },
-    { name: "Laptops & Computers", href: "/products?category=laptops", isBold: false, hasSub: true },
-    { name: "Audio & Headphones", href: "/products?category=audio", isBold: false, hasSub: true },
-    { name: "Smart Watches", href: "/products?category=wearables", isBold: false, hasSub: true },
-    { name: "Accessories", href: "/products?category=accessories", isBold: false, hasSub: true },
+    { name: "Smartphones", href: "/categories/smartphones", isBold: false, hasSub: true },
+    { name: "Laptops & Computers", href: "/categories/laptops", isBold: false, hasSub: true },
+    { name: "Audio & Headphones", href: "/categories/audio", isBold: false, hasSub: true },
+    { name: "Smart Watches", href: "/categories/smart-watches", isBold: false, hasSub: true },
+    { name: "Accessories", href: "/categories/accessories", isBold: false, hasSub: true },
+    { name: "Electronics", href: "/categories/electronics", isBold: false, hasSub: true },
   ];
 
   const categoryList =
     categories.length > 0
       ? [
-          { name: "All Products", href: "/products", isBold: true, hasSub: false },
+          { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
           { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
           ...categories.map((c) => ({
             name: c.name,
-            href: `/products?categoryId=${c.id}`,
+            href: c.slug ? `/categories/${c.slug}` : `/categories`,
             isBold: false,
             hasSub: false,
           })),

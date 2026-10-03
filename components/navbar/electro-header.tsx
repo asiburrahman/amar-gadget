@@ -38,13 +38,13 @@ export const ElectroHeader: React.FC = () => {
   const categories = [
     { name: "Value of the Day", href: "/deals", isBold: true, hasSub: false },
     { name: "Top 100 Offers", href: "/deals", isBold: true, hasSub: false },
-    { name: "New Arrivals", href: "/products?filter=new", isBold: true, hasSub: false },
-    { name: "Smartphones & Tablets", href: "/products?category=smartphones", isBold: false, hasSub: true },
-    { name: "Laptops & Computers", href: "/products?category=laptops", isBold: false, hasSub: true },
-    { name: "Audio & Headphones", href: "/products?category=audio", isBold: false, hasSub: true },
-    { name: "Smart Watches & Wearables", href: "/products?category=wearables", isBold: false, hasSub: true },
-    { name: "Gaming & Consoles", href: "/products?category=gaming", isBold: false, hasSub: true },
-    { name: "Cameras & Drones", href: "/products?category=cameras", isBold: false, hasSub: true },
+    { name: "Smartphones & Tablets", href: "/categories/smartphones", isBold: false, hasSub: true },
+    { name: "Laptops & Computers", href: "/categories/laptops", isBold: false, hasSub: true },
+    { name: "Audio & Headphones", href: "/categories/audio", isBold: false, hasSub: true },
+    { name: "Smart Watches & Wearables", href: "/categories/smart-watches", isBold: false, hasSub: true },
+    { name: "Accessories", href: "/categories/accessories", isBold: false, hasSub: true },
+    { name: "Electronics", href: "/categories/electronics", isBold: false, hasSub: true },
+    { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
   ];
 
   return (

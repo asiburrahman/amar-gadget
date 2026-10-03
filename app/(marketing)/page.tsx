@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   let approvedProducts: DynamicProductItem[] = [];
-  let dbCategories: Array<{ id: string; name: string }> = [];
+  let dbCategories: Array<{ id: string; name: string; slug?: string }> = [];
 
   try {
     const [products, categories] = await Promise.all([
@@ -40,6 +40,7 @@ export default async function Home() {
         select: {
           id: true,
           name: true,
+          slug: true,
         },
         take: 10,
       }),
