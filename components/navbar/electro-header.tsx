@@ -266,44 +266,44 @@ export const ElectroHeader: React.FC = () => {
       </div>
 
       {/* 3. NAVIGATION BAR & DEPARTMENTS MENU - Compact Height */}
-      <div className="bg-white border-t border-gray-200 h-9">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-full">
+      <div className="bg-white border-t border-gray-200 h-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-4 gap-6 items-center h-full">
 
-          <div className="flex items-center space-x-6 sm:space-x-8 h-full">
+          {/* All Departments Button - Full width of category column, square corners */}
+          <div className="relative w-full h-full flex items-stretch">
+            <button
+              onClick={() => setIsDepartmentOpen(!isDepartmentOpen)}
+              className="w-full h-full bg-[#fed700] hover:bg-[#eec800] text-[#333e48] font-black text-xs sm:text-sm px-4 rounded-none flex items-center space-x-2 transition-colors cursor-pointer select-none"
+            >
+              <Menu className="w-4 h-4 text-[#333e48]" />
+              <span>All Departments</span>
+            </button>
 
-            {/* All Departments Button */}
-            <div className="relative w-56 sm:w-64 shrink-0 h-full flex items-end">
-              <button
-                onClick={() => setIsDepartmentOpen(!isDepartmentOpen)}
-                className="w-full h-full bg-[#fed700] hover:bg-[#eec800] text-[#333e48] font-bold text-xs sm:text-sm px-3.5 rounded-t-lg flex items-center space-x-2 transition-colors cursor-pointer"
+            {/* Department Dropdown Menu */}
+            {isDepartmentOpen && (
+              <div
+                className="absolute top-full left-0 w-full bg-white border border-gray-200 border-t-0 shadow-2xl z-50 py-1 rounded-none"
+                onMouseLeave={() => setIsDepartmentOpen(false)}
               >
-                <Menu className="w-4 h-4 text-[#333e48]" />
-                <span>All Departments</span>
-              </button>
+                {categories.map((cat, idx) => (
+                  <Link
+                    key={idx}
+                    href={cat.href}
+                    className={`flex items-center justify-between px-4 py-2 text-xs text-gray-700 hover:bg-gray-100 hover:text-black transition-colors ${
+                      cat.isBold ? "font-bold text-[#333e48]" : "font-semibold"
+                    }`}
+                  >
+                    <span>{cat.name}</span>
+                    {cat.hasSub && <span className="text-gray-400 text-[10px] font-bold">&gt;</span>}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
 
-              {/* Department Dropdown Menu */}
-              {isDepartmentOpen && (
-                <div
-                  className="absolute top-full left-0 w-full bg-white border border-gray-200 shadow-2xl z-50 py-1 rounded-b-lg"
-                  onMouseLeave={() => setIsDepartmentOpen(false)}
-                >
-                  {categories.map((cat, idx) => (
-                    <Link
-                      key={idx}
-                      href={cat.href}
-                      className={`flex items-center justify-between px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-100 hover:text-black transition-colors ${cat.isBold ? "font-bold text-[#333e48]" : "font-semibold"
-                        }`}
-                    >
-                      <span>{cat.name}</span>
-                      {cat.hasSub && <span className="text-gray-400 text-[10px] font-bold">&gt;</span>}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Horizontal Nav Links */}
-            <nav className="hidden lg:flex items-center space-x-6 text-xs sm:text-sm font-extrabold text-[#333e48] h-full">
+          {/* Horizontal Nav Links & Shipping Promo */}
+          <div className="hidden lg:flex lg:col-span-3 items-center justify-between h-full">
+            <nav className="flex items-center space-x-6 text-xs sm:text-sm font-extrabold text-[#333e48] h-full">
               <Link
                 href="/deals"
                 className={`h-full flex items-center gap-1 border-b-2 transition-colors ${
@@ -366,12 +366,12 @@ export const ElectroHeader: React.FC = () => {
                 Contact
               </Link>
             </nav>
+
+            <div className="hidden xl:block text-xs font-semibold text-gray-600">
+              <span>Free Shipping on Orders $50+</span>
+            </div>
           </div>
 
-          {/* Right shipping promo */}
-          <div className="hidden xl:block text-xs font-semibold text-gray-600">
-            <span>Free Shipping on Orders $50+</span>
-          </div>
         </div>
       </div>
 
