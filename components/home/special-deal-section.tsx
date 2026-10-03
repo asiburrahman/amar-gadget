@@ -94,11 +94,11 @@ export const SpecialDealSection: React.FC<SpecialDealSectionProps> = ({
 
   return (
     <section className="py-8 bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         
-        {/* Left Special Offer Card */}
+        {/* Left Special Offer Card - Fixed height, never stretches when right grid expands */}
         {effectiveSpecial ? (
-          <div className="bg-white border-2 border-[#fed700] rounded-xl p-5 relative flex flex-col justify-between shadow-xs">
+          <div className="bg-white border-2 border-[#fed700] rounded-xl p-5 relative flex flex-col justify-between shadow-xs self-start w-full h-fit">
             {/* Discount Badge */}
             {effectiveSpecial.discountPrice && (
               <div className="absolute top-4 right-4 bg-[#fed700] text-[#333e48] text-xs font-black px-3 py-1.5 rounded-full uppercase shadow-xs">
