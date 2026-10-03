@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { ProductCard } from "@/components/shared/product-card";
 
 export interface RecentlyViewedProductItem {
@@ -21,9 +21,11 @@ interface RecentlyViewedProps {
 }
 
 export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({ products = [] }) => {
-  const displayProducts = products.slice(0, 8);
+  const [showAll, setShowAll] = useState(false);
+  const ROW_LIMIT = 4;
+  const visibleProducts = showAll ? products : products.slice(0, ROW_LIMIT);
 
-  if (displayProducts.length === 0) return null;
+  if (products.length === 0) return null;
 
   return (
     <section className="py-12 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
@@ -38,7 +40,7 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({ products = [] })
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {displayProducts.map((item) => (
+          {visibleProducts.map((item) => (
             <ProductCard
               key={item.id}
               id={item.id}
@@ -54,7 +56,38 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({ products = [] })
             />
           ))}
         </div>
+
+        {/* See More / See Less Button */}
+        {products.length > ROW_LIMIT && (
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={() => setShowAll((prev) => !prev)}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-gray-300 bg-white hover:bg-[#fed700] hover:border-[#fed700] text-[#333e48] font-bold text-xs sm:text-sm shadow-xs hover:shadow transition-all duration-200 cursor-pointer active:scale-95 group"
+            >
+              <span>
+                {showAll
+                  ? "See Less"
+                  : `See More (${products.length - ROW_LIMIT} more)`}
+              </span>
+              <svg
+                className={`w-3.5 h-3.5 text-[#333e48] transition-transform duration-200 ${
+                  showAll ? "rotate-180" : "group-hover:translate-y-0.5"
+                }`}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
 };
+

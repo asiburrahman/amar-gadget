@@ -34,6 +34,7 @@ export const SpecialDealSection: React.FC<SpecialDealSectionProps> = ({
   topRatedProducts = [],
 }) => {
   const [activeTab, setActiveTab] = useState<"featured" | "onsale" | "toprated">("featured");
+  const [showAll, setShowAll] = useState(false);
   const [addedNotice, setAddedNotice] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
 
@@ -67,6 +68,13 @@ export const SpecialDealSection: React.FC<SpecialDealSectionProps> = ({
   };
 
   const currentProducts = productsData[activeTab];
+  const ROW_LIMIT = 3;
+  const visibleProducts = showAll ? currentProducts : currentProducts.slice(0, ROW_LIMIT);
+
+  const handleTabChange = (tab: "featured" | "onsale" | "toprated") => {
+    setActiveTab(tab);
+    setShowAll(false);
+  };
 
   const handleAddSpecialToCart = () => {
     if (!effectiveSpecial || effectiveSpecial.stock === 0) return;
@@ -216,7 +224,7 @@ export const SpecialDealSection: React.FC<SpecialDealSectionProps> = ({
           <div className="flex items-center justify-between border-b border-gray-200 pb-2">
             <div className="flex space-x-6">
               <button
-                onClick={() => setActiveTab("featured")}
+                onClick={() => handleTabChange("featured")}
                 className={`text-base font-extrabold pb-2 border-b-2 transition-colors cursor-pointer ${
                   activeTab === "featured"
                     ? "border-[#fed700] text-[#333e48]"
@@ -226,7 +234,7 @@ export const SpecialDealSection: React.FC<SpecialDealSectionProps> = ({
                 Featured ({productsData.featured.length})
               </button>
               <button
-                onClick={() => setActiveTab("onsale")}
+                onClick={() => handleTabChange("onsale")}
                 className={`text-base font-extrabold pb-2 border-b-2 transition-colors cursor-pointer ${
                   activeTab === "onsale"
                     ? "border-[#fed700] text-[#333e48]"
@@ -236,7 +244,7 @@ export const SpecialDealSection: React.FC<SpecialDealSectionProps> = ({
                 On Sale ({productsData.onsale.length})
               </button>
               <button
-                onClick={() => setActiveTab("toprated")}
+                onClick={() => handleTabChange("toprated")}
                 className={`text-base font-extrabold pb-2 border-b-2 transition-colors cursor-pointer ${
                   activeTab === "toprated"
                     ? "border-[#fed700] text-[#333e48]"
@@ -248,25 +256,57 @@ export const SpecialDealSection: React.FC<SpecialDealSectionProps> = ({
             </div>
           </div>
 
-          {/* Product Cards Grid */}
-          {currentProducts.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {currentProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  id={product.id}
-                  slug={product.slug}
-                  name={product.name}
-                  description={product.description}
-                  price={product.price}
-                  discountPrice={product.discountPrice}
-                  stock={product.stock}
-                  imageUrl={product.imageUrl}
-                  category={product.category}
-                  rating={product.rating || 5}
-                />
-              ))}
-            </div>
+          {/* Product Cards Grid - Initial 1 Row (3 items) with See More button */}
+          {visibleProducts.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {visibleProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    id={product.id}
+                    slug={product.slug}
+                    name={product.name}
+                    description={product.description}
+                    price={product.price}
+                    discountPrice={product.discountPrice}
+                    stock={product.stock}
+                    imageUrl={product.imageUrl}
+                    category={product.category}
+                    rating={product.rating || 5}
+                  />
+                ))}
+              </div>
+
+              {/* See More / See Less Button */}
+              {currentProducts.length > ROW_LIMIT && (
+                <div className="flex justify-center pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAll((prev) => !prev)}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-gray-300 bg-white hover:bg-[#fed700] hover:border-[#fed700] text-[#333e48] font-bold text-xs sm:text-sm shadow-xs hover:shadow transition-all duration-200 cursor-pointer active:scale-95 group"
+                  >
+                    <span>
+                      {showAll
+                        ? "See Less"
+                        : `See More (${currentProducts.length - ROW_LIMIT} more)`}
+                    </span>
+                    <svg
+                      className={`w-3.5 h-3.5 text-[#333e48] transition-transform duration-200 ${
+                        showAll ? "rotate-180" : "group-hover:translate-y-0.5"
+                      }`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="p-12 text-center text-gray-400 text-sm">
               No products found in this category.
