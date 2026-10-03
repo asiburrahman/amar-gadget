@@ -149,9 +149,17 @@ export default async function CategoriesPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/60 pb-20">
-      {/* 1. Header Banner */}
-      <section className="bg-white border-b border-gray-200 py-8 lg:py-12">
-        <div className="container mx-auto px-4 text-center max-w-3xl">
+      {/* 1. Header Banner & Breadcrumb */}
+      <section className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4 max-w-7xl pt-4 pb-1 text-xs text-gray-500 flex items-center gap-1.5">
+          <Link href="/" className="hover:text-[#0066cc] transition-colors">
+            Home
+          </Link>
+          <span className="text-gray-400">/</span>
+          <span className="text-[#333e48] font-bold">Categories</span>
+        </div>
+
+        <div className="container mx-auto px-4 text-center max-w-3xl py-8 lg:py-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 text-xs font-bold text-[#333e48] bg-[#fed700]/30 rounded-full mb-3 border border-[#fed700]">
             <span>⚡</span>
             <span>Category-Wise Tech Showcase</span>
@@ -189,50 +197,19 @@ export default async function CategoriesPage() {
         />
       </section>
 
-      {/* 3. Category Quick Cards Row */}
-      <section className="container mx-auto px-4 pt-2 pb-8 max-w-7xl">
-        <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-200">
-          <h2 className="text-base font-extrabold text-[#333e48]">
-            Explore All Category Collections
+      {/* 3. Category-Wise Segregated Detailed Sections (Electro Style) */}
+      <section className="container mx-auto px-4 pt-4 pb-2 max-w-7xl">
+        <div className="flex items-center justify-between border-b-2 border-gray-200 pb-3">
+          <h2 className="text-xl sm:text-2xl font-black text-[#333e48] relative">
+            Browse All Products by Category
+            <span className="absolute -bottom-[14px] left-0 w-20 h-[3px] bg-[#fed700] rounded-full" />
           </h2>
-          <span className="text-xs text-gray-400 font-medium">
-            Select a category to view full dedicated catalog
+          <span className="text-xs text-gray-500 font-medium hidden sm:inline-block">
+            Showing all {totalApprovedProducts} verified devices
           </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-          {categories.map((cat) => {
-            const meta = getCategoryMeta(cat.name, cat.slug);
-            return (
-              <Link
-                key={cat.id}
-                href={`/categories/${cat.slug}`}
-                className="group relative rounded-xl border border-gray-200 bg-white p-4 hover:border-[#fed700] hover:shadow-md transition-all duration-300 flex flex-col items-center text-center justify-between overflow-hidden"
-              >
-                <div className={`absolute inset-0 bg-gradient-to-br ${meta.gradient} opacity-30 group-hover:opacity-100 transition-opacity`} />
-                <div className="relative z-10 w-full space-y-2">
-                  <div className="w-12 h-12 mx-auto rounded-xl bg-slate-50 border border-gray-100 flex items-center justify-center text-2xl shadow-2xs group-hover:scale-110 transition-transform">
-                    {meta.icon}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-xs sm:text-sm text-[#333e48] group-hover:text-[#0066cc] transition-colors line-clamp-1">
-                      {cat.name}
-                    </h3>
-                    <span className="text-[11px] text-gray-400 font-medium">
-                      {cat.products.length} {cat.products.length === 1 ? "item" : "items"}
-                    </span>
-                  </div>
-                </div>
-                <div className="relative z-10 mt-3 pt-2 border-t border-gray-100 w-full flex items-center justify-center text-[11px] font-bold text-[#0066cc] group-hover:translate-x-0.5 transition-transform">
-                  <span>View Category &rarr;</span>
-                </div>
-              </Link>
-            );
-          })}
         </div>
       </section>
 
-      {/* 4. Category-Wise Segregated Detailed Sections */}
       <main className="container mx-auto px-4 py-6 max-w-7xl space-y-12">
         {categories.map((cat) => {
           const meta = getCategoryMeta(cat.name, cat.slug);
