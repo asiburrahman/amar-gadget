@@ -38,7 +38,7 @@ const BD_DISTRICTS = [
 ];
 
 export function ProfileManager({ initialRole }: ProfileManagerProps) {
-  const { user: authUser, refreshUser, updateUser } = useAuth();
+  const { user: authUser, refreshUser, updateUser, setUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -96,6 +96,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           setPhone(data.user.phone || "");
           setAvatar(data.user.avatar || "");
           setAvatarPreview(data.user.avatar || null);
+          setUser(data.user);
 
           if (data.user.addresses && data.user.addresses.length > 0) {
             const defAddr = data.user.addresses[0];
@@ -211,10 +212,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       const data = await res.json();
       if (data.success) {
         setProfileMsg({ type: "success", text: "প্রোফাইল ছবি সফলভাবে আপলোড হয়েছে! (Photo uploaded successfully)" });
+        const updatedUser = { ...(profile || {}), avatar: optimizedDataUrl, name, phone };
         if (profile) {
           setProfile({ ...profile, avatar: optimizedDataUrl });
         }
         updateUser({ avatar: optimizedDataUrl });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
+        }
         await refreshUser();
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to upload image." });
@@ -236,10 +241,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         setAvatar("");
         setAvatarPreview(null);
         setAvatarFile(null);
+        const updatedUser = { ...(profile || {}), avatar: null, name, phone };
         if (profile) {
           setProfile({ ...profile, avatar: null });
         }
         updateUser({ avatar: null });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
+        }
         setProfileMsg({ type: "success", text: "প্রোফাইল ছবি মুছে ফেলা হয়েছে।" });
         await refreshUser();
       } else {
@@ -272,10 +281,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       const data = await res.json();
       if (data.success) {
         setProfileMsg({ type: "success", text: "প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে! (Profile updated successfully)" });
+        const updatedUser = { ...(profile || {}), name, phone, avatar };
         if (profile) {
           setProfile({ ...profile, name, phone, avatar });
         }
         updateUser({ name, phone, avatar });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
+        }
         await refreshUser();
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to update profile." });
@@ -351,6 +364,11 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           setProfile({ ...profile, email: newEmail, isVerified: true });
         }
         updateUser({ email: newEmail, isVerified: true });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", {
+            detail: { ...(profile || {}), email: newEmail, isVerified: true }
+          }));
+        }
         setIsOtpSent(false);
         setNewEmail("");
         setEmailOtp("");

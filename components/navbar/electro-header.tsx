@@ -14,6 +14,34 @@ import { X } from "@/components/icons/X";
 
 export const ElectroHeader: React.FC = () => {
   const { user, logout } = useAuth();
+  const [activeUser, setActiveUser] = useState(user);
+
+  useEffect(() => {
+    setActiveUser(user);
+  }, [user]);
+
+  useEffect(() => {
+    const handleSync = (e: any) => {
+      if (e.detail) {
+        setActiveUser(e.detail);
+      }
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "amar_gadget_user" && e.newValue) {
+        try {
+          setActiveUser(JSON.parse(e.newValue));
+        } catch (err) {}
+      }
+    };
+    window.addEventListener("amar_gadget_user_updated", handleSync);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("amar_gadget_user_updated", handleSync);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  const displayUser = activeUser || user;
   const [isDepartmentOpen, setIsDepartmentOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
@@ -99,7 +127,7 @@ export const ElectroHeader: React.FC = () => {
 
             <span className="text-gray-300">|</span>
 
-            {user ? (
+            {displayUser ? (
               <div className="relative">
                 <button
                   type="button"
@@ -107,15 +135,15 @@ export const ElectroHeader: React.FC = () => {
                   className="flex items-center space-x-2 hover:text-black font-bold transition cursor-pointer"
                 >
                   <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden relative shadow-xs">
-                    {user.avatar ? (
-                      <img src={user.avatar} alt={user.name || "User"} className="h-full w-full object-cover" />
+                    {displayUser.avatar ? (
+                      <img src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
                     ) : (
-                      (user.name || user.email).charAt(0).toUpperCase()
+                      (displayUser.name || displayUser.email).charAt(0).toUpperCase()
                     )}
                   </div>
-                  <span className="truncate max-w-28">{user.name || user.email.split("@")[0]}</span>
+                  <span className="truncate max-w-28">{displayUser.name || displayUser.email.split("@")[0]}</span>
                   <span className="text-[10px] font-extrabold uppercase bg-primary/10 text-primary px-2 py-0.5 rounded-md">
-                    {user.role}
+                    {displayUser.role}
                   </span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
@@ -126,12 +154,12 @@ export const ElectroHeader: React.FC = () => {
                     onMouseLeave={() => setIsUserMenuOpen(false)}
                   >
                     <div className="px-3 py-1.5 border-b border-gray-100 mb-1">
-                      <p className="font-bold text-slate-800 truncate">{user.name || "User"}</p>
-                      <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+                      <p className="font-bold text-slate-800 truncate">{displayUser.name || "User"}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{displayUser.email}</p>
                     </div>
 
                     <Link
-                      href={user.role === "ADMIN" ? "/admin" : user.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard"}
+                      href={displayUser.role === "ADMIN" ? "/admin" : displayUser.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard"}
                       onClick={() => setIsUserMenuOpen(false)}
                       className="flex items-center gap-2 px-3 py-2 hover:bg-[#fed700]/20 hover:text-black font-bold transition"
                     >
@@ -140,7 +168,7 @@ export const ElectroHeader: React.FC = () => {
                     </Link>
 
                     <Link
-                      href={user.role === "ADMIN" ? "/admin/profile" : user.role === "MEMBER" ? "/member/profile" : "/user/profile"}
+                      href={displayUser.role === "ADMIN" ? "/admin/profile" : displayUser.role === "MEMBER" ? "/member/profile" : "/user/profile"}
                       onClick={() => setIsUserMenuOpen(false)}
                       className="flex items-center gap-2 px-3 py-2 hover:bg-[#fed700]/20 hover:text-black font-bold transition"
                     >
@@ -450,26 +478,26 @@ export const ElectroHeader: React.FC = () => {
 
               <div className="border-t border-gray-100 my-4 pt-4">
                 <p className="px-3 text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Account & Support</p>
-                {user ? (
+                {displayUser ? (
                   <div className="space-y-1 mb-2">
                     <div className="px-3 py-2 bg-slate-50 rounded-xl flex items-center gap-2.5">
                       <div className="h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden shrink-0">
-                        {user.avatar ? (
-                          <img src={user.avatar} alt={user.name || "User"} className="h-full w-full object-cover" />
+                        {displayUser.avatar ? (
+                          <img src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
                         ) : (
-                          (user.name || user.email).charAt(0).toUpperCase()
+                          (displayUser.name || displayUser.email).charAt(0).toUpperCase()
                         )}
                       </div>
                       <div className="truncate">
-                        <p className="font-bold text-xs text-[#333e48] truncate">{user.name || user.email.split("@")[0]}</p>
+                        <p className="font-bold text-xs text-[#333e48] truncate">{displayUser.name || displayUser.email.split("@")[0]}</p>
                         <span className="text-[10px] font-extrabold uppercase bg-primary/10 text-primary px-1.5 py-0.2 rounded">
-                          {user.role}
+                          {displayUser.role}
                         </span>
                       </div>
                     </div>
 
                     <Link
-                      href={user.role === "ADMIN" ? "/admin" : user.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard"}
+                      href={displayUser.role === "ADMIN" ? "/admin" : displayUser.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard"}
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="block px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
                     >
@@ -477,7 +505,7 @@ export const ElectroHeader: React.FC = () => {
                     </Link>
 
                     <Link
-                      href={user.role === "ADMIN" ? "/admin/profile" : user.role === "MEMBER" ? "/member/profile" : "/user/profile"}
+                      href={displayUser.role === "ADMIN" ? "/admin/profile" : displayUser.role === "MEMBER" ? "/member/profile" : "/user/profile"}
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="block px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
                     >
