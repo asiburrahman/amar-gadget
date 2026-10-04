@@ -38,7 +38,7 @@ const BD_DISTRICTS = [
 ];
 
 export function ProfileManager({ initialRole }: ProfileManagerProps) {
-  const { user: authUser, refreshUser } = useAuth();
+  const { user: authUser, refreshUser, updateUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -214,6 +214,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         if (profile) {
           setProfile({ ...profile, avatar: optimizedDataUrl });
         }
+        updateUser({ avatar: optimizedDataUrl });
         await refreshUser();
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to upload image." });
@@ -238,6 +239,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         if (profile) {
           setProfile({ ...profile, avatar: null });
         }
+        updateUser({ avatar: null });
         setProfileMsg({ type: "success", text: "প্রোফাইল ছবি মুছে ফেলা হয়েছে।" });
         await refreshUser();
       } else {
@@ -273,6 +275,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         if (profile) {
           setProfile({ ...profile, name, phone, avatar });
         }
+        updateUser({ name, phone, avatar });
         await refreshUser();
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to update profile." });
@@ -347,6 +350,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         if (profile) {
           setProfile({ ...profile, email: newEmail, isVerified: true });
         }
+        updateUser({ email: newEmail, isVerified: true });
         setIsOtpSent(false);
         setNewEmail("");
         setEmailOtp("");

@@ -1,51 +1,43 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect } from "react";
+import { useAuthStore, AuthUser } from "@/stores/auth-store";
 
-export interface AuthUser {
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-  avatar: string | null;
-  phone?: string | null;
-  isVerified: boolean;
-  sellerStatus?: string | null;
-}
+export type { AuthUser };
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchUser = useCallback(async () => {
-    try {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
-      const data = await res.json();
-      if (data.success && data.user) {
-        setUser(data.user);
-      } else {
-        setUser(null);
-      }
-    } catch (error) {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const user = useAuthStore((state) => state.user);
+  const loading = useAuthStore((state) => state.loading);
+  const setUser = useAuthStore((state) => state.setUser);
+  const updateUser = useAuthStore((state) => state.updateUser);
+  const fetchUser = useAuthStore((state) => state.fetchUser);
+  const logout = useAuthStore((state) => state.logout);
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
-  const logout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      setUser(null);
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-  return { user, loading, logout, refreshUser: fetchUser };
+    const handleUserUpdated = (e: any) => {
+      if (e.detail) {
+        useAuthStore.setState({ user: e.detail });
+      }
+    };
+
+    window.addEventListener("amar_gadget_user_updated", handleUserUpdated);
+    return () => {
+      window.removeEventListener("amar_gadget_user_updated", handleUserUpdated);
+    };
+  }, []);
+
+  return {
+    user,
+    loading,
+    logout,
+    refreshUser: fetchUser,
+    updateUser,
+    setUser,
+  };
 }
