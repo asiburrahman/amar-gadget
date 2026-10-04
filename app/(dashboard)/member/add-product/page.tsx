@@ -241,17 +241,6 @@ export default function AddProductPage() {
               </div>
             )}
           </div>
-
-          <div className="pt-2">
-            <span className="text-[11px] text-muted-foreground">Or paste direct Image URL:</span>
-            <Input
-              name="imageUrl"
-              placeholder="https://..."
-              value={formData.imageUrl}
-              onChange={handleChange}
-              className="mt-1"
-            />
-          </div>
         </div>
 
         <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -31,15 +31,6 @@ interface ProfileManagerProps {
   initialRole?: "USER" | "MEMBER" | "ADMIN";
 }
 
-const AVATAR_PRESETS = [
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80",
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80",
-  "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=250&q=80",
-  "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=250&q=80",
-  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=250&q=80",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=250&q=80",
-];
-
 const BD_DISTRICTS = [
   "Dhaka", "Chattogram", "Sylhet", "Rajshahi", "Khulna", "Barishal", 
   "Rangpur", "Mymensingh", "Gazipur", "Narayanganj", "Cumilla", 
@@ -48,6 +39,8 @@ const BD_DISTRICTS = [
 
 export function ProfileManager({ initialRole }: ProfileManagerProps) {
   const { user: authUser, refreshUser } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<"profile" | "email" | "password" | "address">("profile");
   const [loading, setLoading] = useState(true);
@@ -58,6 +51,9 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   const [phone, setPhone] = useState("");
   const [avatar, setAvatar] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Email Change State
@@ -99,6 +95,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           setName(data.user.name || "");
           setPhone(data.user.phone || "");
           setAvatar(data.user.avatar || "");
+          setAvatarPreview(data.user.avatar || null);
 
           if (data.user.addresses && data.user.addresses.length > 0) {
             const defAddr = data.user.addresses[0];
@@ -133,6 +130,125 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     }
     return () => clearInterval(interval);
   }, [resendTimer]);
+
+  // Compress & resize image to 400x400 for optimal fast upload and DB storage
+  const processImageFile = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_SIZE = 400;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height = Math.round((height * MAX_SIZE) / width);
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width = Math.round((width * MAX_SIZE) / height);
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          // Export as compressed WebP or JPEG
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          resolve(dataUrl);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  // Direct File Selection Handler
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setProfileMsg({ type: "error", text: "শুধুমাত্র ছবি (JPG, PNG, WebP) ফাইল নির্বাচন করুন।" });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileMsg({ type: "error", text: "ছবির সাইজ সর্বোচ্চ ৫ মেগাবাইট (5MB) হতে পারবে।" });
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      setProfileMsg(null);
+
+      // Process and optimize image
+      const optimizedDataUrl = await processImageFile(file);
+      setAvatarFile(file);
+      setAvatarPreview(optimizedDataUrl);
+      setAvatar(optimizedDataUrl);
+
+      // Directly upload to server
+      const res = await fetch("/api/user/upload-avatar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar: optimizedDataUrl }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setProfileMsg({ type: "success", text: "প্রোফাইল ছবি সফলভাবে আপলোড হয়েছে! (Photo uploaded successfully)" });
+        if (profile) {
+          setProfile({ ...profile, avatar: optimizedDataUrl });
+        }
+        await refreshUser();
+      } else {
+        setProfileMsg({ type: "error", text: data.message || "Failed to upload image." });
+      }
+    } catch (err: any) {
+      setProfileMsg({ type: "error", text: err.message || "Error reading image file." });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  // Remove Photo Handler
+  const handleRemovePhoto = async () => {
+    try {
+      setIsUploadingAvatar(true);
+      const res = await fetch("/api/user/upload-avatar", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setAvatar("");
+        setAvatarPreview(null);
+        setAvatarFile(null);
+        if (profile) {
+          setProfile({ ...profile, avatar: null });
+        }
+        setProfileMsg({ type: "success", text: "প্রোফাইল ছবি মুছে ফেলা হয়েছে।" });
+        await refreshUser();
+      } else {
+        setProfileMsg({ type: "error", text: data.message || "Failed to remove photo." });
+      }
+    } catch (err: any) {
+      setProfileMsg({ type: "error", text: err.message || "Error removing photo." });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   // Handle Profile Update
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -336,25 +452,60 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
+      {/* Hidden file input for hero camera button */}
+      <input
+        type="file"
+        ref={heroFileInputRef}
+        onChange={handleFileChange}
+        accept="image/png, image/jpeg, image/jpg, image/webp"
+        className="hidden"
+      />
+
       {/* 1. Profile Hero Card */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden p-6 md:p-8">
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-          {/* Avatar Preview */}
+          {/* Avatar with Click-to-Upload overlay */}
           <div className="relative group shrink-0">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-[#fed700] shadow-md bg-slate-100 flex items-center justify-center">
-              {avatar ? (
-                <img src={avatar} alt={name || "User"} className="w-full h-full object-cover" />
+            <div
+              onClick={() => heroFileInputRef.current?.click()}
+              className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-[#fed700] shadow-md bg-slate-100 flex items-center justify-center relative cursor-pointer group hover:opacity-95 transition"
+              title="ছবি পরিবর্তন করতে ক্লিক করুন (Click to upload photo)"
+            >
+              {avatarPreview ? (
+                <img src={avatarPreview} alt={name || "User"} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-3xl sm:text-4xl font-black text-[#333e48]">
                   {(name || profile?.email || "U").charAt(0).toUpperCase()}
                 </span>
               )}
+
+              {/* Hover overlay with camera icon */}
+              <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+                <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-[10px] font-bold">ছবি আপলোড</span>
+              </div>
             </div>
-            <span className="absolute -bottom-2 -right-2 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-xs" title="Verified Account">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-              </svg>
-            </span>
+
+            {/* Quick Upload Action Button under avatar */}
+            <button
+              type="button"
+              onClick={() => heroFileInputRef.current?.click()}
+              disabled={isUploadingAvatar}
+              className="absolute -bottom-2 -right-2 bg-[#fed700] hover:bg-[#eec800] text-[#333e48] p-2 rounded-full border-2 border-white shadow-md cursor-pointer transition-transform hover:scale-110"
+              title="নতুন ছবি আপলোড করুন"
+            >
+              {isUploadingAvatar ? (
+                <div className="w-3.5 h-3.5 border-2 border-[#333e48] border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              )}
+            </button>
           </div>
 
           {/* User Details & Badges */}
@@ -429,7 +580,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
             <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            <span>প্রোফাইল তথ্য (Profile)</span>
+            <span>প্রোফাইল ও ছবি (Profile & Photo)</span>
           </button>
 
           <button
@@ -479,13 +630,13 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
       {/* 3. TAB CONTENT */}
 
-      {/* TAB 1: PROFILE INFO */}
+      {/* TAB 1: PROFILE INFO & DIRECT IMAGE UPLOAD */}
       {activeTab === "profile" && (
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 md:p-8 space-y-6">
           <div>
-            <h2 className="text-lg font-black text-[#333e48]">প্রোফাইল তথ্য আপডেট (Update Profile)</h2>
+            <h2 className="text-lg font-black text-[#333e48]">প্রোফাইল তথ্য ও ছবি (Profile Information & Photo)</h2>
             <p className="text-xs text-slate-500 mt-1">
-              আপনার নাম, মোবাইল নাম্বার এবং প্রোফাইল ছবি সহজে আপডেট করুন।
+              আপনার কম্পিউটার বা মোবাইল থেকে সরাসরি পছন্দের ছবি আপলোড করুন এবং তথ্য আপডেট করুন।
             </p>
           </div>
 
@@ -502,7 +653,76 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
             </div>
           )}
 
-          <form onSubmit={handleUpdateProfile} className="space-y-6">
+          {/* DEDICATED DIRECT IMAGE UPLOADER (NO URLS) */}
+          <div className="p-5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-4">
+            <span className="text-xs font-bold text-[#333e48] block">
+              📸 প্রোফাইল ছবি পরিবর্তন ও আপলোড (Upload Profile Photo)
+            </span>
+
+            <div className="flex flex-col sm:flex-row items-center gap-5">
+              {/* Image Preview Box */}
+              <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#fed700] shadow-sm bg-white shrink-0 flex items-center justify-center relative">
+                {avatarPreview ? (
+                  <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-3xl font-black text-slate-400">
+                    {(name || profile?.email || "U").charAt(0).toUpperCase()}
+                  </span>
+                )}
+                {isUploadingAvatar && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Action Zone */}
+              <div className="flex-1 space-y-2 text-center sm:text-left">
+                {/* Hidden Real File Input */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept="image/png, image/jpeg, image/jpg, image/webp"
+                  className="hidden"
+                />
+
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="px-4 py-2.5 bg-[#fed700] hover:bg-[#eec800] text-[#333e48] font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span>{avatarPreview ? "নতুন ছবি নির্বাচন করুন" : "ছবি আপলোড করুন (Choose Photo)"}</span>
+                  </button>
+
+                  {avatarPreview && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      disabled={isUploadingAvatar}
+                      className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      <span>ছবি মুছে ফেলুন</span>
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 font-medium">
+                  সাপোর্টেড ফরম্যাট: JPG, PNG, WEBP (সর্বোচ্চ সাইজ: 5MB)। ফাইল নির্বাচন করলেই স্বয়ংক্রিয়ভাবে আপলোড হয়ে যাবে।
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleUpdateProfile} className="space-y-6 pt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Full Name */}
               <div className="space-y-1.5">
@@ -564,50 +784,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
             </div>
 
-            {/* Avatar URL & Presets */}
-            <div className="space-y-3 pt-2 border-t border-gray-100">
-              <label className="text-xs font-bold text-[#333e48]">প্রোফাইল ছবি (Avatar Image URL)</label>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="url"
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  placeholder="https://example.com/photo.jpg"
-                  className="flex-1 px-4 py-2.5 text-xs text-[#333e48] border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#fed700] transition"
-                />
-                {avatar && (
-                  <button
-                    type="button"
-                    onClick={() => setAvatar("")}
-                    className="px-3 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition cursor-pointer"
-                  >
-                    ছবি রিমুভ
-                  </button>
-                )}
-              </div>
-
-              {/* Preset selection */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-semibold text-slate-400">বা নিচের পছন্দের ছবি সিলেক্ট করুন:</span>
-                <div className="flex flex-wrap gap-2.5">
-                  {AVATAR_PRESETS.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setAvatar(preset)}
-                      className={`w-10 h-10 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
-                        avatar === preset ? "border-[#fed700] scale-110 shadow-md ring-2 ring-[#fed700]/50" : "border-gray-200 hover:border-gray-400 opacity-80 hover:opacity-100"
-                      }`}
-                    >
-                      <img src={preset} alt={`Preset ${idx + 1}`} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
             {/* Submit button */}
-            <div className="flex justify-end pt-4">
+            <div className="flex justify-end pt-4 border-t border-gray-100">
               <button
                 type="submit"
                 disabled={isUpdatingProfile}
