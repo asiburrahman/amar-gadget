@@ -3,14 +3,14 @@ import { Metadata } from "next";
 import { ProfileManager } from "@/components/dashboard/profile-manager";
 
 export const metadata: Metadata = {
-  title: "Admin Settings | Amar Gadget",
-  description: "Platform administrator account settings and security configurations.",
+  title: "Member / Seller Profile | Amar Gadget",
+  description: "Manage your seller store profile, email verification, and security.",
 };
 
-export default function AdminSettingsPage() {
+export default function MemberProfilePage() {
   return (
     <div className="min-h-screen py-4 md:py-8">
-      <ProfileManager initialRole="ADMIN" />
+      <ProfileManager initialRole="MEMBER" />
     </div>
   );
 }

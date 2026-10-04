@@ -20,6 +20,7 @@ export const ElectroHeader: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeLang, setActiveLang] = useState("Dollar (US)");
   const [isLangOpen, setIsLangOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const pathname = usePathname();
   const cartItems = useCartStore((state) => state.items);
@@ -33,6 +34,7 @@ export const ElectroHeader: React.FC = () => {
   useEffect(() => {
     setIsDepartmentOpen(false);
     setIsMobileMenuOpen(false);
+    setIsUserMenuOpen(false);
   }, [pathname]);
 
   const categories = [
@@ -98,10 +100,11 @@ export const ElectroHeader: React.FC = () => {
             <span className="text-gray-300">|</span>
 
             {user ? (
-              <div className="flex items-center space-x-3">
-                <Link
-                  href={user.role === "ADMIN" ? "/admin" : user.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard"}
-                  className="flex items-center space-x-2 hover:text-black font-bold transition"
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center space-x-2 hover:text-black font-bold transition cursor-pointer"
                 >
                   <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden relative shadow-xs">
                     {user.avatar ? (
@@ -110,19 +113,56 @@ export const ElectroHeader: React.FC = () => {
                       (user.name || user.email).charAt(0).toUpperCase()
                     )}
                   </div>
-                  <span className="truncate max-w-32">{user.name || user.email.split("@")[0]}</span>
+                  <span className="truncate max-w-28">{user.name || user.email.split("@")[0]}</span>
                   <span className="text-[10px] font-extrabold uppercase bg-primary/10 text-primary px-2 py-0.5 rounded-md">
                     {user.role}
                   </span>
-                </Link>
-
-                <button
-                  onClick={logout}
-                  className="text-slate-400 hover:text-destructive text-xs font-bold cursor-pointer transition-colors"
-                  title="Sign Out"
-                >
-                  Logout
+                  <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
+
+                {isUserMenuOpen && (
+                  <div
+                    className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 text-gray-700 rounded-xl shadow-xl py-2 z-50 text-xs"
+                    onMouseLeave={() => setIsUserMenuOpen(false)}
+                  >
+                    <div className="px-3 py-1.5 border-b border-gray-100 mb-1">
+                      <p className="font-bold text-slate-800 truncate">{user.name || "User"}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+                    </div>
+
+                    <Link
+                      href={user.role === "ADMIN" ? "/admin" : user.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard"}
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-[#fed700]/20 hover:text-black font-bold transition"
+                    >
+                      <span>📊</span>
+                      <span>ড্যাশবোর্ড (Dashboard)</span>
+                    </Link>
+
+                    <Link
+                      href={user.role === "ADMIN" ? "/admin/profile" : user.role === "MEMBER" ? "/member/profile" : "/user/profile"}
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-[#fed700]/20 hover:text-black font-bold transition"
+                    >
+                      <span>👤</span>
+                      <span>প্রোফাইল ও সেটিংস (Profile)</span>
+                    </Link>
+
+                    <div className="border-t border-gray-100 my-1"></div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 font-bold cursor-pointer transition"
+                    >
+                      <span>🚪</span>
+                      <span>লগআউট (Logout)</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <Link href="/login" className="hover:text-black flex items-center gap-2 transition-colors">
@@ -410,7 +450,54 @@ export const ElectroHeader: React.FC = () => {
 
               <div className="border-t border-gray-100 my-4 pt-4">
                 <p className="px-3 text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Account & Support</p>
-                <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Register or Sign in</Link>
+                {user ? (
+                  <div className="space-y-1 mb-2">
+                    <div className="px-3 py-2 bg-slate-50 rounded-xl flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden shrink-0">
+                        {user.avatar ? (
+                          <img src={user.avatar} alt={user.name || "User"} className="h-full w-full object-cover" />
+                        ) : (
+                          (user.name || user.email).charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div className="truncate">
+                        <p className="font-bold text-xs text-[#333e48] truncate">{user.name || user.email.split("@")[0]}</p>
+                        <span className="text-[10px] font-extrabold uppercase bg-primary/10 text-primary px-1.5 py-0.2 rounded">
+                          {user.role}
+                        </span>
+                      </div>
+                    </div>
+
+                    <Link
+                      href={user.role === "ADMIN" ? "/admin" : user.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard"}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
+                    >
+                      📊 ড্যাশবোর্ড (Dashboard)
+                    </Link>
+
+                    <Link
+                      href={user.role === "ADMIN" ? "/admin/profile" : user.role === "MEMBER" ? "/member/profile" : "/user/profile"}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
+                    >
+                      👤 প্রোফাইল ও সেটিংস (Profile)
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full text-left block px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                    >
+                      🚪 লগআউট (Sign Out)
+                    </button>
+                  </div>
+                ) : (
+                  <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Register or Sign in</Link>
+                )}
                 <Link href="/track-order" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Track Your Order</Link>
                 <Link href="/contact" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Store Locator</Link>
               </div>

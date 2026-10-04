@@ -8,6 +8,7 @@ export interface AuthUser {
   email: string;
   role: string;
   avatar: string | null;
+  phone?: string | null;
   isVerified: boolean;
   sellerStatus?: string | null;
 }

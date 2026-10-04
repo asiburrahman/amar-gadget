@@ -25,6 +25,7 @@ export async function GET() {
         email: true,
         role: true,
         avatar: true,
+        phone: true,
         isVerified: true,
         sellerStatus: true,
       },

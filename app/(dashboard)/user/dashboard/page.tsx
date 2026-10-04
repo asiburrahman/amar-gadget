@@ -31,9 +31,16 @@ export default async function CustomerDashboardPage() {
           <p className="text-xs text-muted-foreground">Track your electronics orders, view invoices, and manage saved items.</p>
         </div>
 
-        <Link href="/products">
-          <Button variant="default" className="font-bold text-xs">Browse Products</Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/user/profile">
+            <Button variant="outline" className="font-bold text-xs flex items-center gap-1.5">
+              <span>👤 Profile & Settings</span>
+            </Button>
+          </Link>
+          <Link href="/products">
+            <Button variant="default" className="font-bold text-xs">Browse Products</Button>
+          </Link>
+        </div>
       </div>
 
       {/* Orders List */}
