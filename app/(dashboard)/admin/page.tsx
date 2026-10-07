@@ -33,6 +33,9 @@ export default async function AdminDashboardPage() {
         </div>
 
         <div className="flex flex-wrap gap-2.5">
+          <Link href="/admin/orders" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5">
+            📦 Manage Orders ({stats.totalOrders})
+          </Link>
           <Link href="/admin/profile" className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5">
             👤 Admin Profile
           </Link>

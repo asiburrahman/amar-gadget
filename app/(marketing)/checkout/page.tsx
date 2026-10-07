@@ -1,26 +1,38 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCartStore, useHydratedStore } from "@/stores/cart-store";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createOrder } from "@/server/actions/order/order-actions";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function CheckoutPage() {
   const { items, couponCode, discountPercentage, clearCart } = useCartStore();
+  const { user } = useAuth();
   const router = useRouter();
 
   const [formData, setFormData] = useState({
-    fullName: "Asibur Rahman",
-    phone: "01700000000",
+    fullName: "",
+    phone: "",
     street: "House 12, Road 5, Dhanmondi",
     city: "Dhaka",
     district: "Dhaka",
     zipCode: "1212",
     paymentMethod: "COD" as "COD" | "STRIPE",
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: user.name || prev.fullName,
+        phone: (user as any).phone || prev.phone,
+      }));
+    }
+  }, [user]);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -58,7 +70,7 @@ export default function CheckoutPage() {
           paymentMethod: formData.paymentMethod,
           couponCode: couponCode || undefined,
         },
-        "user-demo-id"
+        user?.id
       );
 
       if (result.success && result.orderId) {

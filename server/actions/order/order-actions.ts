@@ -3,26 +3,45 @@
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/order";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { verifyJwtToken } from "@/lib/auth";
 
 export async function createOrder(input: CheckoutInput, userId?: string) {
   try {
     const validated = checkoutSchema.parse(input);
 
-    // 1. Ensure a valid User exists in database
-    let validUserId = userId;
-    let targetUser = await prisma.user.findFirst({
-      where: validUserId ? { id: validUserId } : undefined,
-    });
+    // 1. Resolve actual authenticated user
+    let validUserId = userId && userId !== "user-demo-id" ? userId : null;
 
-    if (!targetUser) {
-      targetUser = (await prisma.user.findFirst({ where: { email: "user@amargadget.com" } })) ||
-                   (await prisma.user.findFirst());
+    if (!validUserId) {
+      try {
+        const cookieStore = await cookies();
+        const token = cookieStore.get("auth_token")?.value;
+        if (token) {
+          const payload = await verifyJwtToken(token);
+          if (payload?.sub) {
+            validUserId = payload.sub as string;
+          }
+        }
+      } catch (err) {
+        // Outside request context
+      }
+    }
+
+    let targetUser = validUserId
+      ? await prisma.user.findUnique({ where: { id: validUserId } })
+      : null;
+
+    if (!targetUser && validated.phone) {
+      targetUser = await prisma.user.findFirst({
+        where: { phone: validated.phone },
+      });
     }
 
     if (!targetUser) {
       targetUser = await prisma.user.create({
         data: {
-          email: "customer@amargadget.com",
+          email: `guest-${Date.now()}-${Math.floor(Math.random() * 1000)}@amargadget.com`,
           name: validated.fullName || "Valued Customer",
           phone: validated.phone,
           role: "USER",
@@ -260,10 +279,68 @@ export async function updateOrderStatusBySeller(orderId: string, newStatus: stri
     revalidatePath("/member/dashboard");
     revalidatePath("/admin/orders");
     revalidatePath("/user/orders");
+    revalidatePath("/user/dashboard");
 
     return { success: true, data: updated };
   } catch (error: any) {
     console.error("Error updating order status by seller:", error);
+    return { success: false, error: error.message || "Failed to update order status." };
+  }
+}
+
+export async function getAllOrdersForAdmin() {
+  try {
+    const orders = await prisma.order.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        items: {
+          include: {
+            product: { select: { id: true, name: true, imageUrl: true, price: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      success: true,
+      data: orders.map((o) => ({
+        ...o,
+        total: Number(o.total),
+        items: o.items.map((i) => ({
+          ...i,
+          price: Number(i.price),
+          product: {
+            ...i.product,
+            price: Number(i.product.price),
+          },
+        })),
+      })),
+    };
+  } catch (error: any) {
+    console.error("Error fetching admin orders:", error);
+    return { success: false, error: "Failed to fetch orders", data: [] };
+  }
+}
+
+export async function updateOrderStatusByAdmin(orderId: string, newStatus: string) {
+  try {
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: newStatus,
+        ...(newStatus === "DELIVERED" ? { paymentStatus: "PAID" } : {}),
+      },
+    });
+
+    revalidatePath("/admin/orders");
+    revalidatePath("/user/orders");
+    revalidatePath("/user/dashboard");
+    revalidatePath("/member/dashboard");
+
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("Error updating order status by admin:", error);
     return { success: false, error: error.message || "Failed to update order status." };
   }
 }
