@@ -5,10 +5,11 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
   error?: string;
   helperText?: string;
+  rightAction?: React.ReactNode;
 }
 
 export const FormInput = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, helperText, className, id, ...props }, ref) => {
+  ({ label, error, helperText, rightAction, className, id, ...props }, ref) => {
     const defaultId = useId();
     const inputId = id || defaultId;
     const errorId = `${inputId}-error`;
@@ -29,18 +30,26 @@ export const FormInput = React.forwardRef<HTMLInputElement, InputProps>(
         >
           {label}
         </label>
-        <input
-          id={inputId}
-          ref={ref}
-          aria-describedby={describedBy || undefined}
-          aria-invalid={!!error}
-          className={cn(
-            "flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-inter transition-colors",
-            error ? "border-red-500 focus-visible:ring-red-500" : "border-input",
-            className
+        <div className="relative w-full">
+          <input
+            id={inputId}
+            ref={ref}
+            aria-describedby={describedBy || undefined}
+            aria-invalid={!!error}
+            className={cn(
+              "flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-inter transition-colors",
+              rightAction ? "pr-10" : "",
+              error ? "border-red-500 focus-visible:ring-red-500" : "border-input",
+              className
+            )}
+            {...props}
+          />
+          {rightAction && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center">
+              {rightAction}
+            </div>
           )}
-          {...props}
-        />
+        </div>
         {helperText && !error && (
           <span
             id={helperId}

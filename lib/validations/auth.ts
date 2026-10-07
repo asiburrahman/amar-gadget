@@ -17,6 +17,7 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, "Must contain at least one lowercase letter")
     .regex(/\d/, "Must contain at least one number")
     .regex(/[!@#$%^&*(),.?":{}|<>]/, "Must contain at least one special character"),
+  confirmPassword: z.string().optional(),
   avatar: z.string().optional(),
   role: z.enum(["USER", "MEMBER"]).default("USER"),
 });

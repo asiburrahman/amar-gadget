@@ -20,7 +20,17 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, password, role, avatar } = validated.data;
+    const { name, email, password, confirmPassword, role, avatar } = validated.data;
+
+    if (confirmPassword && confirmPassword !== password) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Passwords do not match.",
+        },
+        { status: 400 }
+      );
+    }
 
     // 1. Check if user already exists
     const existingUser = await prisma.user.findUnique({
