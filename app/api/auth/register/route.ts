@@ -28,13 +28,38 @@ export async function POST(req: Request) {
     });
 
     if (existingUser) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "An account with this email address already exists.",
+      if (existingUser.isVerified) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "An account with this email address already exists. Please log in.",
+          },
+          { status: 409 }
+        );
+      }
+
+      // User registered previously but did not verify OTP!
+      // Update user details, reset password hash, and dispatch a fresh OTP code
+      const hashedPassword = hashPassword(password);
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          name,
+          password: hashedPassword,
+          avatar: avatar || existingUser.avatar,
+          role: role || existingUser.role,
         },
-        { status: 409 }
-      );
+      });
+
+      // Dispatch fresh OTP verification email
+      await sendOtpEmail(existingUser.email);
+
+      return NextResponse.json({
+        success: true,
+        requiresOtp: true,
+        email: existingUser.email,
+        message: "Your previous registration was unverified. A fresh 6-digit OTP code has been sent to your email.",
+      });
     }
 
     // 2. Hash password and create user in database

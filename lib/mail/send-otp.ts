@@ -7,7 +7,12 @@ export async function sendOtpEmail(email: string): Promise<{ success: boolean; c
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
-    // Save or update OtpToken in database
+    // Delete any previous OTP tokens for this email
+    await prisma.otpToken.deleteMany({
+      where: { email: email.toLowerCase() },
+    });
+
+    // Save fresh OtpToken in database
     await prisma.otpToken.create({
       data: {
         email: email.toLowerCase(),

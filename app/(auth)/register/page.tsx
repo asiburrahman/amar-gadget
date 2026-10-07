@@ -167,7 +167,7 @@ export default function RegisterPage() {
         <div className="space-y-4 text-xs">
           {/* Avatar Input & Preview */}
           <div className="space-y-2">
-            <label className="font-bold text-foreground block">Profile Photo (Upload or URL)</label>
+            <label className="font-bold text-foreground block">Profile Photo (Upload File)</label>
             <div className="flex items-center space-x-3">
               <div className="h-12 w-12 rounded-full bg-muted border border-border overflow-hidden shrink-0 flex items-center justify-center relative">
                 {avatar ? (
@@ -183,13 +183,6 @@ export default function RegisterPage() {
                   accept="image/*"
                   onChange={handleFileChange}
                   className="w-full text-xs text-muted-foreground file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:opacity-90 cursor-pointer"
-                />
-                <input
-                  type="url"
-                  placeholder="or paste photo URL"
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  className="w-full h-8 px-2 rounded border border-input bg-background text-[11px]"
                 />
               </div>
             </div>

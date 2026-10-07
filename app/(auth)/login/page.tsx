@@ -48,6 +48,14 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
+        if (data.requiresOtp && data.email) {
+          setErrorMessage(data.message || "Your account is not verified yet. Redirecting to OTP verification...");
+          setTimeout(() => {
+            window.location.href = `/verify-otp?email=${encodeURIComponent(data.email)}`;
+          }, 1200);
+          return;
+        }
+
         const errorText = data.detail ? `${data.message} (${data.detail})` : (data.message || "Invalid email address or password.");
         setErrorMessage(errorText);
         setIsLoading(false);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
 import { verifyPassword, signJwtToken } from "@/lib/auth";
+import { sendOtpEmail } from "@/lib/mail/send-otp";
 
 export async function POST(req: Request) {
   try {
@@ -44,6 +45,21 @@ export async function POST(req: Request) {
           message: "Invalid email address or password.",
         },
         { status: 401 }
+      );
+    }
+
+    // 2.5 Check if user is verified
+    if (!user.isVerified) {
+      // Send fresh OTP to the unverified user
+      await sendOtpEmail(user.email);
+      return NextResponse.json(
+        {
+          success: false,
+          requiresOtp: true,
+          email: user.email,
+          message: "Your account is not verified yet. A 6-digit verification code has been sent to your email. Please verify to sign in.",
+        },
+        { status: 403 }
       );
     }
 
