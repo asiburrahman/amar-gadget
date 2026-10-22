@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { getCurrentUserWithRole } from "@/lib/session";
 
 const createProductSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),
@@ -17,11 +18,10 @@ export type ActionState = {
 };
 
 export async function createProductAction(
-  userId: string,
-  userRole: string,
   rawData: unknown
 ): Promise<ActionState> {
-  if (userRole !== "MEMBER" && userRole !== "ADMIN") {
+  const user = await getCurrentUserWithRole(["MEMBER", "ADMIN"]);
+  if (!user || (user.role.toUpperCase() === "MEMBER" && user.sellerStatus !== "APPROVED")) {
     return { success: false, message: "Unauthorized action" };
   }
 
@@ -54,8 +54,8 @@ export async function createProductAction(
       data: {
         ...validated.data,
         slug,
-        sellerId: userId,
-        status: userRole === "ADMIN" ? "APPROVED" : "PENDING_APPROVAL",
+        sellerId: user.id,
+        status: user.role.toUpperCase() === "ADMIN" ? "APPROVED" : "PENDING_APPROVAL",
       },
     });
 

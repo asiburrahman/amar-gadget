@@ -3,9 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations/auth";
 import { hashPassword } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const limit = await rateLimit(getClientIp(req.headers), 5, 60, "auth-register");
+    if (!limit.success) {
+      return NextResponse.json({ success: false, message: "Too many registration attempts. Try again shortly." }, { status: 429 });
+    }
+
     const body = await req.json();
     const validated = registerSchema.safeParse(body);
 
@@ -57,12 +63,18 @@ export async function POST(req: Request) {
           name,
           password: hashedPassword,
           avatar: avatar || existingUser.avatar,
-          role: role || existingUser.role,
+          role: existingUser.role,
         },
       });
 
       // Dispatch fresh OTP verification email
-      await sendOtpEmail(existingUser.email);
+      const otpResult = await sendOtpEmail(existingUser.email);
+      if (!otpResult.success) {
+        return NextResponse.json(
+          { success: false, message: "Unable to send a verification code right now." },
+          { status: 503 }
+        );
+      }
 
       return NextResponse.json({
         success: true,
@@ -81,12 +93,19 @@ export async function POST(req: Request) {
         password: hashedPassword,
         avatar: avatar || null,
         role: role || "USER",
+        sellerStatus: role === "MEMBER" ? "PENDING" : "APPROVED",
         isVerified: false,
       },
     });
 
     // 3. Generate and send OTP verification code to email
-    await sendOtpEmail(newUser.email);
+    const otpResult = await sendOtpEmail(newUser.email);
+    if (!otpResult.success) {
+      return NextResponse.json(
+        { success: false, message: "Unable to send a verification code right now." },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

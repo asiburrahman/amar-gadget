@@ -2,8 +2,16 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getCurrentUserWithRole } from "@/lib/session";
 
 export async function getAdminStats() {
+  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
+    return {
+      success: false,
+      stats: { totalUsers: 0, totalProducts: 0, pendingProducts: 0, totalOrders: 0, totalRevenue: 0 },
+    };
+  }
+
   try {
     const [totalUsers, totalProducts, pendingProducts, totalOrders, aggregateRevenue] = await Promise.all([
       prisma.user.count(),
@@ -12,6 +20,7 @@ export async function getAdminStats() {
       prisma.order.count(),
       prisma.order.aggregate({
         _sum: { total: true },
+        where: { paymentStatus: "PAID" },
       }),
     ]);
 
@@ -26,14 +35,20 @@ export async function getAdminStats() {
       },
     };
   } catch (error) {
+    console.error("Failed to load admin statistics:", error);
     return {
       success: false,
+      error: "Failed to load admin statistics.",
       stats: { totalUsers: 0, totalProducts: 0, pendingProducts: 0, totalOrders: 0, totalRevenue: 0 },
     };
   }
 }
 
 export async function updateProductStatus(productId: string, status: "APPROVED" | "REJECTED" | "PENDING_APPROVAL") {
+  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
+    return { success: false, error: "Unauthorized" };
+  }
+
   try {
     const product = await prisma.product.update({
       where: { id: productId },
@@ -51,10 +66,23 @@ export async function updateProductStatus(productId: string, status: "APPROVED" 
 }
 
 export async function updateSellerStatus(sellerId: string, sellerStatus: "APPROVED" | "BLOCKED" | "PENDING" | "REJECTED") {
+  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
+    return { success: false, error: "Unauthorized" };
+  }
+
   try {
+    const seller = await prisma.user.findUnique({
+      where: { id: sellerId },
+      select: { role: true },
+    });
+    if (!seller || seller.role !== "MEMBER") {
+      return { success: false, error: "Seller not found." };
+    }
+
     const user = await prisma.user.update({
       where: { id: sellerId },
       data: { sellerStatus },
+      select: { id: true, email: true, name: true, role: true, sellerStatus: true },
     });
 
     revalidatePath("/admin");
@@ -69,6 +97,10 @@ export async function updateSellerStatus(sellerId: string, sellerStatus: "APPROV
 }
 
 export async function adminUpdateProductPrice(productId: string, price: number, discountPrice?: number | null) {
+  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
+    return { success: false, error: "Unauthorized" };
+  }
+
   try {
     const product = await prisma.product.update({
       where: { id: productId },
@@ -90,6 +122,10 @@ export async function adminUpdateProductPrice(productId: string, price: number, 
 }
 
 export async function adminDeleteProduct(productId: string) {
+  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
+    return { success: false, error: "Unauthorized" };
+  }
+
   try {
     await prisma.product.delete({
       where: { id: productId },
@@ -105,4 +141,3 @@ export async function adminDeleteProduct(productId: string) {
     return { success: false, error: error.message || "Failed to delete product" };
   }
 }
-

@@ -1,7 +1,3 @@
-import { createProductAction } from "../../app/(marketing)/products/_actions/create-product";
-import { prisma } from "../../lib/prisma";
-
-// Complete mock for the Prisma client singleton
 jest.mock("../../lib/prisma", () => ({
   prisma: {
     category: {
@@ -13,13 +9,27 @@ jest.mock("../../lib/prisma", () => ({
   },
 }));
 
+jest.mock("../../lib/session", () => ({
+  getCurrentUserWithRole: jest.fn(),
+}));
+
+import { createProductAction } from "../../app/(marketing)/products/_actions/create-product";
+import { prisma } from "../../lib/prisma";
+import { getCurrentUserWithRole } from "../../lib/session";
+
 describe("createProductAction", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (getCurrentUserWithRole as jest.Mock).mockResolvedValue({
+      id: "user-1",
+      role: "MEMBER",
+      sellerStatus: "APPROVED",
+    });
   });
 
   it("should block non-members and non-admins from creating products", async () => {
-    const response = await createProductAction("user-1", "USER", {
+    (getCurrentUserWithRole as jest.Mock).mockResolvedValue(null);
+    const response = await createProductAction({
       name: "New iPhone",
       price: 120000,
       stock: 10,
@@ -34,7 +44,7 @@ describe("createProductAction", () => {
   it("should block product creation if category does not exist", async () => {
     (prisma.category.findUnique as jest.Mock).mockResolvedValue(null);
 
-    const response = await createProductAction("user-1", "MEMBER", {
+    const response = await createProductAction({
       name: "New iPhone",
       price: 120000,
       stock: 10,
@@ -51,7 +61,7 @@ describe("createProductAction", () => {
     (prisma.category.findUnique as jest.Mock).mockResolvedValue({ id: "cat-1" });
     (prisma.product.create as jest.Mock).mockResolvedValue({});
 
-    const response = await createProductAction("user-1", "MEMBER", {
+    const response = await createProductAction({
       name: "New iPhone",
       price: 120000,
       stock: 10,

@@ -1,5 +1,10 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_51MockKeyForBuild1234567890", {
-  apiVersion: "2025-02-24.acacia" as any,
-});
+export function getStripe() {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error("STRIPE_SECRET_KEY must be configured to use Stripe.");
+  }
+
+  return new Stripe(secretKey);
+}

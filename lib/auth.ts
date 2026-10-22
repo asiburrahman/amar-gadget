@@ -1,9 +1,13 @@
 import crypto from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 
-const JWT_SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-for-build-purposes-only-32chars"
-);
+function getJwtSecretKey() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error("JWT_SECRET must be configured with at least 32 characters.");
+  }
+  return new TextEncoder().encode(secret);
+}
 
 /**
  * Hashes a plain-text password using PBKDF2 with SHA-512 and a random 16-byte salt.
@@ -42,7 +46,7 @@ export async function signJwtToken(user: {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(JWT_SECRET_KEY);
+    .sign(getJwtSecretKey());
 }
 
 /**
@@ -50,7 +54,7 @@ export async function signJwtToken(user: {
  */
 export async function verifyJwtToken(token: string) {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET_KEY);
+    const { payload } = await jwtVerify(token, getJwtSecretKey());
     return payload;
   } catch (error) {
     return null;

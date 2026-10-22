@@ -1,23 +1,31 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signJwtToken } from "@/lib/auth";
+import { verifyOtpSchema } from "@/lib/validations/auth";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
-    const { email, otp } = await req.json();
+    const limit = await rateLimit(getClientIp(req.headers), 5, 60, "auth-verify-otp");
+    if (!limit.success) {
+      return NextResponse.json({ success: false, message: "Too many verification attempts. Try again shortly." }, { status: 429 });
+    }
 
-    if (!email || !otp) {
+    const parsed = verifyOtpSchema.safeParse(await req.json());
+    if (!parsed.success) {
       return NextResponse.json(
         { success: false, message: "Email and OTP verification code are required." },
         { status: 400 }
       );
     }
+    const { email, otp } = parsed.data;
+    const normalizedEmail = email.trim().toLowerCase();
 
     // Find latest OTP token for email
     const otpRecord = await prisma.otpToken.findFirst({
       where: {
-        email: email.toLowerCase(),
-        code: otp.trim(),
+        email: normalizedEmail,
+        code: otp,
         expiresAt: { gte: new Date() },
       },
       orderBy: { createdAt: "desc" },
@@ -31,23 +39,27 @@ export async function POST(req: Request) {
     }
 
     // Find user and mark as verified
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+    const user = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.otpToken.deleteMany({
+        where: { id: otpRecord.id, expiresAt: { gte: new Date() } },
+      });
+      if (claimed.count !== 1) return null;
 
+      const foundUser = await tx.user.findUnique({ where: { email: normalizedEmail } });
+      if (!foundUser) return null;
+      await tx.user.update({
+        where: { id: foundUser.id },
+        data: { isVerified: true },
+      });
+      await tx.otpToken.deleteMany({ where: { email: normalizedEmail } });
+      return foundUser;
+    });
     if (!user) {
-      return NextResponse.json({ success: false, message: "User account not found." }, { status: 404 });
+      return NextResponse.json(
+        { success: false, message: "Invalid or expired OTP verification code." },
+        { status: 400 }
+      );
     }
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isVerified: true },
-    });
-
-    // Delete verified OTP token
-    await prisma.otpToken.deleteMany({
-      where: { email: email.toLowerCase() },
-    });
 
     // Generate signed JWT token
     const token = await signJwtToken({
@@ -68,15 +80,9 @@ export async function POST(req: Request) {
       },
     });
 
-    const forwardedProto = req.headers.get("x-forwarded-proto");
-    const isHttps =
-      forwardedProto === "https" ||
-      req.headers.get("cf-visitor")?.includes('"scheme":"https"') ||
-      req.url.startsWith("https://");
-
     response.cookies.set("auth_token", token, {
       httpOnly: true,
-      secure: isHttps,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 604800, // 7 days
       path: "/",

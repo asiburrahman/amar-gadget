@@ -5,19 +5,24 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { H1, P } from "@/components/ui/typography";
-import { formatCurrency } from "@/lib/formatter";
+
+type TrackingData = {
+  id: string;
+  status: string;
+  timeline: { step: string; date: string; done: boolean; current?: boolean }[];
+};
 
 export default function TrackOrderPage() {
   const [orderId, setOrderId] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [orderData, setOrderData] = useState<any>(null);
+  const [orderData, setOrderData] = useState<TrackingData | null>(null);
 
   const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orderId.trim()) {
-      setError("Please enter your Order ID or tracking code.");
+    if (!orderId.trim() || !phone.trim()) {
+      setError("Please enter your order ID and the phone number used at checkout.");
       return;
     }
 
@@ -26,33 +31,17 @@ export default function TrackOrderPage() {
     setOrderData(null);
 
     try {
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderId.trim())}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.order) {
-          setOrderData(data.order);
-        } else {
-          setOrderData(data);
-        }
-      } else {
-        // Fallback demo order status for simulated tracking
-        setOrderData({
-          id: orderId.trim(),
-          status: "IN_TRANSIT",
-          createdAt: new Date().toISOString(),
-          customerName: "Verified Customer",
-          total: 155000,
-          itemsCount: 1,
-          timeline: [
-            { step: "Order Placed", date: "Sep 28, 2026", done: true },
-            { step: "Payment Confirmed", date: "Sep 28, 2026", done: true },
-            { step: "Dispatched from Hub", date: "Sep 29, 2026", done: true },
-            { step: "In Transit via Express Courier", date: "Active Today", done: true, current: true },
-            { step: "Delivered", date: "Estimated Tomorrow", done: false },
-          ],
-        });
+      const query = new URLSearchParams({ phone: phone.trim() });
+      const res = await fetch(
+        `/api/orders/${encodeURIComponent(orderId.trim())}?${query.toString()}`
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.message || "No order matched those details.");
+        return;
       }
-    } catch (err) {
+      setOrderData(data.order as TrackingData);
+    } catch {
       setError("Could not retrieve tracking details. Please verify your order number.");
     } finally {
       setLoading(false);
@@ -71,7 +60,7 @@ export default function TrackOrderPage() {
             Track Your Order
           </H1>
           <P className="mt-2 text-muted-foreground text-sm sm:text-base">
-            Enter your order tracking ID and registered phone number to view live delivery updates.
+            Enter your order ID or tracking code and the phone number used at checkout.
           </P>
         </div>
 
@@ -85,7 +74,7 @@ export default function TrackOrderPage() {
                 </label>
                 <Input
                   required
-                  placeholder="e.g. ord-12345 or demo"
+                  placeholder="Enter your order ID or tracking code"
                   value={orderId}
                   onChange={(e) => setOrderId(e.target.value)}
                 />
@@ -93,10 +82,11 @@ export default function TrackOrderPage() {
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Phone Number (Optional)
+                  Phone Number *
                 </label>
                 <Input
-                  placeholder="e.g. 01700000000"
+                  required
+                  placeholder="Phone number used at checkout"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
@@ -139,14 +129,8 @@ export default function TrackOrderPage() {
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-6">
                 Shipment Milestones
               </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 relative">
-                {(orderData.timeline || [
-                  { step: "Order Placed", date: "Confirmed", done: true },
-                  { step: "Processing", date: "Packed", done: true },
-                  { step: "Dispatched", date: "Courier Handover", done: true },
-                  { step: "In Transit", date: "On Route", done: true, current: true },
-                  { step: "Delivered", date: "Pending", done: false },
-                ]).map((step: any, idx: number) => (
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 relative">
+                {orderData.timeline.map((step, idx) => (
                   <div key={idx} className="flex flex-col items-center text-center space-y-2">
                     <div
                       className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${

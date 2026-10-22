@@ -69,8 +69,6 @@ export default function AddProductPage() {
     setSuccessMsg("");
 
     try {
-      const sellerId = user?.id || "seller-demo-id";
-
       const result = await createProduct(
         {
           name: formData.name,
@@ -83,8 +81,7 @@ export default function AddProductPage() {
           categoryId: formData.categoryId || (categories[0]?.id || ""),
           brandId: formData.brandId || undefined,
           isFeatured: false,
-        },
-        sellerId
+        }
       );
 
       if (result.success) {

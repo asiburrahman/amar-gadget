@@ -88,7 +88,9 @@ model Order {
   paymentMethod   String      @default("COD") // COD, STRIPE
   paymentStatus   String      @default("UNPAID") // UNPAID, PAID, FAILED
   paymentIntentId String?
+  checkoutTokenHash String? @unique
   shippingAddress String?
+  shippingPhone   String?
   trackingNumber  String?
   couponCode      String?
   
@@ -178,4 +180,3 @@ model OtpToken {
 
   @@index([email])
 }
-

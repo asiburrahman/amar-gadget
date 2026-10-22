@@ -19,7 +19,7 @@ const getProduct = cache(async (identifier: string) => {
       include: {
         category: true,
         brand: true,
-        seller: { select: { id: true, name: true, email: true } },
+        seller: { select: { id: true, name: true, sellerStatus: true } },
         reviews: {
           include: { user: { select: { name: true, avatar: true } } },
           orderBy: { createdAt: "desc" },
@@ -34,7 +34,7 @@ const getProduct = cache(async (identifier: string) => {
         include: {
           category: true,
           brand: true,
-          seller: { select: { id: true, name: true, email: true } },
+          seller: { select: { id: true, name: true, sellerStatus: true } },
           reviews: {
             include: { user: { select: { name: true, avatar: true } } },
             orderBy: { createdAt: "desc" },
@@ -52,7 +52,7 @@ const getProduct = cache(async (identifier: string) => {
         include: {
           category: true,
           brand: true,
-          seller: { select: { id: true, name: true, email: true } },
+          seller: { select: { id: true, name: true, sellerStatus: true } },
           reviews: {
             include: { user: { select: { name: true, avatar: true } } },
             orderBy: { createdAt: "desc" },
@@ -64,7 +64,16 @@ const getProduct = cache(async (identifier: string) => {
     console.error("Database product lookup error:", identifier, error);
   }
 
-  return product;
+  if (product && (product.status !== "APPROVED" || product.seller.sellerStatus !== "APPROVED")) {
+    return null;
+  }
+
+  if (!product) return null;
+  const { seller, ...publicProduct } = product;
+  return {
+    ...publicProduct,
+    seller: { id: seller.id, name: seller.name },
+  };
 });
 
 export async function generateMetadata({

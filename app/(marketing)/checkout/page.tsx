@@ -70,15 +70,21 @@ export default function CheckoutPage() {
           paymentMethod: formData.paymentMethod,
           couponCode: couponCode || undefined,
         },
-        user?.id
       );
 
       if (result.success && result.orderId) {
         if (formData.paymentMethod === "STRIPE") {
+          if (!result.checkoutToken) {
+            setErrorMsg("Secure checkout could not be initialized. Please try again.");
+            return;
+          }
           const stripeRes = await fetch("/api/stripe/checkout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items, orderId: result.orderId }),
+            body: JSON.stringify({
+              orderId: result.orderId,
+              checkoutToken: result.checkoutToken,
+            }),
           });
           const stripeData = await stripeRes.json();
           if (stripeData.success && stripeData.url) {
@@ -86,6 +92,8 @@ export default function CheckoutPage() {
             window.location.href = stripeData.url;
             return;
           }
+          setErrorMsg(stripeData.message || "Unable to start secure card checkout.");
+          return;
         }
 
         clearCart();

@@ -3,9 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
 import { verifyPassword, signJwtToken } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const limit = await rateLimit(getClientIp(req.headers), 10, 60, "auth-login");
+    if (!limit.success) {
+      return NextResponse.json({ success: false, message: "Too many sign-in attempts. Try again shortly." }, { status: 429 });
+    }
+
     const body = await req.json();
     const validated = loginSchema.safeParse(body);
 
@@ -51,7 +57,13 @@ export async function POST(req: Request) {
     // 2.5 Check if user is verified
     if (!user.isVerified) {
       // Send fresh OTP to the unverified user
-      await sendOtpEmail(user.email);
+      const otpResult = await sendOtpEmail(user.email);
+      if (!otpResult.success) {
+        return NextResponse.json(
+          { success: false, message: "Unable to send a verification code right now." },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
         {
           success: false,
@@ -83,15 +95,9 @@ export async function POST(req: Request) {
       },
     });
 
-    const forwardedProto = req.headers.get("x-forwarded-proto");
-    const isHttps =
-      forwardedProto === "https" ||
-      req.headers.get("cf-visitor")?.includes('"scheme":"https"') ||
-      req.url.startsWith("https://");
-
     response.cookies.set("auth_token", token, {
       httpOnly: true,
-      secure: isHttps,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 604800, // 7 days
       path: "/",
@@ -104,7 +110,6 @@ export async function POST(req: Request) {
       {
         success: false,
         message: "Internal server error during login.",
-        detail: error?.message || String(error)
       },
       { status: 500 }
     );

@@ -60,7 +60,10 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
               ? {
                   ...o,
                   status: newStatus,
-                  paymentStatus: newStatus === "DELIVERED" ? "PAID" : o.paymentStatus,
+                  paymentStatus:
+                    newStatus === "DELIVERED" && o.paymentMethod === "COD"
+                      ? "PAID"
+                      : o.paymentStatus,
                 }
               : o
           )
@@ -91,7 +94,10 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
     return true;
   });
 
-  const totalGrossRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
+  const totalGrossRevenue = orders.reduce(
+    (sum, order) => sum + (order.paymentStatus === "PAID" ? Number(order.total) : 0),
+    0
+  );
   const pendingCount = orders.filter((o) => o.status === "PENDING" || o.status === "PROCESSING").length;
   const deliveredCount = orders.filter((o) => o.status === "DELIVERED").length;
 

@@ -1,8 +1,10 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createProductSchema, productQuerySchema, type CreateProductInput } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
+import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
 
 export async function getProducts(queryParams: Record<string, unknown> = {}) {
   try {
@@ -14,19 +16,27 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
     const { page, limit, search, categoryId, brandId, minPrice, maxPrice, status, sort } = parsed.data;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
-
-    if (status) {
-      where.status = status;
-    } else {
-      // Default to APPROVED for public catalog
+    const where: Prisma.ProductWhereInput = {};
+    if (!status || status === "APPROVED") {
       where.status = "APPROVED";
+      where.seller = { sellerStatus: "APPROVED" };
+    } else {
+      const viewer = await getCurrentUser();
+      if (!viewer) {
+        return { success: false, error: "Unauthorized", data: [], total: 0 };
+      }
+      if (viewer.role.toUpperCase() === "ADMIN") {
+        where.status = status;
+      } else if (
+        viewer.role.toUpperCase() === "MEMBER" &&
+        viewer.sellerStatus === "APPROVED"
+      ) {
+        where.status = status;
+        where.sellerId = viewer.id;
+      } else {
+        return { success: false, error: "Unauthorized", data: [], total: 0 };
+      }
     }
-
-    // Always require active approved seller status for public marketplace query
-    where.seller = {
-      sellerStatus: "APPROVED",
-    };
 
     if (search) {
       where.OR = [
@@ -63,7 +73,7 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
         include: {
           category: { select: { id: true, name: true, slug: true } },
           brand: { select: { id: true, name: true, slug: true, logo: true } },
-          seller: { select: { id: true, name: true, email: true } },
+          seller: { select: { id: true, name: true } },
         },
       }),
       prisma.product.count({ where }),
@@ -88,12 +98,12 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
 
 export async function getProductBySlug(slug: string) {
   try {
-    const product = await prisma.product.findUnique({
-      where: { slug },
+    const product = await prisma.product.findFirst({
+      where: { slug, status: "APPROVED", seller: { sellerStatus: "APPROVED" } },
       include: {
         category: true,
         brand: true,
-        seller: { select: { id: true, name: true, email: true } },
+        seller: { select: { id: true, name: true } },
         reviews: {
           include: { user: { select: { name: true, avatar: true } } },
           orderBy: { createdAt: "desc" },
@@ -116,18 +126,14 @@ export async function getProductBySlug(slug: string) {
   }
 }
 
-export async function createProduct(input: CreateProductInput, sellerId?: string) {
+export async function createProduct(input: CreateProductInput) {
   try {
-    let targetSeller = sellerId ? await prisma.user.findUnique({ where: { id: sellerId } }) : null;
+    const targetSeller = await getCurrentUserWithRole(["MEMBER", "ADMIN"]);
     if (!targetSeller) {
-      targetSeller = await prisma.user.findFirst({ where: { role: "MEMBER" } });
+      return { success: false, error: "Unauthorized" };
     }
 
-    if (!targetSeller) {
-      return { success: false, error: "No active seller account found in system." };
-    }
-
-    if (targetSeller.sellerStatus !== "APPROVED") {
+    if (targetSeller.role.toUpperCase() === "MEMBER" && targetSeller.sellerStatus !== "APPROVED") {
       return {
         success: false,
         error: "Your seller account is currently pending Admin Approval or suspended. You cannot submit products until approved.",

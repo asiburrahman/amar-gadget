@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { ProductGrid } from "@/components/shared/product-grid";
 import { H1, P } from "@/components/ui/typography";
 
@@ -82,30 +83,31 @@ export default async function ProductsPage({
       });
     }
 
-    const whereClause: any = {
+    const whereClause: Prisma.ProductWhereInput = {
       status: "APPROVED",
+      seller: { sellerStatus: "APPROVED" },
     };
+    const filters: Prisma.ProductWhereInput[] = [];
 
     if (activeCategory) {
       whereClause.categoryId = activeCategory.id;
     } else if (categoryParam) {
-      whereClause.OR = [
+      filters.push({ OR: [
         { category: { slug: { equals: categoryParam, mode: "insensitive" } } },
         { category: { name: { contains: categoryParam.replace(/-/g, " "), mode: "insensitive" } } },
-      ];
+      ] });
     }
 
     if (searchParam) {
-      whereClause.AND = [
-        {
-          OR: [
-            { name: { contains: searchParam, mode: "insensitive" } },
-            { description: { contains: searchParam, mode: "insensitive" } },
-            { category: { name: { contains: searchParam, mode: "insensitive" } } },
-          ],
-        },
-      ];
+      filters.push({
+        OR: [
+          { name: { contains: searchParam, mode: "insensitive" } },
+          { description: { contains: searchParam, mode: "insensitive" } },
+          { category: { name: { contains: searchParam, mode: "insensitive" } } },
+        ],
+      });
     }
+    if (filters.length) whereClause.AND = filters;
 
     if (filterParam === "sale") {
       whereClause.discountPrice = { not: null, gt: 0 };

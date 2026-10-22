@@ -132,7 +132,7 @@ export default function SellerDashboardClient({
     setMsg("");
 
     try {
-      const result = await updateOrderStatusBySeller(orderId, newStatus, seller.id);
+      const result = await updateOrderStatusBySeller(orderId, newStatus);
       if (result.success) {
         setOrderItems((prev) =>
           prev.map((item) =>
@@ -142,7 +142,6 @@ export default function SellerDashboardClient({
                   order: {
                     ...item.order,
                     status: newStatus,
-                    paymentStatus: newStatus === "DELIVERED" ? "PAID" : item.order.paymentStatus,
                   },
                 }
               : item
@@ -327,7 +326,10 @@ export default function SellerDashboardClient({
               {orderItems.map((item) => {
                 const isDelivered = item.order.status === "DELIVERED";
                 const isReady = item.order.status === "READY_FOR_DELIVERY" || item.order.status === "SHIPPED";
-                const isProcessing = item.order.status === "PROCESSING" || item.order.status === "PENDING";
+                const isProcessing =
+                  item.order.status === "PROCESSING" ||
+                  (item.order.status === "PENDING" &&
+                    item.order.paymentMethod === "COD");
                 const itemTotalPrice = item.price * item.quantity;
 
                 return (
@@ -412,20 +414,10 @@ export default function SellerDashboardClient({
                         {isProcessing && (
                           <button
                             disabled={updatingOrderId === item.order.id}
-                            onClick={() => handleUpdateStatus(item.order.id, "READY_FOR_DELIVERY")}
+                            onClick={() => handleUpdateStatus(item.order.id, "SHIPPED")}
                             className="px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition shadow-sm"
                           >
-                            {updatingOrderId === item.order.id ? "Updating..." : "✓ Approve & Prepare Delivery"}
-                          </button>
-                        )}
-
-                        {!isDelivered && (
-                          <button
-                            disabled={updatingOrderId === item.order.id}
-                            onClick={() => handleUpdateStatus(item.order.id, "DELIVERED")}
-                            className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition shadow-sm"
-                          >
-                            {updatingOrderId === item.order.id ? "Updating..." : "📦 Mark as Delivered"}
+                            {updatingOrderId === item.order.id ? "Updating..." : "📦 Mark as Shipped"}
                           </button>
                         )}
 

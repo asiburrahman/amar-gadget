@@ -2,42 +2,50 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 
 export async function seedDefaultAccounts() {
-  const defaultAccounts = [
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Default account seeding is disabled in production.");
+  }
+
+  const accounts = [
     {
       name: "System Super Admin",
-      email: "admin@amargadget.com",
-      password: "AdminPassword123!",
+      email: process.env.SEED_ADMIN_EMAIL,
+      password: process.env.SEED_ADMIN_PASSWORD,
       role: "ADMIN",
     },
     {
-      name: "Official Apple Store Vendor",
-      email: "vendor@amargadget.com",
-      password: "VendorPassword123!",
+      name: "Official Vendor",
+      email: process.env.SEED_SELLER_EMAIL,
+      password: process.env.SEED_SELLER_PASSWORD,
       role: "MEMBER",
     },
     {
       name: "Demo Customer",
-      email: "user@amargadget.com",
-      password: "UserPassword123!",
+      email: process.env.SEED_USER_EMAIL,
+      password: process.env.SEED_USER_PASSWORD,
       role: "USER",
     },
   ];
 
-  for (const acc of defaultAccounts) {
-    const existing = await prisma.user.findUnique({
-      where: { email: acc.email },
-    });
+  if (accounts.some((account) => !account.email || !account.password)) {
+    throw new Error("Set all SEED_*_EMAIL and SEED_*_PASSWORD values before seeding accounts.");
+  }
 
-    if (!existing) {
-      await prisma.user.create({
-        data: {
-          name: acc.name,
-          email: acc.email,
-          password: hashPassword(acc.password),
-          role: acc.role,
-        },
-      });
-      console.log(`✅ Default account created: ${acc.email} (${acc.role})`);
-    }
+  for (const account of accounts) {
+    const email = account.email!.trim().toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) continue;
+
+    await prisma.user.create({
+      data: {
+        name: account.name,
+        email,
+        password: hashPassword(account.password!),
+        role: account.role,
+        sellerStatus: account.role === "MEMBER" ? "PENDING" : "APPROVED",
+        isVerified: true,
+      },
+    });
+    console.log(`Created local seed account for ${account.role}.`);
   }
 }

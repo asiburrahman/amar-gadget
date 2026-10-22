@@ -1,35 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || searchParams.get("q") || "";
     const categoryId = searchParams.get("categoryId") || searchParams.get("category");
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const requestedLimit = Number(searchParams.get("limit") || "20");
+    const requestedPage = Number(searchParams.get("page") || "1");
+    const limit = Number.isInteger(requestedLimit) ? Math.min(50, Math.max(1, requestedLimit)) : 20;
+    const page = Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1;
     const skip = (page - 1) * limit;
 
-    const whereClause: any = {
+    const whereClause: Prisma.ProductWhereInput = {
       status: "APPROVED",
-      seller: {
-        sellerStatus: "APPROVED",
-      },
+      seller: { sellerStatus: "APPROVED" },
     };
+    const filters: Prisma.ProductWhereInput[] = [];
 
     if (search) {
-      whereClause.OR = [
+      filters.push({ OR: [
         { name: { contains: search, mode: "insensitive" } },
         { description: { contains: search, mode: "insensitive" } },
-      ];
+      ] });
     }
 
     if (categoryId) {
-      whereClause.OR = [
+      filters.push({ OR: [
         { categoryId: categoryId },
         { category: { name: { contains: categoryId, mode: "insensitive" } } },
-      ];
+      ] });
     }
+    if (filters.length) whereClause.AND = filters;
 
     const [products, total] = await Promise.all([
       prisma.product.findMany({

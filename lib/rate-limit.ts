@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { randomUUID } from "node:crypto";
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -31,10 +32,16 @@ export function getClientIp(headers: Headers): string {
   return "127.0.0.1";
 }
 
-export async function rateLimit(ip: string, limit = 100, windowInSeconds = 60) {
+export async function rateLimit(
+  ip: string,
+  limit = 100,
+  windowInSeconds = 60,
+  namespace = "default"
+) {
   if (!redis) {
     if (process.env.NODE_ENV === "production") {
-      console.warn("⚠️ Upstash Redis config missing in production! Rate limiter bypassed.");
+      console.error("Upstash Redis config missing in production; rate-limited request denied.");
+      return { success: false, limit, remaining: 0 };
     }
     return {
       success: true,
@@ -44,13 +51,13 @@ export async function rateLimit(ip: string, limit = 100, windowInSeconds = 60) {
   }
 
   try {
-    const key = `ratelimit:${ip}`;
+    const key = `ratelimit:${namespace}:${ip}`;
     const now = Math.floor(Date.now() / 1000);
     const clearBefore = now - windowInSeconds;
 
     const multi = redis.multi();
     multi.zremrangebyscore(key, 0, clearBefore);
-    multi.zadd(key, { score: now, member: `${now}-${Math.random()}` });
+    multi.zadd(key, { score: now, member: randomUUID() });
     multi.zcard(key);
     multi.expire(key, windowInSeconds);
 
@@ -64,9 +71,8 @@ export async function rateLimit(ip: string, limit = 100, windowInSeconds = 60) {
     };
   } catch (error) {
     console.error("Rate limiting execution failed:", error);
-    // Graceful fail-open: allow request to proceed under disaster recovery scenarios
     return {
-      success: true,
+      success: process.env.NODE_ENV !== "production",
       limit,
       remaining: 0,
     };

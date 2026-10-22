@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const limit = await rateLimit(getClientIp(req.headers), 5, 60, "auth-forgot-password");
+    if (!limit.success) {
+      return NextResponse.json({ success: false, message: "Too many requests. Try again shortly." }, { status: 429 });
+    }
+
     const { email } = await req.json();
 
     if (!email || typeof email !== "string") {
@@ -40,7 +46,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `A 6-digit password reset code has been sent to ${normalizedEmail}.`,
+      message: "If an account exists with this email, a verification code has been sent.",
     });
   } catch (error: any) {
     console.error("POST /api/auth/forgot-password error:", error);

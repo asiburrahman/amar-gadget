@@ -38,6 +38,9 @@ export async function generatePresignedUploadUrl({
   if (maxSizeInBytes > MAX_LIMIT) {
     throw new Error("File size exceeds the 10MB limit");
   }
+  if (!Number.isFinite(maxSizeInBytes) || maxSizeInBytes <= 0) {
+    throw new Error("File size must be a positive number.");
+  }
 
   // 3. Filename sanitation (Prevents path traversal attacks like ../)
   const sanitizedFilename = filename
@@ -47,13 +50,7 @@ export async function generatePresignedUploadUrl({
   const key = `uploads/${Date.now()}-${sanitizedFilename}`;
 
   if (!s3Client || !bucketName) {
-    if (process.env.NODE_ENV === "production") {
-      console.warn("⚠️ Cloudflare R2 credentials missing in production! Returning mock presigned URL.");
-    }
-    return {
-      uploadUrl: `https://mock-r2-upload-url.local/bucket/${key}?mock=true`,
-      fileKey: key,
-    };
+    throw new Error("Cloudflare R2 credentials must be configured before uploads are available.");
   }
 
   try {
@@ -61,6 +58,7 @@ export async function generatePresignedUploadUrl({
       Bucket: bucketName,
       Key: key,
       ContentType: contentType,
+      ContentLength: maxSizeInBytes,
     });
 
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });

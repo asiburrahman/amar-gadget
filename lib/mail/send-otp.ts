@@ -1,10 +1,11 @@
+import { randomInt } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { transporter } from "./nodemailer";
 
-export async function sendOtpEmail(email: string): Promise<{ success: boolean; code?: string; error?: string }> {
+export async function sendOtpEmail(email: string): Promise<{ success: boolean; error?: string }> {
   try {
     // Generate 6-digit numeric OTP code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
     // Delete any previous OTP tokens for this email
@@ -44,15 +45,14 @@ export async function sendOtpEmail(email: string): Promise<{ success: boolean; c
       `,
     };
 
-    console.log(`[OTP GENERATED] Code for ${email} is: ${code}`);
-
     try {
       await transporter.sendMail(mailOptions);
-    } catch (smtpError) {
-      console.warn("SMTP email dispatch warning (OTP logged to console):", smtpError);
+    } catch (error) {
+      await prisma.otpToken.deleteMany({ where: { email: email.toLowerCase(), code } });
+      throw error;
     }
 
-    return { success: true, code };
+    return { success: true };
   } catch (error: any) {
     console.error("Error sending OTP email:", error);
     return { success: false, error: error.message || "Failed to generate OTP" };

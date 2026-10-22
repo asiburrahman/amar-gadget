@@ -16,7 +16,7 @@ export async function GET(
       include: {
         category: { select: { id: true, name: true } },
         brand: { select: { id: true, name: true } },
-        seller: { select: { id: true, name: true, email: true } },
+        seller: { select: { id: true, name: true, sellerStatus: true } },
         reviews: {
           include: { user: { select: { name: true, avatar: true } } },
           orderBy: { createdAt: "desc" },
@@ -30,7 +30,7 @@ export async function GET(
         include: {
           category: { select: { id: true, name: true } },
           brand: { select: { id: true, name: true } },
-          seller: { select: { id: true, name: true, email: true } },
+          seller: { select: { id: true, name: true, sellerStatus: true } },
           reviews: {
             include: { user: { select: { name: true, avatar: true } } },
             orderBy: { createdAt: "desc" },
@@ -45,7 +45,7 @@ export async function GET(
         include: {
           category: { select: { id: true, name: true } },
           brand: { select: { id: true, name: true } },
-          seller: { select: { id: true, name: true, email: true } },
+          seller: { select: { id: true, name: true, sellerStatus: true } },
           reviews: {
             include: { user: { select: { name: true, avatar: true } } },
             orderBy: { createdAt: "desc" },
@@ -61,9 +61,20 @@ export async function GET(
       );
     }
 
+    if (product.status !== "APPROVED" || product.seller.sellerStatus !== "APPROVED") {
+      return NextResponse.json(
+        { success: false, message: "Product not found in database" },
+        { status: 404 }
+      );
+    }
+
+    const { seller, ...publicProduct } = product;
     return NextResponse.json({
       success: true,
-      product,
+      product: {
+        ...publicProduct,
+        seller: { id: seller.id, name: seller.name },
+      },
     });
   } catch (error: any) {
     console.error("API /api/products/[slug] error:", error);

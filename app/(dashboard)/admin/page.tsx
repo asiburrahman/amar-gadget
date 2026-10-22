@@ -7,6 +7,9 @@ import { AdminProductActions } from "./_components/admin-product-actions";
 
 export default async function AdminDashboardPage() {
   const statsResult = await getAdminStats();
+  if (!statsResult.success) {
+    throw new Error(statsResult.error || "Failed to load admin statistics.");
+  }
   const stats = statsResult.stats;
 
   // Fetch pending products for approval
