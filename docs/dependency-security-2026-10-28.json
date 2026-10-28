@@ -1,0 +1,67 @@
+{
+  "reviewedOn": "2026-10-28",
+  "timezone": "Asia/Dhaka",
+  "runtime": "Node 24.19.0 / Windows",
+  "production": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "full": {
+    "info": 0,
+    "low": 6,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 6
+  },
+  "selectedVersions": {
+    "next": "16.4.3",
+    "react": "19.2.9",
+    "prisma": "7.10.1",
+    "prismaClient": "7.10.1",
+    "zod": "4.6.7",
+    "nodemailer": "10.2.1",
+    "jest": "30.5.2"
+  },
+  "residualEntries": [
+    {
+      "name": "@jest/core",
+      "severity": "low"
+    },
+    {
+      "name": "deepmerge",
+      "severity": "low"
+    },
+    {
+      "name": "jest",
+      "severity": "low"
+    },
+    {
+      "name": "jest-cli",
+      "severity": "low"
+    },
+    {
+      "name": "jest-config",
+      "severity": "low"
+    },
+    {
+      "name": "ts-jest",
+      "severity": "low"
+    }
+  ],
+  "mitigation": {
+    "advisory": "GHSA-gcqx-w48m-w2h4",
+    "patch": "patches/deepmerge+4.3.1.dev.patch",
+    "versionMetadataUnchanged": true,
+    "verifiedAfterCleanInstall": true,
+    "tests": 5,
+    "cjsSha256": "a18bc1bcb0a285eed2280c1aae3c23bd9cd61bf3c3038dc06706bbbee19c9f42",
+    "umdSha256": "ac73e83bcfefd4e39e9a2bee3d7ec478b3ba558c2ef71647d691b9737f6360e8"
+  },
+  "deepmergePresentInStandalone": false,
+  "jestPresentInStandalone": false
+}

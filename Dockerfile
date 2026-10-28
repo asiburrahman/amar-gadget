@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
-RUN npm ci --ignore-scripts || npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 FROM base AS builder
 WORKDIR /app
@@ -18,6 +18,7 @@ ENV NODE_ENV=production
 ENV SKIP_ENV_VALIDATION=1
 ENV NODE_OPTIONS="--max-old-space-size=1536"
 
+RUN npx patch-package --error-on-fail
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npx prisma generate
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 

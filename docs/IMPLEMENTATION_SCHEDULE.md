@@ -33,7 +33,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-008 — stronger versioned password storage with compatible login-time migration.** Current total: 12 original tasks implemented, 37 original tasks open, plus newly identified AUD-050 open (50 tracked tasks; 38 open). **Next: AUD-050 — dependency security remediation**, then AUD-009. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
+**Latest completed step: AUD-050 — dependency security remediation with explicit development vendor mitigation.** Current total: 12 original tasks plus AUD-050 implemented (13 of 50 tracked tasks); 37 original tasks open. **Next: AUD-009 — purpose/user-bound hashed OTP and atomic email-change verification.** The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence, the transparent residual low registry alert and outstanding external verification.
 
 ## Owner-provided introduction
 

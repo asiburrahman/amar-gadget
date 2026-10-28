@@ -3,11 +3,11 @@
 > **A Next-Gen, Full-Stack Multi-Vendor E-Commerce Marketplace**
 > *Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Prisma, PostgreSQL (Neon), Stripe, Cloudflare R2, and Upstash Redis.*
 
-[![Next.js](https://img.shields.io/badge/Next.js-16.2.10-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19.2.4-blue?style=for-the-badge&logo=react)](https://react.dev/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4.3-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.2.9-blue?style=for-the-badge&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38bdf8?style=for-the-badge&logo=tailwindcss)](https://tailwindcss.com/)
-[![Prisma](https://img.shields.io/badge/Prisma-7.8.0-2d3748?style=for-the-badge&logo=prisma)](https://www.prisma.io/)
+[![Prisma](https://img.shields.io/badge/Prisma-7.10.1-2d3748?style=for-the-badge&logo=prisma)](https://www.prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon_Serverless-4169e1?style=for-the-badge&logo=postgresql)](https://neon.tech/)
 [![Stripe](https://img.shields.io/badge/Stripe-Payments-635bff?style=for-the-badge&logo=stripe)](https://stripe.com/)
 [![Cloudflare R2](https://img.shields.io/badge/Storage-Cloudflare_R2-f38020?style=for-the-badge&logo=cloudflare)](https://www.cloudflare.com/products/r2/)
@@ -132,7 +132,7 @@ Unlike conventional monolithic single-vendor stores, **Amar Gadget** provides:
 | **Frontend Library** | **React 19** | Latest React features, concurrent rendering |
 | **Language** | **TypeScript 5.x** | Complete end-to-end type safety |
 | **Styling** | **Tailwind CSS v4** | Next-gen CSS-first styling engine |
-| **ORM & Database** | **Prisma 7.8 + Neon PostgreSQL** | Serverless PostgreSQL with type-safe schema modeling |
+| **ORM & Database** | **Prisma 7.10.1 + Neon PostgreSQL** | PostgreSQL via the transaction-capable PrismaPg adapter |
 | **Payments** | **Stripe API & Webhooks** | Card processing and automated payment status webhooks |
 | **File Storage** | **Cloudflare R2 (AWS S3 SDK)** | High-throughput, zero-egress cost object storage |
 | **Rate Limiter** | **Upstash Redis** | Sliding-window API rate limiting |
@@ -191,7 +191,7 @@ amar-gadget/
 Follow these steps to run **Amar Gadget** locally on your machine:
 
 ### Prerequisites
-- **Node.js**: `v20.x` or `v22.x` recommended
+- **Node.js**: `v22.x` (22.12+) or `v24.x`; local validation uses 24.19.0. The package engine range also permits Node 20.19+.
 - **Package Manager**: `npm`, `pnpm`, or `bun`
 - **Database**: A PostgreSQL instance (e.g. Free [Neon](https://neon.tech), Supabase, or local PostgreSQL)
 
