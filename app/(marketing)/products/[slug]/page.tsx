@@ -6,6 +6,7 @@ import Image from "next/image";
 import { ProductDetailActions } from "./_components/product-detail-actions";
 import { formatCurrency } from "@/lib/formatter";
 import { generateProductSchema } from "@/lib/seo/schema";
+import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,7 @@ export default async function ProductDetailPage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       <main className="min-h-screen bg-background py-10">
         <div className="container mx-auto px-4 max-w-6xl">
