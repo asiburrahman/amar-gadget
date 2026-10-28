@@ -1,5 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
-const { PrismaNeonHttp } = require("@prisma/adapter-neon");
+const { PrismaPg } = require("@prisma/adapter-pg");
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -7,7 +7,7 @@ if (!databaseUrl) {
 }
 
 const prisma = new PrismaClient({
-  adapter: new PrismaNeonHttp(databaseUrl, {}),
+  adapter: new PrismaPg({ connectionString: databaseUrl, connectionTimeoutMillis: 10_000, max: 5 }),
 });
 
 async function main() {

@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaNeonHttp } from "@prisma/adapter-neon";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -18,7 +18,13 @@ const getDatabaseUrl = () => {
 };
 
 const createPrismaClient = () => {
-  const adapter = new PrismaNeonHttp(getDatabaseUrl(), {});
+  // Checkout, OTP and webhooks require interactive transactions. Use PostgreSQL
+  // TCP (including Neon's pooled TCP URL); the Neon HTTP adapter rejects them.
+  const adapter = new PrismaPg({
+    connectionString: getDatabaseUrl(),
+    connectionTimeoutMillis: 10_000,
+    max: 5,
+  });
   return new PrismaClient({
     adapter,
     log:
