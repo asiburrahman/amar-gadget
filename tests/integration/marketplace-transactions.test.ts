@@ -8,7 +8,7 @@ jest.mock("next/headers", () => ({
   cookies: jest.fn().mockResolvedValue({ set: jest.fn(), get: jest.fn() }),
   headers: jest.fn().mockResolvedValue(new Headers()),
 }));
-jest.mock("@/lib/auth", () => ({ signJwtToken: jest.fn().mockResolvedValue("integration-token") }));
+jest.mock("@/lib/auth", () => ({ ...jest.requireActual("@/lib/password"), signJwtToken: jest.fn().mockResolvedValue("integration-token") }));
 jest.mock("@/lib/rate-limit", () => ({
   getClientIp: jest.fn().mockReturnValue("127.0.0.1"),
   rateLimit: jest.fn().mockResolvedValue({ success: true }),

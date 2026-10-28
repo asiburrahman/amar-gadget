@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 11 tasks implemented, 38 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 12 of the original 49 tasks implemented; 37 original tasks remain open. One additional dependency-security task (AUD-050) brings the tracked total to 50, with 38 open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -134,6 +134,8 @@ Next task: **AUD-026 — durable transition history and actual shipment tracking
 
 ## Batch 7 — AUD-026: durable order history and shipment tracking
 
+Implementation commit: [fa8f88b](https://github.com/asiburrahman/amar-gadget/commit/fa8f88b).
+
 Migration `20261028190000_order_event_history` adds an indexed, ordered `OrderEvent` history and separate carrier/parcel fields. A database trigger records creation and real status/payment/shipment changes atomically for every application path, including webhook/worker SQL writes. No-op/duplicate updates produce no event; rolled-back writes leave no event. A monotonic database sequence orders changes even within the same millisecond. Events cannot be edited or individually deleted while the parent order exists. Parent deletion retains the existing cascade policy; financial/deletion retention constraints remain AUD-049.
 
 Existing orders receive their known creation time and an explicitly undated current-state snapshot. Earlier shipment/cancellation times are never invented from `createdAt` or `updatedAt`. Tracking now shows actual recorded events and unknown legacy times, current carrier/parcel data, and complete history through 50-event cursor pages. Cursor ownership, bounded inputs, the existing phone check and private/no-store responses protect lookups. Navigation from admin and confirmation pre-fills the order/tracking code; the customer must still provide the checkout phone number. Updates occur only on explicit lookup/refresh/pagination; the page no longer advertises real-time push tracking.
@@ -143,6 +145,18 @@ The admin orders page includes a real carrier/tracking editor backed by a valida
 Validation: **96 tests across 13 suites**, including SQL history immutability/rollback, seller→admin transitions, duplicate signed payment/expiry events, unauthorized/invalid/unpaid shipment writes, full 56-event pagination and foreign-cursor denial. Four added DOM cases cover real field submission, failure feedback, unknown legacy dates and history pagination. All six migrations pass on a fresh disposable PostgreSQL database. A separate five-migration upgrade rehearsal preserved a pre-existing shipped COD order's total/state, retained its exact creation time and left the legacy shipment time null. TypeScript, affected-file ESLint, Prisma validation, diff checks and production build pass. No production migration/deployment or real carrier/provider operation was performed. Actual browser/provider verification remains AUD-044.
 
 See [order history operations](ORDER_HISTORY_RUNBOOK.md) for rollout and retention behavior. Next: **AUD-008 — versioned strong password storage and compatible login-time migration**. The full remaining-task goal stays active.
+
+## Batch 8 — AUD-008: versioned password hashes and compatible migration
+
+All active password writers use asynchronous, random-salted scrypt with explicit version/allowlisted cost parameters and timing-safe digest comparison. The supported legacy PBKDF2 format retains its exact hexadecimal-salt-as-text and password-byte contract. Successful legacy login upgrades through a compare-and-update; concurrent login can reuse a completed upgrade, while a winning password reset cannot be overwritten or authenticated with the old password. New registration, password reset/change and operator account creation await the same implementation. No database migration or mass reset is needed.
+
+The KDF uses the [OWASP-listed 64 MiB scrypt profile](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt) with Node's asynchronous crypto API, two active jobs, 16 queued jobs, a five-second queue timeout and controlled HTTP 503/Retry-After on saturation. Nonexistent/malformed credentials and failed legacy comparisons still spend the current KDF cost. No password normalization/truncation is introduced. Legacy/malformed format parsing cannot select arbitrary resource costs.
+
+The old hash/password-printing diagnostic is replaced by a bounded read-only format inventory. The fixed-credential JavaScript seeder and personal-account reset script are retired in favor of explicit environment-configured account seeding/provisioning with shared hashing and no plaintext/hash output. Actual CLI integration tests run only against the disposable local database. `tsx` is a development/operator tool dependency, not a new application runtime requirement. Old ad hoc OTP/token-printing diagnostics remain recorded follow-ups for AUD-009/010; they are not safe production verification tools.
+
+Validation: **111 tests across 15 suites**, including real PostgreSQL legacy upgrade, concurrent-login/reset conflict, registration/reset/change, overload response and actual seed/provision/inventory CLI cases, plus native-crypto format/salt/Unicode/long-password/timing-safe/queue tests. TypeScript, affected-file ESLint, diff checks and production build pass with the isolated local database and environment-validation bypass. The reproducible local benchmark (`npm run bench:passwords`, Node 24.19.0 on Windows, five sequential samples) measured mean hash **392.0 ms**, mean verification **380.3 ms**, four queued/concurrent hashes **916.4 ms**, sampled process peak RSS **197.6 MiB** and maximum observed event-loop delay **15.5 ms**. These are local measurements, not deployment performance guarantees. See [password storage operations](PASSWORD_STORAGE_RUNBOOK.md).
+
+The dependency check also exposed existing vulnerable packages: full `npm audit` reports 27 affected entries; `npm audit --omit=dev` reports 17 (1 critical, 10 high, 6 moderate). This is not represented as a clean dependency scan or a fixed release. [AUD-050](ADDITIONAL_AUDIT_FINDINGS.md) records the separate urgent remediation task, prioritized next. Session revocation, OTP-purpose isolation and consistent account input policy remain AUD-010/009/011 respectively. No production accounts, credentials, provider or deployment were changed.
 
 ## Public contribution evidence
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, PasswordWorkloadBusy } from "@/lib/auth";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const hashedPassword = hashPassword(newPassword);
+    const hashedPassword = await hashPassword(newPassword);
 
     const changed = await prisma.$transaction(async (tx) => {
       const claimed = await tx.otpToken.deleteMany({
@@ -101,10 +101,11 @@ export async function POST(req: Request) {
       success: true,
       message: "Password reset successful! You can now sign in with your new password.",
     });
-  } catch (error: any) {
+  } catch (error) {
+    if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
     console.error("POST /api/auth/reset-password error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to reset password." },
+      { success: false, message: "Failed to reset password." },
       { status: 500 }
     );
   }

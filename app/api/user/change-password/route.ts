@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifyJwtToken, verifyPassword, hashPassword } from "@/lib/auth";
+import { verifyJwtToken, verifyPassword, hashPassword, PasswordWorkloadBusy } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
 
     const { currentPassword, newPassword, confirmPassword } = await req.json();
 
-    if (!newPassword || newPassword.length < 6) {
+    if (typeof newPassword !== "string" || newPassword.length < 6) {
       return NextResponse.json(
         { success: false, message: "New password must be at least 6 characters long." },
         { status: 400 }
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
         );
       }
 
-      const isCurrentValid = verifyPassword(currentPassword, user.password);
+      const isCurrentValid = await verifyPassword(currentPassword, user.password);
       if (!isCurrentValid) {
         return NextResponse.json(
           { success: false, message: "Current password is incorrect." },
@@ -70,21 +70,23 @@ export async function POST(req: Request) {
     }
 
     // Hash and update to new password
-    const hashed = hashPassword(newPassword);
+    const hashed = await hashPassword(newPassword);
 
-    await prisma.user.update({
-      where: { id: user.id },
+    const updated = await prisma.user.updateMany({
+      where: { id: user.id, password: user.password },
       data: { password: hashed },
     });
+    if (updated.count !== 1) return NextResponse.json({ success: false, message: "Your credentials changed. Sign in again before changing the password." }, { status: 409 });
 
     return NextResponse.json({
       success: true,
       message: "Password updated successfully!",
     });
-  } catch (error: any) {
+  } catch (error) {
+    if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
     console.error("POST /api/user/change-password error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to update password." },
+      { success: false, message: "Failed to update password." },
       { status: 500 }
     );
   }

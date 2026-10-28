@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations/auth";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, PasswordWorkloadBusy } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -56,9 +56,9 @@ export async function POST(req: Request) {
 
       // User registered previously but did not verify OTP!
       // Update user details, reset password hash, and dispatch a fresh OTP code
-      const hashedPassword = hashPassword(password);
-      await prisma.user.update({
-        where: { id: existingUser.id },
+      const hashedPassword = await hashPassword(password);
+      const updated = await prisma.user.updateMany({
+        where: { id: existingUser.id, isVerified: false, password: existingUser.password },
         data: {
           name,
           password: hashedPassword,
@@ -66,6 +66,7 @@ export async function POST(req: Request) {
           role: existingUser.role,
         },
       });
+      if (updated.count !== 1) return NextResponse.json({ success: false, message: "The account changed. Please sign in or retry registration." }, { status: 409 });
 
       // Dispatch fresh OTP verification email
       const otpResult = await sendOtpEmail(existingUser.email);
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
     }
 
     // 2. Hash password and create user in database
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = await hashPassword(password);
     const newUser = await prisma.user.create({
       data: {
         name,
@@ -113,13 +114,13 @@ export async function POST(req: Request) {
       email: newUser.email,
       message: "Account created! A 6-digit OTP code has been sent to your email.",
     });
-  } catch (error: any) {
+  } catch (error) {
+    if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
     console.error("Registration error:", error);
     return NextResponse.json(
       { 
         success: false, 
-        message: "Internal server error during registration.",
-        detail: error?.message || String(error)
+        message: "Internal server error during registration."
       },
       { status: 500 }
     );

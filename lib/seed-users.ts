@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
+import { registerSchema } from "@/lib/validations/auth";
 
 export async function seedDefaultAccounts() {
   if (process.env.NODE_ENV === "production") {
@@ -20,7 +21,7 @@ export async function seedDefaultAccounts() {
       role: "MEMBER",
     },
     {
-      name: "Demo Customer",
+      name: "Local Customer",
       email: process.env.SEED_USER_EMAIL,
       password: process.env.SEED_USER_PASSWORD,
       role: "USER",
@@ -32,7 +33,8 @@ export async function seedDefaultAccounts() {
   }
 
   for (const account of accounts) {
-    const email = account.email!.trim().toLowerCase();
+    const email = registerSchema.shape.email.parse(account.email).trim().toLowerCase();
+    const password = registerSchema.shape.password.parse(account.password);
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) continue;
 
@@ -40,7 +42,7 @@ export async function seedDefaultAccounts() {
       data: {
         name: account.name,
         email,
-        password: hashPassword(account.password!),
+        password: await hashPassword(password),
         role: account.role,
         sellerStatus: account.role === "MEMBER" ? "PENDING" : "APPROVED",
         isVerified: true,

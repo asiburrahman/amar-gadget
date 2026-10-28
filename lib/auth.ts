@@ -1,5 +1,5 @@
-import crypto from "crypto";
 import { SignJWT, jwtVerify } from "jose";
+export { hashPassword, verifyPassword, passwordNeedsRehash, PasswordWorkloadBusy } from "@/lib/password";
 
 function getJwtSecretKey() {
   const secret = process.env.JWT_SECRET;
@@ -7,25 +7,6 @@ function getJwtSecretKey() {
     throw new Error("JWT_SECRET must be configured with at least 32 characters.");
   }
   return new TextEncoder().encode(secret);
-}
-
-/**
- * Hashes a plain-text password using PBKDF2 with SHA-512 and a random 16-byte salt.
- */
-export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-  return `${salt}:${hash}`;
-}
-
-/**
- * Verifies a plain-text password against a stored PBKDF2 salt:hash string.
- */
-export function verifyPassword(password: string, storedHash: string): boolean {
-  if (!storedHash || !storedHash.includes(":")) return false;
-  const [salt, originalHash] = storedHash.split(":");
-  const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
-  return hash === originalHash;
 }
 
 /**
@@ -56,7 +37,7 @@ export async function verifyJwtToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, getJwtSecretKey());
     return payload;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

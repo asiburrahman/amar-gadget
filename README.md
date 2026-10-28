@@ -98,7 +98,7 @@ Unlike conventional monolithic single-vendor stores, **Amar Gadget** provides:
 - **Product Reviews & Ratings**: Verified customer reviews with star ratings and feedback.
 
 ### 🛡️ Security & Performance
-- **Authentication**: Custom JWT authentication (`jose`) with secure HTTP-only cookies and bcrypt-secured passwords.
+- **Authentication**: Custom JWT authentication (`jose`) with secure HTTP-only cookies and versioned scrypt password hashes; compatible legacy hashes are upgraded on successful login.
 - **Email OTP Verification**: Two-step account verification and password reset workflows powered by **Nodemailer**.
 - **Rate Limiting**: Distributed rate-limiting via **Upstash Redis** to protect authentication endpoints and sensitive APIs against brute-force attacks.
 - **Schema Validation**: End-to-end data validation using **Zod** for all client forms and backend server actions/routes.

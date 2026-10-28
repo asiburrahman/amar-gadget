@@ -10,7 +10,11 @@
     "tunnel:local": "cloudflared tunnel --url http://localhost:3000",
     "postinstall": "prisma generate",
     "lint": "eslint",
-    "test": "jest"
+    "test": "jest",
+    "bench:passwords": "tsx scripts/benchmark-passwords.ts",
+    "audit:password-formats": "tsx scripts/check-passwords.ts",
+    "seed:accounts": "tsx scripts/seed-users-credentials.ts",
+    "provision:admin": "tsx scripts/provision-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
@@ -50,6 +54,7 @@
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.11",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

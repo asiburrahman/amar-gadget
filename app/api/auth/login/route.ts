@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
-import { verifyPassword, signJwtToken } from "@/lib/auth";
+import { verifyPassword, hashPassword, passwordNeedsRehash, PasswordWorkloadBusy, signJwtToken } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       where: { email: email.toLowerCase() },
     });
 
-    if (!user) {
+    if (!(await verifyPassword(password, user?.password)) || !user?.password) {
       return NextResponse.json(
         {
           success: false,
@@ -43,15 +43,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Verify password (if stored password exists)
-    if (!user.password || !verifyPassword(password, user.password)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid email address or password.",
-        },
-        { status: 401 }
-      );
+    if (passwordNeedsRehash(user.password)) {
+      const upgraded = await hashPassword(password);
+      const saved = await prisma.user.updateMany({ where: { id: user.id, password: user.password }, data: { password: upgraded } });
+      // Never overwrite a concurrent password reset. Another successful login
+      // may already have upgraded this same password, so recheck that case.
+      if (saved.count !== 1) {
+        const current = await prisma.user.findUnique({ where: { id: user.id }, select: { password: true } });
+        if (!(await verifyPassword(password, current?.password))) return NextResponse.json({ success: false, message: "Invalid email address or password." }, { status: 401 });
+      }
     }
 
     // 2.5 Check if user is verified
@@ -104,7 +104,8 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error) {
+    if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
     console.error("Login error:", error);
     return NextResponse.json(
       {

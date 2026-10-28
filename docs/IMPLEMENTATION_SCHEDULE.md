@@ -6,11 +6,13 @@ This is a dependency-ordered work queue, not a background timer or a promised co
 
 Standing owner instruction after AUD-007: complete **all remaining 40 tasks**, one at a time, preserving every task's scope, with a focused professional commit and push for each. Session checkpoints do not narrow that objective or require a fresh permission request to continue routine authorized work.
 
+New findings are additive, not replacements for that scope. The dependency scan during AUD-008 identified urgent AUD-050; see [additional audit findings](ADDITIONAL_AUDIT_FINDINGS.md). It is prioritized immediately after AUD-008, before continuing account-security work.
+
 | Phase | Tasks, in working order | Outcome |
 | --- | --- | --- |
 | 1 — Completed foundation | AUD-001, 002, 003, 012, 013 | Transactions, JSON-LD safety, visibility and seller data/state guards |
 | 2 — Checkout reliability | AUD-004 → 005 → 006 → 007 → 025 → 026 | One order per attempt, bounded stock reservations, payment retry, correct quotes and tracking |
-| 3 — Account security | AUD-008 → 009 → 010 → 011 → 039 → 040 → 041 | Password/OTP/session protections, atomic profile updates, runtime/proxy boundaries |
+| 3 — Account security | AUD-008 → 050 → 009 → 010 → 011 → 039 → 040 → 041 | Password/OTP/session protections, dependency security patches, atomic profile updates, runtime/proxy boundaries |
 | 4 — Catalog and media | AUD-016 → 017 → 018 → 019 → 020 → 037 → 043 → 047 → 048 | Real uploads, validated product mutations, browsing/search/compare, truthful data and SEO |
 | 5 — Customer account | AUD-021 → 022 → 023 → 024 → 038 | Address selection, wishlist/cart persistence, verified reviews, avatar storage |
 | 6 — Marketplace operations | AUD-014 → 015 → 032 → 034 | Per-vendor fulfillment, refunds, settlement and accurate financial metrics |
@@ -31,7 +33,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-026 — durable transition history and actual shipment tracking.** Current total: 11 of 49 tasks implemented, 38 open. **Next: AUD-008 — stronger versioned password storage with compatible login-time migration.** The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
+**Latest completed step: AUD-008 — stronger versioned password storage with compatible login-time migration.** Current total: 12 original tasks implemented, 37 original tasks open, plus newly identified AUD-050 open (50 tracked tasks; 38 open). **Next: AUD-050 — dependency security remediation**, then AUD-009. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
 
 ## Owner-provided introduction
 
