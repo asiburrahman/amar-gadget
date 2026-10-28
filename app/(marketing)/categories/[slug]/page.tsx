@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { publicProductWhere } from "@/lib/catalog-visibility";
 import { ProductGrid } from "@/components/shared/product-grid";
 import { H1, P } from "@/components/ui/typography";
 
@@ -59,7 +60,7 @@ export default async function CategoryDetailPage({
     });
 
     const whereClause: any = {
-      status: "APPROVED",
+      ...publicProductWhere,
     };
 
     if (category) {

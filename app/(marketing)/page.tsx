@@ -1,5 +1,6 @@
 import React from "react";
 import { prisma } from "@/lib/prisma";
+import { publicProductWhere } from "@/lib/catalog-visibility";
 import { SEOGuard } from "@/components/shared/seo-guard";
 import { HeroSection } from "@/components/home/hero-section";
 import { PromoBanners } from "@/components/home/promo-banners";
@@ -21,9 +22,7 @@ export default async function Home() {
   try {
     const [products, categories] = await Promise.all([
       prisma.product.findMany({
-        where: {
-          status: "APPROVED",
-        },
+        where: publicProductWhere,
         include: {
           category: {
             select: {

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { publicProductWhere } from "@/lib/catalog-visibility";
 import { Prisma } from "@prisma/client";
 import { ProductGrid } from "@/components/shared/product-grid";
 import { H1, P } from "@/components/ui/typography";
@@ -84,8 +85,7 @@ export default async function ProductsPage({
     }
 
     const whereClause: Prisma.ProductWhereInput = {
-      status: "APPROVED",
-      seller: { sellerStatus: "APPROVED" },
+      ...publicProductWhere,
     };
     const filters: Prisma.ProductWhereInput[] = [];
 

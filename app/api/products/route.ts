@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { publicProductWhere } from "@/lib/catalog-visibility";
 import { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
@@ -14,8 +15,7 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * limit;
 
     const whereClause: Prisma.ProductWhereInput = {
-      status: "APPROVED",
-      seller: { sellerStatus: "APPROVED" },
+      ...publicProductWhere,
     };
     const filters: Prisma.ProductWhereInput[] = [];
 

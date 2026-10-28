@@ -2,6 +2,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { publicProductWhere } from "@/lib/catalog-visibility";
 import { createProductSchema, productQuerySchema, type CreateProductInput } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
@@ -18,8 +19,7 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
 
     const where: Prisma.ProductWhereInput = {};
     if (!status || status === "APPROVED") {
-      where.status = "APPROVED";
-      where.seller = { sellerStatus: "APPROVED" };
+      Object.assign(where, publicProductWhere);
     } else {
       const viewer = await getCurrentUser();
       if (!viewer) {
@@ -99,7 +99,7 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
 export async function getProductBySlug(slug: string) {
   try {
     const product = await prisma.product.findFirst({
-      where: { slug, status: "APPROVED", seller: { sellerStatus: "APPROVED" } },
+      where: { slug, ...publicProductWhere },
       include: {
         category: true,
         brand: true,
@@ -177,7 +177,7 @@ export async function getCategories() {
   try {
     const categories = await prisma.category.findMany({
       orderBy: { name: "asc" },
-      include: { _count: { select: { products: true } } },
+      include: { _count: { select: { products: { where: publicProductWhere } } } },
     });
     return { success: true, data: categories };
   } catch (error) {
@@ -189,7 +189,7 @@ export async function getBrands() {
   try {
     const brands = await prisma.brand.findMany({
       orderBy: { name: "asc" },
-      include: { _count: { select: { products: true } } },
+      include: { _count: { select: { products: { where: publicProductWhere } } } },
     });
     return { success: true, data: brands };
   } catch (error) {

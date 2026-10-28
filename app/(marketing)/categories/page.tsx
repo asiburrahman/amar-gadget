@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { publicProductWhere } from "@/lib/catalog-visibility";
 import { H1, P } from "@/components/ui/typography";
 import {
   ElectroCategoryShowcase,
@@ -25,9 +26,7 @@ export default async function CategoriesPage() {
     categories = await prisma.category.findMany({
       include: {
         products: {
-          where: {
-            status: "APPROVED",
-          },
+          where: publicProductWhere,
           include: {
             category: {
               select: {
