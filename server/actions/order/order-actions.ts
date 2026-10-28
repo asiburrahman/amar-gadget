@@ -334,9 +334,19 @@ export async function updateOrderStatusBySeller(orderId: string, newStatus: stri
       return { success: false, error: "A multi-seller order must be shipped by an administrator." };
     }
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
+    const changed = await prisma.order.updateMany({
+      where: {
+        id: orderId,
+        status: "PROCESSING",
+        paymentStatus: orderItem.order.paymentStatus,
+      },
       data: { status: newStatus },
+    });
+    if (changed.count !== 1) {
+      return { success: false, error: "The order changed. Refresh and try again." };
+    }
+    const updated = await prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
       select: { id: true, status: true, paymentStatus: true },
     });
 
