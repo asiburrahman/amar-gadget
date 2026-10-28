@@ -1,27 +1,27 @@
 import React from "react";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { verifyJwtToken } from "@/lib/auth";
+import { getCurrentUserWithRole } from "@/lib/session";
+import { redirect } from "next/navigation";
 import SellerDashboardClient from "./seller-dashboard-client";
 
 export const revalidate = 0; // Ensure fresh data on every request
 
 export default async function SellerDashboardPage() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-
-  let currentUserId: string | null = null;
-  if (token) {
-    const payload = await verifyJwtToken(token);
-    if (payload?.sub) {
-      currentUserId = payload.sub as string;
-    }
+  const currentUser = await getCurrentUserWithRole(["MEMBER", "ADMIN"]);
+  if (!currentUser) redirect("/login");
+  if (currentUser.role.toUpperCase() === "ADMIN") redirect("/admin");
+  // Suspended/pending sellers retain their profile and status, but cannot read
+  // customer order details. Match the seller actions' server-side policy.
+  if (currentUser.sellerStatus !== "APPROVED") {
+    return (
+      <section className="mx-auto max-w-2xl space-y-3 rounded-xl border p-6">
+        <h1 className="text-2xl font-bold">Seller account status</h1>
+        <p>Your account is {currentUser.sellerStatus.toLowerCase()}. Store management and customer orders are available after administrator approval.</p>
+        <a href="/member/profile" className="text-primary underline">Manage your profile</a>
+      </section>
+    );
   }
-
-  // Fetch logged in user or fallback to member user
-  const seller = currentUserId
-    ? await prisma.user.findUnique({ where: { id: currentUserId } })
-    : await prisma.user.findFirst({ where: { role: "MEMBER" } });
+  const seller = await prisma.user.findUnique({ where: { id: currentUser.id } });
 
   // Fetch seller's products (Filtered strictly by seller's own sellerId)
   const products = seller
