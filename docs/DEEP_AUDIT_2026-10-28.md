@@ -8,6 +8,8 @@ Work branch: `codex/deep-audit-2026-10-28`
 
 Prepared with: OpenAI Codex, at the repository owner's request.
 
+**Implementation update:** this file preserves the original audit snapshot. See the [implementation log](CODEX_IMPLEMENTATION_LOG.md) for completed fixes, commit links and newer validation evidence.
+
 এই commit অডিট, source inventory এবং offline diagnostic যোগ করে। নিচের feature fixes এখনো করা হয়নি। এই নথি repository-তে Codex-assisted কাজের যাচাইযোগ্য record; কোনো certification, live payment success বা production readiness-এর দাবি নয়। Git commit history ও branch diff দিয়ে এই contribution দেখা যাবে।
 
 ## সিদ্ধান্ত ও scope

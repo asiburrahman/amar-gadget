@@ -264,6 +264,8 @@ NEXT_PUBLIC_GTM_ID="GTM-XXXXXXX"
 
 ### Database Migration & Seeding
 
+The application and seed use the transaction-capable PostgreSQL TCP adapter (`@prisma/adapter-pg`). For Neon, use its pooled TCP URL for `DATABASE_URL` and direct TCP URL for `DIRECT_URL`; the Prisma CLI prefers `DIRECT_URL` when present. Ordinary local PostgreSQL TCP URLs also work. HTTP-only database connections are unsuitable for the checkout and OTP transactions.
+
 1. **Apply migrations to a fresh local development database and generate the Prisma client**:
    ```bash
    npx prisma migrate deploy
@@ -333,6 +335,8 @@ npm run lint
 ### Deep Audit & Open Tasks (28 October 2026)
 
 [Read the Codex-assisted deep audit and prioritized task list](docs/DEEP_AUDIT_2026-10-28.md). It records source evidence, acceptance criteria, current validation results, and incomplete frontend/backend wiring. The separate `codex/deep-audit-2026-10-28` branch contains this audit contribution; its task list does not imply the listed fixes have been implemented.
+
+[Implementation progress and validation evidence](docs/CODEX_IMPLEMENTATION_LOG.md) tracks fixes against the original audit. [The first technical case study](docs/CODEX_CONTENT_CASE_STUDY.md) explains the transaction blocker, security fixes, and reproducible checks.
 
 ### Codex-Assisted Development Record
 
