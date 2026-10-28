@@ -211,6 +211,38 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     afterAll(async () => { await db.product.update({ where: { id: productId }, data: { stock: 10 } }); });
   });
 
+  it("serves changing confirmation state only to its owner or scoped guest capability", async () => {
+    const stockBefore = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+    const input = checkout({ paymentMethod: "STRIPE" });
+    const result = await createOrder(input);
+    if (!result.success) throw new Error(result.error);
+    const { GET } = await import("@/app/(marketing)/order-success/[id]/status/route");
+    const request = () => GET(new Request(`http://localhost/order-success/${result.orderId}/status?paid=true`), { params: Promise.resolve({ id: result.orderId }) });
+    const ownerId = (await db.order.findUniqueOrThrow({ where: { id: result.orderId } })).userId;
+    try {
+      (cookies as jest.Mock).mockResolvedValue({ get: () => undefined });
+      expect((await request()).status).toBe(404);
+      (cookies as jest.Mock).mockResolvedValue({ get: (name: string) => name === "order_access_token" ? { value: input.checkoutToken } : undefined });
+      const pending = await request();
+      expect(pending.headers.get("cache-control")).toBe("private, no-store");
+      expect(await pending.json()).toMatchObject({ order: { paymentStatus: "UNPAID", status: "PENDING", canViewOrders: false } });
+      (getCurrentUser as jest.Mock).mockResolvedValue({ id: sellerId, role: "MEMBER" });
+      expect((await request()).status).toBe(404); // Another account cannot use a leftover guest cookie.
+      (getCurrentUser as jest.Mock).mockResolvedValue({ id: ownerId, role: "USER" });
+      await db.order.update({ where: { id: result.orderId }, data: { paymentStatus: "PAID", status: "PROCESSING" } });
+      const paid = await (await request()).json();
+      expect(paid.order).toMatchObject({ paymentStatus: "PAID", status: "PROCESSING", canViewOrders: true });
+      expect(paid.order.checkoutTokenHash).toBeUndefined();
+      expect(paid.order.userId).toBeUndefined();
+      (rateLimit as jest.Mock).mockResolvedValueOnce({ success: false });
+      expect((await request()).status).toBe(429);
+    } finally {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+      (cookies as jest.Mock).mockResolvedValue({ set: jest.fn(), get: jest.fn() });
+      await db.product.update({ where: { id: productId }, data: { stock: stockBefore } });
+    }
+  });
+
   it("commits COD checkout using current server price and stock", async () => {
     const result = await createOrder(checkout());
     expect(result.success).toBe(true);

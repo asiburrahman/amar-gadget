@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 9 tasks implemented, 40 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria.
+**Current checkpoint: 10 tasks implemented, 39 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -119,6 +119,16 @@ Both screens display returned line prices, discount, shipping and total. A faile
 Validation: **80 tests across 11 suites**, including 12 added real PostgreSQL quote/coupon cases and 6 DOM interaction cases. Coverage includes arbitrary database codes, fixed/percentage amounts, expired/inactive/invalid coupons, minimum-spend equality/failure, capped discounts, fractional rounding, shipping threshold, changed-price/discount review, saved-order replay, stale browser responses and quote-service failures. TypeScript, affected-file ESLint, Prisma validation, diff checks and production build pass. No additional migration is required for this task. The build used the disposable local database and environment-validation bypass; hosted Stripe, actual browser/device and production rollout checks remain pending. Only test code substitutes provider/service responses.
 
 This concludes the requested three-task sequence (AUD-005, AUD-006, AUD-007), with one focused implementation commit per task. The next scheduled task is **AUD-025 — complete order-success payment/status presentation and guest tracking navigation**, followed by **AUD-026 — persist order transition history**. Partial order-success improvements in AUD-006 do not mark AUD-025 complete.
+
+## Batch 6 — AUD-025: complete order-confirmation payment states
+
+The whole confirmation summary now reads one current authorized order state: heading, payment/delivery labels, totals and recovery navigation update together. COD shows amount due on delivery; pending Stripe explicitly awaits server confirmation; failed/cancelled orders do not show a success claim. Late payment on a cancelled order is labelled as received for refund review. Paid completion removes only the saved purchased quantities through the existing idempotent cart contract.
+
+The confirmation's scoped, private `GET /order-success/<id>/status` uses the original HttpOnly guest cookie path or the authenticated owner/admin. It returns no capability/hash/user ID, ignores client payment claims, rate-limits requests and returns controlled unavailable/access-expired errors. A signed-in different account cannot use a leftover guest cookie. Twelve five-second polls stop on terminal payment/cancellation, errors or the time limit; explicit refresh remains available. Older responses cannot overwrite a newer result. Guest navigation goes to working phone-verified tracking with instructions; only the actual owner sees account order history. Initial database outages are distinguished from missing/expired access.
+
+Validation: **89 tests in 12 suites**, including eight new DOM cases for delayed confirmation, COD, failure/cancellation, late payment, bounded polling, service failure and stale-response ordering, plus real PostgreSQL confirmation endpoint authorization/state/cache/rate-limit coverage. TypeScript, affected-file ESLint, diff checks and production build pass with the disposable local database and build-time environment-validation bypass. The delayed-payment walkthrough uses controlled HTTP responses in DOM tests; hosted Stripe and actual browser/device verification remain release checks under AUD-044. No migration, production database change or deployment is part of this task.
+
+Next task: **AUD-026 — durable transition history and actual shipment tracking fields**. All remaining audit tasks remain in scope.
 
 ## Public contribution evidence
 

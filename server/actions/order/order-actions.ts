@@ -217,6 +217,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         trackingNumber: true,
         createdAt: true,
         checkoutTokenHash: true,
+        reservationReviewReason: true,
         items: {
           select: {
             id: true,
@@ -236,7 +237,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
     const authorized =
       currentUser?.role.toUpperCase() === "ADMIN" ||
       currentUser?.id === order.userId ||
-      (accessToken !== undefined &&
+      (!currentUser && accessToken !== undefined &&
         matchesCheckoutToken(accessToken, order.checkoutTokenHash));
 
     if (!authorized) return { success: false, error: "Order not found", data: null };
@@ -252,6 +253,8 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         shippingAddress: order.shippingAddress,
         trackingNumber: order.trackingNumber,
         createdAt: order.createdAt,
+        canViewOrders: currentUser?.id === order.userId,
+        needsReview: Boolean(order.reservationReviewReason),
         items: order.items.map((item) => ({
           ...item,
           price: Number(item.price),
@@ -260,7 +263,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
     };
   } catch (error) {
     console.error("Error fetching order:", error);
-    return { success: false, error: "Error fetching order", data: null };
+    return { success: false, error: "Error fetching order", code: "ORDER_UNAVAILABLE", data: null };
   }
 }
 

@@ -4,6 +4,8 @@ Requested by Asibur Rahman on 28 October 2026: finish the remaining audit work c
 
 This is a dependency-ordered work queue, not a background timer or a promised completion date. Each active session takes the next task through implementation, relevant validation, documentation and GitHub commit/push. All work stays on `codex/deep-audit-2026-10-28`; main is not merged automatically.
 
+Standing owner instruction after AUD-007: complete **all remaining 40 tasks**, one at a time, preserving every task's scope, with a focused professional commit and push for each. Session checkpoints do not narrow that objective or require a fresh permission request to continue routine authorized work.
+
 | Phase | Tasks, in working order | Outcome |
 | --- | --- | --- |
 | 1 — Completed foundation | AUD-001, 002, 003, 012, 013 | Transactions, JSON-LD safety, visibility and seller data/state guards |
@@ -29,7 +31,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-007 — authoritative coupon validation and shared server quotes.** Current total: 9 of 49 tasks implemented, 40 open. The requested three-task sequence AUD-005 → AUD-006 → AUD-007 is complete. **Next: AUD-025 — order-success payment/status presentation and guest tracking navigation**, then AUD-026. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
+**Latest completed step: AUD-025 — complete live order-confirmation state and guest tracking navigation.** Current total: 10 of 49 tasks implemented, 39 open. **Next: AUD-026 — durable order transition timestamps and tracking.** The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
 
 ## Owner-provided introduction
 
