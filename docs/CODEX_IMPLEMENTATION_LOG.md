@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 8 tasks implemented, 41 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria.
+**Current checkpoint: 9 tasks implemented, 40 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -86,6 +86,8 @@ Next task: **AUD-005 — persisted stock-reservation expiry and safe cleanup/rec
 
 ## Batch 3 — AUD-005: durable reservation expiry and reconciliation
 
+Implementation commit: [88532cd](https://github.com/asiburrahman/amar-gadget/commit/88532cd).
+
 Unprovisioned unpaid Stripe orders now expire after a persisted 15-minute reservation. Provider provisioning is recorded before the network request; its fixed origin/deadline/idempotency parameters and returned session ID are durable. Known sessions are expired/queried at Stripe before inventory release; ambiguous timeouts and legacy unknown sessions retain stock with a durable review reason. Payment winning expiry is reconciled as paid. Late payment never revives an already-restocked order and is flagged for refund review. COD is excluded.
 
 An authenticated POST endpoint and separately supervised worker perform bounded sweeps; overlapping workers, signed webhooks and administrator cancellation use a shared locked transaction. Due failures are deferred five minutes to prevent starvation. The Docker image includes the worker script. The endpoint checks its configured database name before mutation. A local HTTP smoke run of the actual built web server and worker reported `checked:1,released:1`; SQL verified the order cancelled and stock returned from 9 to 10 exactly once. Its isolated fixture records were removed afterward. See the [deployment and operator runbook](CHECKOUT_RESERVATIONS_RUNBOOK.md) for configuration, monitoring and review resolution. The production worker has not been deployed by this change.
@@ -96,6 +98,8 @@ Next independent task: **AUD-006 — retain cart/context and resume the same che
 
 ## Batch 4 — AUD-006: payment cancellation, retry and cart recovery
 
+Implementation commit: [ed3f164](https://github.com/asiburrahman/amar-gadget/commit/ed3f164).
+
 Checkout now retains its cart and records purchased line/quantity snapshots when an order is created. The dedicated `/checkout?resume=<orderId>` screen loads the saved items, shipping address and authoritative total through a private capability/owner-authorized API. A scoped HttpOnly cookie carries guest access; no capability is put in the URL. Authenticated users cannot use another account's leftover capability. Payment retries reuse the saved order/session; failures leave the cart intact. Cancellation first closes the provider session safely, then allows a new checkout.
 
 The confirmation screen polls server payment state for a bounded period and offers explicit refresh. Client query-string payment claims are ignored. Purchased quantities are removed only after verified payment (or accepted COD creation), once per saved snapshot. Additional quantities, unrelated items, and lines removed/re-added during payment are preserved. Pending context survives reload; a new visit to checkout resumes outstanding context instead of silently starting another order. A late paid/cancelled order keeps its cart and shows refund-review information.
@@ -105,6 +109,16 @@ Migration `20261028180000_checkout_resume_version` preserves the exact cancel UR
 Validation: **62 tests across 10 suites**, including real PostgreSQL ownership/session/cancellation cases and DOM interaction/storage-reload tests, plus TypeScript, affected-file lint and production build. Provider network responses are controlled fixtures only in tests, never application fallbacks. Five migrations are now required for a fresh installation. Live hosted Stripe/real-device walkthrough and production rollout remain external verification; no production database or provider payment was modified.
 
 Next independent task: **AUD-007 — authoritative coupon validation and shared server quote calculation**.
+
+## Batch 5 — AUD-007: authoritative coupon validation and checkout quotes
+
+Cart and checkout now request the same server-calculated quote used inside the order transaction. The endpoint validates bounded cart quantities, current approved product/seller availability, stock, prices and actual database coupons. Arbitrary configured codes work; hardcoded promotional success and persisted client discount arithmetic are removed. Fixed and percentage discounts, expiry, minimum spend, two-decimal half-up rounding and shipping use one calculation. Fixed discounts cannot exceed the merchandise subtotal; totals exceeding the order column's supported range are rejected.
+
+Both screens display returned line prices, discount, shipping and total. A failed quote blocks new checkout and provides retry/coupon removal. An old quantity response cannot replace a newer cart quote; coupon validation for changed items is discarded. The checkout form submits the displayed quote fingerprint. If price or coupon terms change, the transaction rejects the stale quote before guest/inventory writes, refreshes the summary and requires another explicit submission. The fingerprint is an optional compatibility precondition for existing direct action consumers; every request still derives all prices and discounts on the server. It is excluded from checkout identity so replay of an already committed attempt always returns its saved order, even after prices change.
+
+Validation: **80 tests across 11 suites**, including 12 added real PostgreSQL quote/coupon cases and 6 DOM interaction cases. Coverage includes arbitrary database codes, fixed/percentage amounts, expired/inactive/invalid coupons, minimum-spend equality/failure, capped discounts, fractional rounding, shipping threshold, changed-price/discount review, saved-order replay, stale browser responses and quote-service failures. TypeScript, affected-file ESLint, Prisma validation, diff checks and production build pass. No additional migration is required for this task. The build used the disposable local database and environment-validation bypass; hosted Stripe, actual browser/device and production rollout checks remain pending. Only test code substitutes provider/service responses.
+
+This concludes the requested three-task sequence (AUD-005, AUD-006, AUD-007), with one focused implementation commit per task. The next scheduled task is **AUD-025 — complete order-success payment/status presentation and guest tracking navigation**, followed by **AUD-026 — persist order transition history**. Partial order-success improvements in AUD-006 do not mark AUD-025 complete.
 
 ## Public contribution evidence
 

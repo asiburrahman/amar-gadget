@@ -3,6 +3,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
+import { calculateCheckoutQuote, CheckoutQuoteError } from "@/lib/checkout-quote";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/order";
 import { revalidatePath } from "next/cache";
@@ -65,6 +66,10 @@ export async function createOrder(input: CheckoutInput) {
         }
         return existing;
       }
+      const quote = await calculateCheckoutQuote(tx, validated);
+      if (validated.quoteFingerprint && validated.quoteFingerprint !== quote.fingerprint) {
+        throw new CheckoutError("Prices or discounts changed. Review the refreshed total before placing your order.", "QUOTE_CHANGED");
+      }
       const user = currentUser
         ? await tx.user.findUnique({ where: { id: currentUser.id } })
         : await tx.user.create({
@@ -79,71 +84,16 @@ export async function createOrder(input: CheckoutInput) {
 
       if (!user) throw new CheckoutError("Your account is no longer available. Please sign in again.", "ACCOUNT_UNAVAILABLE");
 
-      let subtotal = new Prisma.Decimal(0);
       const orderItems = [];
-
-      // A consistent lock order also avoids cart A/B vs B/A stock deadlocks.
-      for (const item of [...validated.items].sort((a, b) => a.productId.localeCompare(b.productId))) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-          include: { seller: { select: { sellerStatus: true } } },
-        });
-
-        if (
-          !product ||
-          product.status !== "APPROVED" ||
-          product.seller.sellerStatus !== "APPROVED"
-        ) {
-          throw new CheckoutError("One or more selected products are no longer available.", "PRODUCT_UNAVAILABLE");
-        }
-
-        const stockUpdate = await tx.product.updateMany({
-          where: { id: product.id, stock: { gte: item.quantity } },
+      for (const item of quote.items) {
+        const updated = await tx.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity }, status: "APPROVED", seller: { sellerStatus: "APPROVED" } },
           data: { stock: { decrement: item.quantity } },
         });
-        if (stockUpdate.count !== 1) {
-          throw new CheckoutError(`Insufficient stock for ${product.name}.`, "OUT_OF_STOCK");
-        }
-
-        const unitPrice = product.discountPrice ?? product.price;
-        subtotal = subtotal.add(unitPrice.mul(item.quantity));
-        orderItems.push({
-          productId: product.id,
-          quantity: item.quantity,
-          price: unitPrice,
-        });
+        if (updated.count !== 1) throw new CheckoutError("A product is no longer available in the requested quantity.", "OUT_OF_STOCK");
+        orderItems.push({ productId: item.productId, quantity: item.quantity, price: new Prisma.Decimal(item.unitPrice) });
       }
-
-      let total = subtotal;
-      if (validated.couponCode) {
-        const coupon = await tx.coupon.findUnique({
-          where: { code: validated.couponCode.trim().toUpperCase() },
-        });
-        const couponIsValid =
-          coupon?.isActive &&
-          (!coupon.expiresAt || coupon.expiresAt >= new Date()) &&
-          (!coupon.minSpend || subtotal.gte(coupon.minSpend));
-
-        if (!couponIsValid || !coupon) {
-          throw new CheckoutError("The coupon code is invalid, expired, or does not meet the minimum spend.", "INVALID_COUPON");
-        }
-
-        if (coupon.discount.lte(0)) {
-          throw new CheckoutError("The coupon code is invalid.", "INVALID_COUPON");
-        }
-        if (coupon.isPercentage) {
-          const percentage = Math.min(100, Math.max(0, Number(coupon.discount)));
-          total = total.mul(100 - percentage).div(100);
-        } else {
-          total = Prisma.Decimal.max(0, total.sub(Prisma.Decimal.max(0, coupon.discount)));
-        }
-      }
-
-      const shippingFee = subtotal.gt(0) && subtotal.lte(50000) ? 150 : 0;
-      total = total.add(shippingFee);
-      if (validated.paymentMethod === "STRIPE" && total.lt(1)) {
-        throw new CheckoutError("Card checkout requires an order total of at least BDT 1.", "INVALID_TOTAL");
-      }
+      const total = new Prisma.Decimal(quote.total);
 
       return tx.order.create({
         data: {
@@ -197,7 +147,7 @@ export async function createOrder(input: CheckoutInput) {
     if (error instanceof ZodError) {
       return { success: false as const, code: "INVALID_CHECKOUT", error: "Check your cart and shipping details, then try again." };
     }
-    if (error instanceof CheckoutError) {
+    if (error instanceof CheckoutError || error instanceof CheckoutQuoteError) {
       return { success: false as const, code: error.code, error: error.message };
     }
     // Never return database/provider exception details to a public action.

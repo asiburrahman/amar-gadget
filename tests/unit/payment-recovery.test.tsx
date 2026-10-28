@@ -13,7 +13,7 @@ const response = (body: unknown, ok = true) => ({ ok, json: async () => body }) 
 
 beforeEach(() => {
   jest.clearAllMocks();
-  useCartStore.setState({ items: [], couponCode: null, discountPercentage: 0, pendingCheckouts: {} });
+  useCartStore.setState({ items: [], couponCode: null, pendingCheckouts: {} });
   useCartStore.getState().addItem({ id: "product", name: "Test product", price: 900, quantity: 3 });
   useCartStore.getState().rememberCheckout(order.id, [{ productId: "product", quantity: 1 }], null);
   global.fetch = jest.fn();

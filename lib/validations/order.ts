@@ -24,7 +24,10 @@ export const checkoutSchema = checkoutDetailsSchema.extend({
   // This is a secret capability, not a public order ID. The browser generates
   // 256 random bits and reuses them only for an identical checkout intent.
   checkoutToken: z.string().regex(/^[a-f0-9]{64}$/, "Invalid checkout attempt"),
+  quoteFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 });
+
+export const quoteRequestSchema = checkoutDetailsSchema.pick({ items: true, couponCode: true, paymentMethod: true });
 
 export type OrderItemInput = z.infer<typeof orderItemSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;

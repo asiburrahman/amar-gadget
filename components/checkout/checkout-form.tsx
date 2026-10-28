@@ -11,11 +11,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { getCheckoutAttempt, clearCheckoutAttempt, bindCheckoutAttempt, type CheckoutAttempt } from "@/lib/checkout-attempt";
 import type { CheckoutDetails } from "@/lib/validations/order";
 import { PaymentRecovery } from "@/components/checkout/payment-recovery";
+import { useCheckoutQuote } from "@/hooks/use-checkout-quote";
 
 const subscribeHydration = () => () => undefined;
 
 export default function CheckoutForm() {
-  const { items, couponCode, discountPercentage, rememberCheckout, completeCheckout, pendingCheckouts } = useCartStore();
+  const { items, couponCode, removeCoupon, rememberCheckout, completeCheckout, pendingCheckouts } = useCartStore();
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -40,14 +41,10 @@ export default function CheckoutForm() {
   const [errorMsg, setErrorMsg] = useState("");
   const [canRestart, setCanRestart] = useState(false);
 
-  const subtotal = items.reduce((sum, item) => {
-    const price = item.discountPrice || item.price;
-    return sum + price * item.quantity;
-  }, 0);
-
-  const discountAmount = (subtotal * discountPercentage) / 100;
-  const shippingFee = subtotal > 0 ? (subtotal > 50000 ? 0 : 150) : 0;
-  const total = Math.max(0, subtotal - discountAmount + shippingFee);
+  const pendingOrderId = Object.keys(pendingCheckouts)[0];
+  const { quote, error: quoteError, refresh: refreshQuote } = useCheckoutQuote(
+    items.map((item) => ({ productId: item.id, quantity: item.quantity })), couponCode, formData.paymentMethod, hydrated && !pendingOrderId,
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -55,7 +52,7 @@ export default function CheckoutForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (items.length === 0 || authLoading || submittingRef.current) return;
+    if (items.length === 0 || !quote || authLoading || submittingRef.current) return;
 
     submittingRef.current = true;
     setLoading(true);
@@ -77,7 +74,7 @@ export default function CheckoutForm() {
       };
       const attempt = await getCheckoutAttempt(details, attemptRef.current);
       attemptRef.current = attempt;
-      const result = await createOrder({ ...details, checkoutToken: attempt.token });
+      const result = await createOrder({ ...details, checkoutToken: attempt.token, quoteFingerprint: quote.fingerprint });
 
       if (result.success && result.orderId) {
         attemptRef.current = bindCheckoutAttempt(attempt, result.orderId);
@@ -93,6 +90,7 @@ export default function CheckoutForm() {
       } else {
         setErrorMsg(result.error || "Order creation failed. Please check form inputs.");
         setCanRestart(result.code === "CHECKOUT_CLOSED" || result.code === "CHECKOUT_CONFLICT");
+        if (result.code && ["QUOTE_CHANGED", "INVALID_COUPON", "COUPON_MIN_SPEND", "PRODUCT_UNAVAILABLE", "OUT_OF_STOCK", "INVALID_PRICE", "INVALID_TOTAL"].includes(result.code)) refreshQuote();
       }
     } catch {
       setErrorMsg("Checkout could not be completed. Retry with the same details to safely resume your order.");
@@ -103,7 +101,6 @@ export default function CheckoutForm() {
   };
 
   if (!hydrated) return <p className="p-8">Loading checkout…</p>;
-  const pendingOrderId = Object.keys(pendingCheckouts)[0];
   if (pendingOrderId) return <PaymentRecovery orderId={pendingOrderId} />;
   return (
     <div className="min-h-screen bg-background py-12">
@@ -245,6 +242,10 @@ export default function CheckoutForm() {
             <div className="space-y-4">
               <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
                 <h2 className="text-lg font-bold text-foreground border-b border-border pb-3">Order Items ({items.length})</h2>
+                {quoteError && <p role="alert" className="text-destructive">{quoteError}</p>}
+                {!quote && !quoteError && <p>Calculating current prices…</p>}
+                {!quote && <Button type="button" variant="outline" onClick={refreshQuote}>Refresh total</Button>}
+                {couponCode && <Button type="button" variant="outline" onClick={removeCoupon}>Remove coupon {couponCode}</Button>}
 
                 <div className="divide-y divide-border max-h-60 overflow-y-auto pr-1 space-y-2">
                   {items.map((item) => (
@@ -254,7 +255,7 @@ export default function CheckoutForm() {
                         <p className="text-muted-foreground">Qty: {item.quantity}</p>
                       </div>
                       <span className="font-semibold text-foreground">
-                        {formatCurrency((item.discountPrice || item.price) * item.quantity)}
+                        {quote ? formatCurrency(quote.items.find((line) => line.productId === item.id)!.lineTotal) : "—"}
                       </span>
                     </div>
                   ))}
@@ -263,29 +264,29 @@ export default function CheckoutForm() {
                 <div className="border-t border-border pt-4 space-y-2 text-xs">
                   <div className="flex justify-between text-muted-foreground">
                     <span>Subtotal</span>
-                    <span className="font-semibold text-foreground">{formatCurrency(subtotal)}</span>
+                    <span className="font-semibold text-foreground">{quote ? formatCurrency(quote.subtotal) : "—"}</span>
                   </div>
-                  {couponCode && (
+                  {quote?.coupon && (
                     <div className="flex justify-between text-emerald-600 font-semibold">
-                      <span>Discount ({discountPercentage}%)</span>
-                      <span>-{formatCurrency(discountAmount)}</span>
+                      <span>Discount ({quote.coupon.code})</span>
+                      <span>-{formatCurrency(quote.discountAmount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-muted-foreground">
                     <span>Shipping</span>
                     <span className="font-semibold text-foreground">
-                      {shippingFee === 0 ? <span className="text-emerald-600 font-bold">FREE</span> : formatCurrency(shippingFee)}
+                      {quote ? (quote.shippingFee === 0 ? "FREE" : formatCurrency(quote.shippingFee)) : "—"}
                     </span>
                   </div>
                   <div className="border-t border-border pt-3 flex justify-between text-base font-extrabold text-foreground">
                     <span>Total Amount</span>
-                    <span className="text-primary">{formatCurrency(total)}</span>
+                    <span className="text-primary">{quote ? formatCurrency(quote.total) : "—"}</span>
                   </div>
                 </div>
 
                 <Button
                   type="submit"
-                  disabled={loading || authLoading}
+                  disabled={loading || authLoading || !quote}
                   variant="default"
                   className="w-full h-12 font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
                 >

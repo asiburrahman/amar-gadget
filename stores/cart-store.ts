@@ -18,7 +18,6 @@ export interface CartItem {
 interface CartState {
   items: CartItem[];
   couponCode: string | null;
-  discountPercentage: number;
   pendingCheckouts: Record<string, { items: { productId: string; quantity: number; lineId?: string }[]; couponCode: string | null }>;
   rememberCheckout: (orderId: string, items: { productId: string; quantity: number; lineId?: string }[], couponCode: string | null) => void;
   completeCheckout: (orderId: string) => void;
@@ -26,20 +25,16 @@ interface CartState {
   addItem: (item: CartItem) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
-  applyCoupon: (code: string, discountPct: number) => void;
+  applyCoupon: (code: string) => void;
   removeCoupon: () => void;
   clearCart: () => void;
-  getSubtotal: () => number;
-  getDiscountAmount: () => number;
-  getTotal: () => number;
 }
 
 export const useCartStore = create<CartState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       items: [],
       couponCode: null,
-      discountPercentage: 0,
       pendingCheckouts: {},
       forgetCheckout: (orderId) => set((state) => {
         const pendingCheckouts = { ...state.pendingCheckouts };
@@ -65,7 +60,7 @@ export const useCartStore = create<CartState>()(
         });
         return {
           pendingCheckouts, items,
-          ...(changed && state.couponCode === pending.couponCode ? { couponCode: null, discountPercentage: 0 } : {}),
+          ...(changed && state.couponCode === pending.couponCode ? { couponCode: null } : {}),
         };
       }),
       addItem: (newItem) =>
@@ -92,25 +87,11 @@ export const useCartStore = create<CartState>()(
             item.id === id ? { ...item, quantity: Math.max(1, quantity) } : item
           ),
         })),
-      applyCoupon: (code, discountPct) =>
-        set({ couponCode: code, discountPercentage: discountPct }),
-      removeCoupon: () => set({ couponCode: null, discountPercentage: 0 }),
-      clearCart: () => set({ items: [], couponCode: null, discountPercentage: 0 }),
-      getSubtotal: () => {
-        return get().items.reduce((sum, item) => {
-          const effectivePrice = item.discountPrice || item.price;
-          return sum + effectivePrice * item.quantity;
-        }, 0);
-      },
-      getDiscountAmount: () => {
-        const subtotal = get().getSubtotal();
-        return (subtotal * get().discountPercentage) / 100;
-      },
-      getTotal: () => {
-        const subtotal = get().getSubtotal();
-        const discount = get().getDiscountAmount();
-        return Math.max(0, subtotal - discount);
-      },
+      // Store only the requested code. Current prices and discounts come from
+      // the server quote, never persisted client arithmetic.
+      applyCoupon: (code) => set({ couponCode: code.trim().toUpperCase() }),
+      removeCoupon: () => set({ couponCode: null }),
+      clearCart: () => set({ items: [], couponCode: null }),
     }),
     { name: "amar-gadget-cart" }
   )

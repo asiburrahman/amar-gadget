@@ -29,7 +29,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-006 — Stripe cart/context recovery.** Current total: 8 of 49 tasks implemented, 41 open. **Next: AUD-007 — coupon/quote consistency.** Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
+**Latest completed step: AUD-007 — authoritative coupon validation and shared server quotes.** Current total: 9 of 49 tasks implemented, 40 open. The requested three-task sequence AUD-005 → AUD-006 → AUD-007 is complete. **Next: AUD-025 — order-success payment/status presentation and guest tracking navigation**, then AUD-026. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
 
 ## Owner-provided introduction
 

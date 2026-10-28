@@ -78,6 +78,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
         await db.product.delete({ where: { id: productId } });
       }
       if (categoryId) await db.category.delete({ where: { id: categoryId } });
+      await db.coupon.deleteMany({ where: { code: { startsWith: prefix.toUpperCase() } } });
       await db.otpToken.deleteMany({ where: { email: { startsWith: prefix } } });
       await db.user.deleteMany({ where: { OR: [{ id: { in: guestUserIds } }, { email: { startsWith: prefix } }] } });
     } finally { await db.$disconnect(); }
@@ -111,6 +112,104 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     const past = new Date(Date.now() - 60_000);
     await db.order.update({ where: { id: orderId }, data: { reservationExpiresAt: past, reservationNextCheckAt: past, ...data } });
   }
+
+  describe("authoritative checkout quotes", () => {
+    const quoteRequest = async (body: unknown) => {
+      const { POST } = await import("@/app/api/checkout/quote/route");
+      return POST(new Request("http://localhost/api/checkout/quote", { method: "POST", body: JSON.stringify(body) }));
+    };
+    const fixtureCoupon = async (overrides: Record<string, unknown> = {}) => db.coupon.create({ data: {
+      code: `${prefix}-${randomUUID().slice(0, 8)}`.toUpperCase(), discount: 125.50, isPercentage: false, ...overrides,
+    } });
+
+    it.each([false, true])("uses a real database coupon and persists the exact quoted total (percentage=%s)", async (isPercentage) => {
+      const coupon = await fixtureCoupon({ isPercentage, discount: isPercentage ? 12.35 : 125.50 });
+      const input = checkout({ couponCode: coupon.code.toLowerCase() });
+      const response = await quoteRequest(input);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const { quote } = await response.json();
+      expect(quote).toMatchObject({ subtotal: 900, shippingFee: 150, discountAmount: isPercentage ? 111.15 : 125.50, total: isPercentage ? 938.85 : 924.50, coupon: { code: coupon.code, type: isPercentage ? "percentage" : "fixed" } });
+      const result = await createOrder({ ...input, quoteFingerprint: quote.fingerprint });
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error(result.error);
+      const saved = await db.order.findUniqueOrThrow({ where: { id: result.orderId }, include: { items: true } });
+      expect(Number(saved.total)).toBe(quote.total);
+      expect(Number(saved.items[0].price)).toBe(quote.items[0].unitPrice);
+      const replay = await createOrder({ ...input, quoteFingerprint: "0".repeat(64) });
+      expect(replay.success && replay.orderId).toBe(result.orderId);
+    });
+
+    it.each([
+      { isActive: false }, { expiresAt: new Date(0) }, { minSpend: 901 }, { discount: 101, isPercentage: true }, { discount: -1 },
+    ])("rejects invalid coupon conditions without guest, stock or order writes: %s", async (conditions) => {
+      const coupon = await fixtureCoupon(conditions);
+      const input = checkout({ couponCode: coupon.code });
+      const before = await Promise.all([db.user.count(), db.order.count(), db.product.findUniqueOrThrow({ where: { id: productId } })]);
+      const response = await quoteRequest(input);
+      expect(response.status).toBe(422);
+      const result = await createOrder(input);
+      expect(result.success).toBe(false);
+      expect(await db.user.count()).toBe(before[0]);
+      expect(await db.order.count()).toBe(before[1]);
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before[2].stock);
+    });
+
+    it("rejects a missing code instead of accepting a client-side promotional claim", async () => {
+      const response = await quoteRequest(checkout({ couponCode: `${prefix}-MISSING` }));
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({ code: "INVALID_COUPON" });
+    });
+
+    it("caps fixed discounts at the subtotal and enforces minimum spend at equality", async () => {
+      const coupon = await fixtureCoupon({ discount: 2000, minSpend: 900 });
+      const response = await quoteRequest(checkout({ couponCode: coupon.code }));
+      expect(await response.json()).toMatchObject({ quote: { subtotal: 900, discountAmount: 900, shippingFee: 150, total: 150 } });
+    });
+
+    it("requires review of changed prices or discounts before accepting a fresh order", async () => {
+      const coupon = await fixtureCoupon();
+      const input = checkout({ couponCode: coupon.code });
+      const { quote } = await (await quoteRequest(input)).json();
+      const beforeUsers = await db.user.count();
+      const beforeStock = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+      try {
+        await db.product.update({ where: { id: productId }, data: { discountPrice: 950 } });
+        expect(await createOrder({ ...input, quoteFingerprint: quote.fingerprint })).toMatchObject({ success: false, code: "QUOTE_CHANGED" });
+        await db.product.update({ where: { id: productId }, data: { discountPrice: 900 } });
+        await db.coupon.update({ where: { id: coupon.id }, data: { discount: 126 } });
+        expect(await createOrder({ ...input, quoteFingerprint: quote.fingerprint })).toMatchObject({ success: false, code: "QUOTE_CHANGED" });
+        expect(await db.user.count()).toBe(beforeUsers);
+        expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(beforeStock);
+        const { quote: refreshed } = await (await quoteRequest(input)).json();
+        const accepted = await createOrder({ ...input, quoteFingerprint: refreshed.fingerprint });
+        expect(accepted.success).toBe(true);
+        if (accepted.success) expect(Number((await db.order.findUniqueOrThrow({ where: { id: accepted.orderId } })).total)).toBe(refreshed.total);
+      } finally { await db.product.update({ where: { id: productId }, data: { discountPrice: 900 } }); }
+    });
+
+    it("shares shipping threshold, monetary rounding and supported order limits", async () => {
+      try {
+        await db.product.update({ where: { id: productId }, data: { price: 50000, discountPrice: null } });
+        expect(await (await quoteRequest(checkout())).json()).toMatchObject({ quote: { shippingFee: 150, total: 50150 } });
+        await db.product.update({ where: { id: productId }, data: { price: 50000.01 } });
+        expect(await (await quoteRequest(checkout())).json()).toMatchObject({ quote: { shippingFee: 0, total: 50000.01 } });
+        await db.product.update({ where: { id: productId }, data: { price: 1.05 } });
+        const coupon = await fixtureCoupon({ isPercentage: true, discount: 10 });
+        expect(await (await quoteRequest(checkout({ couponCode: coupon.code }))).json()).toMatchObject({ quote: { discountAmount: 0.11, total: 150.94 } });
+        await db.product.update({ where: { id: productId }, data: { price: 99999999.99 } });
+        expect(await (await quoteRequest(checkout({ items: [{ productId, quantity: 2 }] }))).json()).toMatchObject({ code: "INVALID_TOTAL" });
+      } finally { await db.product.update({ where: { id: productId }, data: { price: 1000, discountPrice: 900 } }); }
+    });
+
+    it("bounds malformed requests and rate denial before querying", async () => {
+      expect((await quoteRequest({ items: [] })).status).toBe(400);
+      (rateLimit as jest.Mock).mockResolvedValueOnce({ success: false });
+      expect((await quoteRequest(checkout())).status).toBe(429);
+    });
+
+    afterAll(async () => { await db.product.update({ where: { id: productId }, data: { stock: 10 } }); });
+  });
 
   it("commits COD checkout using current server price and stock", async () => {
     const result = await createOrder(checkout());
