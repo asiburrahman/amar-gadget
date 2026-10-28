@@ -66,7 +66,7 @@ export default async function AdminOrdersPage() {
       </div>
 
       {/* Admin Orders Management Table */}
-      <AdminOrdersClient initialOrders={orders as any} />
+      <AdminOrdersClient initialOrders={orders} />
     </div>
   );
 }

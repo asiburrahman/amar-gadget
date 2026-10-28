@@ -99,6 +99,8 @@ model Order {
   stripeCheckoutVersion Int @default(1)
   shippingAddress String?
   shippingPhone   String?
+  shippingCarrier String? @db.VarChar(80)
+  shipmentTrackingNumber String? @db.VarChar(120)
   trackingNumber  String?
   couponCode      String?
   
@@ -106,8 +108,27 @@ model Order {
   updatedAt       DateTime    @updatedAt
   
   items           OrderItem[]
+  events          OrderEvent[]
 
   @@index([paymentMethod, status, paymentStatus, reservationNextCheckAt], map: "Order_reservation_sweep_idx")
+}
+
+model OrderEvent {
+  id                     String @id @default(uuid())
+  sequence               BigInt @unique @default(autoincrement())
+  orderId                String
+  order                  Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind                   String
+  previousStatus         String?
+  status                 String?
+  previousPaymentStatus  String?
+  paymentStatus          String?
+  shippingCarrier        String? @db.VarChar(80)
+  shipmentTrackingNumber String? @db.VarChar(120)
+  occurredAt             DateTime?
+  recordedAt             DateTime @default(now())
+
+  @@index([orderId, sequence])
 }
 
 model OrderItem {

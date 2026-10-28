@@ -21,7 +21,7 @@ it("shows COD amount due and a working guest tracking destination", () => {
   render(<OrderConfirmation initialOrder={{ ...order, paymentMethod: "COD", status: "PROCESSING" }} />);
   expect(screen.getByText("Amount due on delivery")).toBeTruthy();
   expect(screen.queryByText("Amount paid")).toBeNull();
-  expect(screen.getByRole("link", { name: "Track this order" }).getAttribute("href")).toBe("/track-order");
+  expect(screen.getByRole("link", { name: "Track this order" }).getAttribute("href")).toBe("/track-order?id=AG-TEST");
   expect(screen.queryByRole("link", { name: "View my orders" })).toBeNull();
   expect(useCartStore.getState().items[0].quantity).toBe(1);
 });

@@ -393,6 +393,8 @@ export async function getAllOrdersForAdmin() {
         paymentStatus: true,
         shippingAddress: true,
         trackingNumber: true,
+        shippingCarrier: true,
+        shipmentTrackingNumber: true,
         createdAt: true,
         user: { select: { id: true, name: true, email: true, phone: true } },
         items: {

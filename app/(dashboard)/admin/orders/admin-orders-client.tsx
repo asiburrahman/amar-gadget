@@ -2,9 +2,11 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
 import { updateOrderStatusByAdmin } from "@/server/actions/order/order-actions";
+import { ShipmentEditor } from "@/components/orders/shipment-editor";
 
 interface OrderItem {
   id: string;
@@ -26,6 +28,8 @@ interface Order {
   paymentStatus: string;
   shippingAddress: string | null;
   trackingNumber: string | null;
+  shippingCarrier: string | null;
+  shipmentTrackingNumber: string | null;
   createdAt: string | Date;
   user: {
     id: string;
@@ -48,9 +52,11 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isPending, startTransition] = useTransition();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState("");
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
     setUpdatingId(orderId);
+    setStatusError("");
     startTransition(async () => {
       const res = await updateOrderStatusByAdmin(orderId, newStatus);
       if (res.success) {
@@ -59,16 +65,13 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
             o.id === orderId
               ? {
                   ...o,
-                  status: newStatus,
-                  paymentStatus:
-                    newStatus === "DELIVERED" && o.paymentMethod === "COD"
-                      ? "PAID"
-                      : o.paymentStatus,
+                  status: res.data?.status ?? o.status,
+                  paymentStatus: res.data?.paymentStatus ?? o.paymentStatus,
                 }
               : o
           )
         );
-      }
+      } else setStatusError(res.error || "The order could not be updated.");
       setUpdatingId(null);
     });
   };
@@ -103,6 +106,7 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
 
   return (
     <div className="space-y-6">
+      {statusError && <p role="alert" className="text-destructive">{statusError}</p>}
       {/* Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-card border border-border p-5 rounded-2xl shadow-xs space-y-1">
@@ -213,6 +217,7 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
                           #{order.id.slice(0, 8)}
                         </div>
                         <div className="text-[11px] text-muted-foreground mt-0.5">{dateStr}</div>
+                        <ShipmentEditor orderId={order.id} carrier={order.shippingCarrier} trackingNumber={order.shipmentTrackingNumber} editable={["PROCESSING", "SHIPPED"].includes(order.status) && (order.paymentMethod === "COD" || order.paymentStatus === "PAID")} />
                         {order.trackingNumber && (
                           <div className="mt-1 font-mono text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded inline-block">
                             {order.trackingNumber}
@@ -235,9 +240,12 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
                           {order.items.map((item) => (
                             <div key={item.id} className="flex items-center gap-2">
                               {item.product.imageUrl ? (
-                                <img
+                                <Image
                                   src={item.product.imageUrl}
                                   alt={item.product.name}
+                                  width={24}
+                                  height={24}
+                                  unoptimized
                                   className="w-6 h-6 rounded object-cover border border-border shrink-0"
                                 />
                               ) : (
@@ -274,7 +282,7 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
                       <td className="p-4 align-top">
                         <select
                           value={order.status}
-                          disabled={updatingId === order.id}
+                          disabled={isPending || updatingId === order.id}
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
                           className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs font-semibold focus:ring-2 focus:ring-primary focus:outline-none cursor-pointer"
                         >
@@ -289,7 +297,7 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
                       {/* Actions */}
                       <td className="p-4 align-top text-right">
                         {order.trackingNumber && (
-                          <Link href={`/track-order?id=${order.trackingNumber}`}>
+                          <Link href={`/track-order?id=${encodeURIComponent(order.trackingNumber)}`}>
                             <Button variant="outline" size="sm" className="h-7 text-[11px] font-bold">
                               Track
                             </Button>

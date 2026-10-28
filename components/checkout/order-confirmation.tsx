@@ -93,7 +93,7 @@ export function OrderConfirmation({ initialOrder }: { initialOrder: ConfirmedOrd
     <div className="flex flex-wrap items-center gap-4">
       <Button variant="outline" disabled={busy} onClick={refresh}>{busy ? "Refreshing order…" : "Refresh order status"}</Button>
       {pending && <Link href={`/checkout?resume=${order.id}`} className="underline">Continue or review saved payment</Link>}
-      <Link href="/track-order" className="underline">Track this order</Link>
+      <Link href={`/track-order?id=${encodeURIComponent(order.trackingNumber ?? order.id)}`} className="underline">Track this order</Link>
       {order.canViewOrders && <Link href="/user/orders" className="underline">View my orders</Link>}
       <Link href="/products" className="underline">Continue shopping</Link>
     </div>

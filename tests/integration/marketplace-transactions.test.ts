@@ -18,7 +18,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { CheckoutInput } from "@/lib/validations/order";
 import { publicProductWhere } from "@/lib/catalog-visibility";
 import { randomBytes, randomUUID } from "node:crypto";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
 import { rateLimit } from "@/lib/rate-limit";
 import { cookies } from "next/headers";
 
@@ -394,6 +394,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     expect(order.paymentStatus).toBe("PAID");
     expect(order.status).toBe("PROCESSING");
     expect(order.paymentIntentId).toBe("pi_codex_test");
+    expect(await db.orderEvent.count({ where: { orderId: result.orderId } })).toBe(2);
     expect(await createOrder(input)).toMatchObject({ success: true, orderId: result.orderId, paymentStatus: "PAID" });
   });
 
@@ -407,6 +408,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     expect((await dispatch(event)).status).toBe(200);
     expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock);
     expect((await db.order.findUniqueOrThrow({ where: { id: result.orderId } })).status).toBe("CANCELLED");
+    expect(await db.orderEvent.count({ where: { orderId: result.orderId } })).toBe(2);
     expect(await createOrder(input)).toMatchObject({ success: false, code: "CHECKOUT_CLOSED" });
     expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock);
   });
@@ -594,6 +596,75 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
       create.mockRestore(); retrieve.mockRestore(); expire.mockRestore();
       (cookies as jest.Mock).mockResolvedValue({ set: jest.fn(), get: jest.fn() });
     }
+  });
+
+  it("records atomic, immutable shipment, seller and admin transitions with actual tracking timestamps", async () => {
+    const { updateShipmentDetails } = await import("@/server/actions/order/shipment-actions");
+    const { updateOrderStatusBySeller, updateOrderStatusByAdmin } = await import("@/server/actions/order/order-actions");
+    const result = await createOrder(checkout());
+    if (!result.success) throw new Error(result.error);
+    const orderId = result.orderId;
+    try {
+      (getCurrentUserWithRole as jest.Mock).mockResolvedValue({ id: sellerId, role: "ADMIN" });
+      const shipment = { orderId, carrier: "Test carrier", trackingNumber: "PARCEL-123" };
+      expect(await updateShipmentDetails(shipment)).toMatchObject({ success: true });
+      expect(await updateShipmentDetails(shipment)).toMatchObject({ success: true });
+      expect(await db.orderEvent.count({ where: { orderId } })).toBe(2); // No-op updates are not events.
+      (getCurrentUserWithRole as jest.Mock).mockResolvedValue({ id: sellerId, role: "MEMBER", sellerStatus: "APPROVED" });
+      expect(await updateOrderStatusBySeller(orderId, "SHIPPED")).toMatchObject({ success: true });
+      (getCurrentUserWithRole as jest.Mock).mockResolvedValue({ id: sellerId, role: "ADMIN" });
+      expect(await updateOrderStatusByAdmin(orderId, "DELIVERED")).toMatchObject({ success: true });
+      const events = await db.orderEvent.findMany({ where: { orderId }, orderBy: { sequence: "asc" } });
+      expect(events.map((event) => event.kind)).toEqual(["ORDER_PLACED", "SHIPMENT_UPDATED", "STATE_CHANGED", "STATE_CHANGED"]);
+      expect(events.map((event) => event.status)).toEqual(["PROCESSING", "PROCESSING", "SHIPPED", "DELIVERED"]);
+      expect(events[3].paymentStatus).toBe("PAID");
+      expect(events.every((event) => event.occurredAt !== null)).toBe(true);
+      const { GET } = await import("@/app/api/orders/[orderId]/route");
+      const context = { params: Promise.resolve({ orderId }) };
+      expect((await GET(new Request("http://localhost/tracking?phone=01799999999"), context)).status).toBe(404);
+      const tracked = await GET(new Request("http://localhost/tracking?phone=01700000000"), context);
+      expect(tracked.headers.get("cache-control")).toBe("private, no-store");
+      const { order } = await tracked.json();
+      expect(order).toMatchObject({ carrier: shipment.carrier, shipmentTrackingNumber: shipment.trackingNumber, status: "DELIVERED", nextCursor: null });
+      expect(order.timeline.map((event: { date: string }) => event.date)).toEqual(events.map((event) => event.occurredAt!.toISOString()));
+      expect(order.shippingPhone).toBeUndefined();
+      expect(order.shippingAddress).toBeUndefined();
+      await expect(db.orderEvent.update({ where: { id: events[0].id }, data: { status: "CANCELLED" } })).rejects.toThrow();
+      await expect(db.orderEvent.delete({ where: { id: events[0].id } })).rejects.toThrow();
+      const count = await db.orderEvent.count({ where: { orderId } });
+      await expect(db.$transaction(async (tx) => { await tx.order.update({ where: { id: orderId }, data: { status: "CANCELLED" } }); throw new Error("Intentional transaction rollback"); })).rejects.toThrow("Intentional transaction rollback");
+      expect(await db.orderEvent.count({ where: { orderId } })).toBe(count);
+      expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).status).toBe("DELIVERED");
+      expect(await updateShipmentDetails({ ...shipment, trackingNumber: "CLOSED-CHANGE" })).toMatchObject({ success: false });
+    } finally { (getCurrentUserWithRole as jest.Mock).mockResolvedValue(null); }
+  });
+
+  it("validates shipment authorization, bounded fields and unpaid card eligibility", async () => {
+    const { updateShipmentDetails } = await import("@/server/actions/order/shipment-actions");
+    const orderId = await stripeOrder();
+    const input = { orderId, carrier: "Carrier", trackingNumber: "PARCEL" };
+    expect(await updateShipmentDetails(input)).toMatchObject({ success: false, error: "Unauthorized" });
+    (getCurrentUserWithRole as jest.Mock).mockResolvedValue({ id: sellerId, role: "ADMIN" });
+    try {
+      expect(await updateShipmentDetails({ ...input, carrier: "x".repeat(81) })).toMatchObject({ success: false });
+      expect(await updateShipmentDetails(input)).toMatchObject({ success: false });
+      expect(await db.orderEvent.count({ where: { orderId } })).toBe(1);
+    } finally { (getCurrentUserWithRole as jest.Mock).mockResolvedValue(null); }
+  });
+
+  it("paginates complete immutable history without accepting another order's cursor", async () => {
+    const orderId = await stripeOrder();
+    for (let index = 0; index < 55; index++) await db.order.update({ where: { id: orderId }, data: { shippingCarrier: "Carrier", shipmentTrackingNumber: `PARCEL-${index}` } });
+    const { GET } = await import("@/app/api/orders/[orderId]/route");
+    const context = { params: Promise.resolve({ orderId }) };
+    const first = await (await GET(new Request("http://localhost/tracking?phone=01700000000"), context)).json();
+    expect(first.order.timeline).toHaveLength(50);
+    const second = await (await GET(new Request(`http://localhost/tracking?phone=01700000000&cursor=${first.order.nextCursor}`), context)).json();
+    expect(second.order.timeline).toHaveLength(6);
+    expect(second.order.nextCursor).toBeNull();
+    expect(new Set([...first.order.timeline, ...second.order.timeline].map((event: { id: string }) => event.id)).size).toBe(56);
+    const foreignOrderId = await stripeOrder();
+    expect((await GET(new Request(`http://localhost/tracking?phone=01700000000&cursor=${first.order.nextCursor}`), { params: Promise.resolve({ orderId: foreignOrderId }) })).status).toBe(404);
   });
 
   it("preserves pre-upgrade provider request parameters for idempotent recovery", async () => {

@@ -31,7 +31,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-025 — complete live order-confirmation state and guest tracking navigation.** Current total: 10 of 49 tasks implemented, 39 open. **Next: AUD-026 — durable order transition timestamps and tracking.** The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
+**Latest completed step: AUD-026 — durable transition history and actual shipment tracking.** Current total: 11 of 49 tasks implemented, 38 open. **Next: AUD-008 — stronger versioned password storage with compatible login-time migration.** The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
 
 ## Owner-provided introduction
 
