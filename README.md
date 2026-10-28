@@ -330,6 +330,10 @@ npm run test
 npm run lint
 ```
 
+### Deep Audit & Open Tasks (28 October 2026)
+
+[Read the Codex-assisted deep audit and prioritized task list](docs/DEEP_AUDIT_2026-10-28.md). It records source evidence, acceptance criteria, current validation results, and incomplete frontend/backend wiring. The separate `codex/deep-audit-2026-10-28` branch contains this audit contribution; its task list does not imply the listed fixes have been implemented.
+
 ### Codex-Assisted Development Record
 
 This change was made after reviewing authorization boundaries, checkout totals and payment state, catalog visibility, OTP handling, order tracking, and the checked-in Prisma migrations. The main engineering decision was to derive identities and prices on the server, then make payment confirmation depend on a verified Stripe webhook rather than client input.
