@@ -29,7 +29,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-004 — idempotent, abuse-limited order creation.** Current total: 6 of 49 tasks implemented, 43 open. **Next: AUD-005 — reservation expiry**. It is a separate task and has not been marked complete by AUD-004. See the implementation log for test evidence and outstanding external verification.
+**Latest completed step: AUD-005 — persisted reservation expiry and reconciliation.** Current total: 7 of 49 tasks implemented, 42 open. **Next: AUD-006 — Stripe cart/context recovery**, then AUD-007 coupon/quote consistency. Each remains a separate implementation and commit. See the implementation log for test evidence and outstanding external verification.
 
 ## Owner-provided introduction
 

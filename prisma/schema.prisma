@@ -90,6 +90,12 @@ model Order {
   paymentIntentId String?
   checkoutTokenHash String? @unique
   checkoutRequestHash String? @db.VarChar(64)
+  reservationExpiresAt DateTime?
+  reservationNextCheckAt DateTime?
+  reservationReviewReason String?
+  stripeSessionRequestedAt DateTime?
+  stripeCheckoutSessionId String? @unique
+  stripeCheckoutOrigin String?
   shippingAddress String?
   shippingPhone   String?
   trackingNumber  String?
@@ -99,6 +105,8 @@ model Order {
   updatedAt       DateTime    @updatedAt
   
   items           OrderItem[]
+
+  @@index([paymentMethod, status, paymentStatus, reservationNextCheckAt], map: "Order_reservation_sweep_idx")
 }
 
 model OrderItem {

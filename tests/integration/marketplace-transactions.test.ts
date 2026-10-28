@@ -29,6 +29,8 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
   let verifyOtp: typeof import("@/app/api/auth/verify-otp/route").POST;
   let webhook: typeof import("@/app/api/stripe/webhook/route").POST;
   let stripe: import("stripe").default;
+  let reservations: typeof import("@/lib/checkout-reservations");
+  let startStripeCheckout: typeof import("@/lib/stripe/order-checkout").startStripeCheckout;
   const prefix = `audit-${randomUUID()}`;
   let sellerId: string;
   let categoryId: string;
@@ -47,7 +49,11 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     ({ createOrder } = await import("@/server/actions/order/order-actions"));
     ({ POST: verifyOtp } = await import("@/app/api/auth/verify-otp/route"));
     ({ POST: webhook } = await import("@/app/api/stripe/webhook/route"));
-    stripe = (await import("@/lib/stripe/stripe")).getStripe();
+    const stripeModule = await import("@/lib/stripe/stripe");
+    stripe = stripeModule.getStripe();
+    jest.spyOn(stripeModule, "getStripe").mockReturnValue(stripe);
+    reservations = await import("@/lib/checkout-reservations");
+    ({ startStripeCheckout } = await import("@/lib/stripe/order-checkout"));
     const seller = await db.user.create({ data: { email: `${prefix}@example.invalid`, role: "MEMBER", sellerStatus: "APPROVED" } });
     sellerId = seller.id;
     const category = await db.category.create({ data: { name: prefix, slug: prefix } });
@@ -87,6 +93,23 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     const payload = JSON.stringify({ id: `evt_${randomUUID()}`, object: "event", ...event });
     const signature = stripe.webhooks.generateTestHeaderString({ payload, secret: process.env.STRIPE_WEBHOOK_SECRET! });
     return webhook(new Request("http://localhost/api/stripe/webhook", { method: "POST", body: payload, headers: { "stripe-signature": signature } }));
+  }
+
+  async function stripeOrder() {
+    await db.product.update({ where: { id: productId }, data: { stock: 100 } });
+    const result = await createOrder(checkout({ paymentMethod: "STRIPE" }));
+    if (!result.success) throw new Error(result.error);
+    return result.orderId;
+  }
+
+  function sessionFor(orderId: string, changes: Partial<import("stripe").default.Checkout.Session> = {}) {
+    return { id: `cs_${orderId}`, metadata: { orderId }, status: "open", payment_status: "unpaid", amount_total: 105000, currency: "bdt", payment_intent: null,
+      expires_at: Math.floor(Date.now() / 1000) + 1860, url: "https://checkout.stripe.com/test-only-fixture", ...changes } as import("stripe").default.Checkout.Session;
+  }
+
+  async function makeDue(orderId: string, data = {}) {
+    const past = new Date(Date.now() - 60_000);
+    await db.order.update({ where: { id: orderId }, data: { reservationExpiresAt: past, reservationNextCheckAt: past, ...data } });
   }
 
   it("commits COD checkout using current server price and stock", async () => {
@@ -248,7 +271,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     const input = checkout({ paymentMethod: "STRIPE" });
     const result = await createOrder(input);
     if (!result.success) throw new Error(result.error);
-    const event = { type: "checkout.session.expired", data: { object: { metadata: { orderId: result.orderId } } } };
+    const event = { type: "checkout.session.expired", data: { object: { id: `cs_${randomUUID()}`, status: "expired", payment_status: "unpaid", metadata: { orderId: result.orderId } } } };
     expect((await dispatch(event)).status).toBe(200);
     expect((await dispatch(event)).status).toBe(200);
     expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock);
@@ -268,5 +291,128 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     }
     await db.user.update({ where: { id: sellerId }, data: { sellerStatus: "APPROVED" } });
     expect(await db.product.count({ where: { ...publicProductWhere, id: productId } })).toBe(1);
+  });
+
+  it("expires abandoned pre-session reservations exactly once with overlapping cleaners", async () => {
+    const orderId = await stripeOrder();
+    const before = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+    await makeDue(orderId);
+    const results = await Promise.all([reservations.reconcileReservation(orderId), reservations.reconcileReservation(orderId)]);
+    expect(results.filter((result) => result === "released")).toHaveLength(1);
+    expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before + 1);
+    expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).status).toBe("CANCELLED");
+  });
+
+  it("does not expire live pre-session reservations or COD orders", async () => {
+    const orderId = await stripeOrder();
+    expect(await reservations.reconcileReservation(orderId)).toBe("unchanged");
+    const cod = await createOrder(checkout());
+    if (!cod.success) throw new Error(cod.error);
+    await makeDue(cod.orderId);
+    expect(await reservations.reconcileReservation(cod.orderId)).toBe("unchanged");
+    expect((await db.order.findUniqueOrThrow({ where: { id: cod.orderId } })).status).toBe("PROCESSING");
+  });
+
+  it("retains uncertain provider reservations and replays immutable session parameters", async () => {
+    const orderId = await stripeOrder();
+    const create = jest.spyOn(stripe.checkout.sessions, "create").mockRejectedValueOnce(new Error("Response lost"));
+    try {
+      await expect(startStripeCheckout(orderId, "https://shop.example")).rejects.toThrow("Response lost");
+      const before = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+      expect(await reservations.reconcileReservation(orderId, new Date(Date.now() + 3600_000))).toBe("review");
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before);
+      create.mockResolvedValueOnce(sessionFor(orderId) as never);
+      await startStripeCheckout(orderId, "https://different-request-origin.example");
+      expect(create.mock.calls[1]).toEqual(create.mock.calls[0]);
+      expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).stripeCheckoutSessionId).toBe(`cs_${orderId}`);
+    } finally { create.mockRestore(); }
+  });
+
+  it("expires a known open provider session before restoring inventory", async () => {
+    const orderId = await stripeOrder();
+    await makeDue(orderId, { stripeSessionRequestedAt: new Date(), stripeCheckoutSessionId: `cs_${orderId}` });
+    const retrieve = jest.spyOn(stripe.checkout.sessions, "retrieve").mockResolvedValue(sessionFor(orderId) as never);
+    const expire = jest.spyOn(stripe.checkout.sessions, "expire").mockResolvedValue(sessionFor(orderId, { status: "expired" }) as never);
+    try {
+      const stock = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+      expect(await reservations.reconcileReservation(orderId)).toBe("released");
+      expect(expire).toHaveBeenCalledWith(`cs_${orderId}`);
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock + 1);
+    } finally { retrieve.mockRestore(); expire.mockRestore(); }
+  });
+
+  it("records payment winning provider expiry without restocking", async () => {
+    const orderId = await stripeOrder();
+    await makeDue(orderId, { stripeSessionRequestedAt: new Date(), stripeCheckoutSessionId: `cs_${orderId}` });
+    const retrieve = jest.spyOn(stripe.checkout.sessions, "retrieve")
+      .mockResolvedValueOnce(sessionFor(orderId) as never)
+      .mockResolvedValueOnce(sessionFor(orderId, { status: "complete", payment_status: "paid", payment_intent: "pi_race" }) as never);
+    const expire = jest.spyOn(stripe.checkout.sessions, "expire").mockRejectedValue(new Error("Already completed"));
+    try {
+      const stock = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+      expect(await reservations.reconcileReservation(orderId)).toBe("paid");
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock);
+      expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).paymentStatus).toBe("PAID");
+    } finally { retrieve.mockRestore(); expire.mockRestore(); }
+  });
+
+  it("records late payment for refund review without reviving a cancelled order", async () => {
+    const orderId = await stripeOrder();
+    await makeDue(orderId);
+    await reservations.reconcileReservation(orderId);
+    const log = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await reservations.confirmStripePayment(orderId, "pi_late", 105000, "bdt");
+      expect(await db.order.findUniqueOrThrow({ where: { id: orderId } })).toMatchObject({ status: "CANCELLED", paymentStatus: "PAID", reservationReviewReason: "LATE_PAYMENT_REQUIRES_REFUND" });
+    } finally { log.mockRestore(); }
+  });
+
+  it("requires worker authorization and enforces bounded, repeatable cleanup", async () => {
+    const orderId = await stripeOrder();
+    await makeDue(orderId);
+    const { POST } = await import("@/app/api/internal/checkout/expire/route");
+    process.env.CHECKOUT_SWEEP_SECRET = "integration-sweep-secret-32-characters-only";
+    process.env.CHECKOUT_SWEEP_DATABASE = new URL(process.env.TEST_DATABASE_URL!).pathname.slice(1);
+    expect((await POST(new Request("http://localhost/api/internal/checkout/expire", { method: "POST" }))).status).toBe(401);
+    expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).status).toBe("PENDING");
+    const authorization = `Bearer ${process.env.CHECKOUT_SWEEP_SECRET}`;
+    process.env.CHECKOUT_SWEEP_DATABASE = "different_database";
+    expect((await POST(new Request("http://localhost/api/internal/checkout/expire", { method: "POST", headers: { authorization } }))).status).toBe(503);
+    expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).status).toBe("PENDING");
+    process.env.CHECKOUT_SWEEP_DATABASE = new URL(process.env.TEST_DATABASE_URL!).pathname.slice(1);
+    const result = await POST(new Request("http://localhost/api/internal/checkout/expire", { method: "POST", headers: { authorization: `Bearer ${process.env.CHECKOUT_SWEEP_SECRET}` } }));
+    expect(result.status).toBe(200);
+    expect((await db.order.findUniqueOrThrow({ where: { id: orderId } })).status).toBe("CANCELLED");
+    expect((await reservations.sweepReservations(1)).checked).toBeLessThanOrEqual(1);
+  });
+
+  it("retains stock and schedules review when Stripe reconciliation is unavailable", async () => {
+    const orderId = await stripeOrder();
+    await makeDue(orderId, { stripeSessionRequestedAt: new Date(), stripeCheckoutSessionId: `cs_${orderId}` });
+    const retrieve = jest.spyOn(stripe.checkout.sessions, "retrieve").mockRejectedValue(new Error("Provider unavailable"));
+    const log = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const before = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+      expect((await reservations.sweepReservations()).errors).toBeGreaterThanOrEqual(1);
+      const order = await db.order.findUniqueOrThrow({ where: { id: orderId } });
+      expect(order).toMatchObject({ status: "PENDING", reservationReviewReason: "PROVIDER_RECONCILIATION_FAILED" });
+      expect(order.reservationNextCheckAt!.getTime()).toBeGreaterThan(Date.now());
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before);
+    } finally { retrieve.mockRestore(); log.mockRestore(); }
+  });
+
+  it("restocks once when a signed expiry webhook overlaps a worker", async () => {
+    const orderId = await stripeOrder();
+    await makeDue(orderId, { stripeSessionRequestedAt: new Date(), stripeCheckoutSessionId: `cs_${orderId}` });
+    const session = sessionFor(orderId, { status: "expired" });
+    const retrieve = jest.spyOn(stripe.checkout.sessions, "retrieve").mockResolvedValue(session as never);
+    try {
+      const before = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+      await Promise.all([
+        reservations.reconcileReservation(orderId),
+        dispatch({ type: "checkout.session.expired", data: { object: session } }),
+      ]);
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before + 1);
+    } finally { retrieve.mockRestore(); }
   });
 });

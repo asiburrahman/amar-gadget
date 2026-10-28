@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 6 tasks implemented, 43 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria.
+**Current checkpoint: 7 tasks implemented, 42 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -83,6 +83,16 @@ Added checks include four simultaneous retries of the final stock unit yielding 
 Migration `20261028160000_checkout_request_binding` must be applied before deploying this application revision. It is additive and preserves existing order rows. No production database, deployment or external provider was changed. Retrying after a reload requires the client to retain its attempt token; blocked storage supports in-memory retries only. Actual browser walkthrough and live Redis/Stripe checkout verification remain release work and are not represented as passed here.
 
 Next task: **AUD-005 — persisted stock-reservation expiry and safe cleanup/reconciliation**. No other remaining task is marked complete by this batch.
+
+## Batch 3 — AUD-005: durable reservation expiry and reconciliation
+
+Unprovisioned unpaid Stripe orders now expire after a persisted 15-minute reservation. Provider provisioning is recorded before the network request; its fixed origin/deadline/idempotency parameters and returned session ID are durable. Known sessions are expired/queried at Stripe before inventory release; ambiguous timeouts and legacy unknown sessions retain stock with a durable review reason. Payment winning expiry is reconciled as paid. Late payment never revives an already-restocked order and is flagged for refund review. COD is excluded.
+
+An authenticated POST endpoint and separately supervised worker perform bounded sweeps; overlapping workers, signed webhooks and administrator cancellation use a shared locked transaction. Due failures are deferred five minutes to prevent starvation. The Docker image includes the worker script. The endpoint checks its configured database name before mutation. A local HTTP smoke run of the actual built web server and worker reported `checked:1,released:1`; SQL verified the order cancelled and stock returned from 9 to 10 exactly once. Its isolated fixture records were removed afterward. See the [deployment and operator runbook](CHECKOUT_RESERVATIONS_RUNBOOK.md) for configuration, monitoring and review resolution. The production worker has not been deployed by this change.
+
+Validation: all four migrations passed on a fresh local PostgreSQL database; the previous-schema upgrade preserved an existing Stripe order and marked it as legacy/unknown instead of releasing it. **52 tests across 9 suites pass**, including 26 real PostgreSQL integration cases. Additional coverage proves abandoned release, overlapping cleanup, uncertain provider response, stable retry parameters, provider-expiry/payment races, authenticated sweeps, unavailable provider backoff and worker/webhook exactly-once restock. Stripe network responses are fixtures only in tests; the SDK signature check and SQL are real. TypeScript, affected-file lint, worker syntax, diff checks and production build pass. No live Stripe payment or production migration was performed.
+
+Next independent task: **AUD-006 — retain cart/context and resume the same checkout through Stripe cancellation, failures and completion**.
 
 ## Public contribution evidence
 

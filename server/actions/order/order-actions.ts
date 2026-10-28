@@ -10,6 +10,7 @@ import { cookies, headers } from "next/headers";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
 import { canonicalCheckoutRequest } from "@/lib/checkout-request";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { INITIAL_RESERVATION_MS, reconcileReservation } from "@/lib/checkout-reservations";
 
 function hashCheckoutToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -27,7 +28,7 @@ class CheckoutError extends Error {
 }
 
 const checkoutResultSelect = {
-  id: true, trackingNumber: true, status: true, paymentStatus: true,
+  id: true, trackingNumber: true, status: true, paymentStatus: true, reservationExpiresAt: true,
 } satisfies Prisma.OrderSelect;
 
 export async function createOrder(input: CheckoutInput) {
@@ -157,6 +158,10 @@ export async function createOrder(input: CheckoutInput) {
           couponCode: validated.couponCode?.trim().toUpperCase() || null,
           checkoutTokenHash: tokenHash,
           checkoutRequestHash: requestHash,
+          ...(validated.paymentMethod === "STRIPE" ? {
+            reservationExpiresAt: new Date(Date.now() + INITIAL_RESERVATION_MS),
+            reservationNextCheckAt: new Date(Date.now() + INITIAL_RESERVATION_MS),
+          } : {}),
           items: { create: orderItems },
         },
         select: checkoutResultSelect,
@@ -503,6 +508,13 @@ export async function updateOrderStatusByAdmin(orderId: string, newStatus: strin
     }
     if (newStatus === "CANCELLED" && order.paymentStatus === "PAID") {
       return { success: false, error: "Paid orders must be refunded before they can be cancelled." };
+    }
+    if (newStatus === "CANCELLED" && order.paymentMethod === "STRIPE") {
+      const result = await reconcileReservation(orderId, new Date(), true);
+      if (result !== "released") return { success: false, error: "Payment cannot be safely cancelled yet. Refresh or review its provider state." };
+      revalidatePath("/admin/orders");
+      revalidatePath("/user/orders");
+      return { success: true, data: { id: orderId, status: "CANCELLED", paymentStatus: "FAILED" } };
     }
     if (
       newStatus === "DELIVERED" &&
