@@ -47,7 +47,12 @@ async function main() {
     const origin = `http://127.0.0.1:${port}`;
     const get = (path, cookie) => fetch(`${origin}${path}`, { redirect: "manual", headers: cookie ? { Cookie: cookie } : undefined, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
     phase = "health lookup";
-    const health = await get("/api/health");
+    // First probes after a fresh Windows build have exceeded the old
+    // arbitrary 10-second probe. Keep a distinct bounded startup budget and
+    // report the actual duration; subsequent requests retain their 10s limit.
+    const healthStarted = Date.now();
+    const health = await fetch(`${origin}/api/health`, { redirect: "manual", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
+    const firstHealthMs = Date.now() - healthStarted;
     if (health.status !== 200) throw new SmokeFailure("Health HTTP smoke failed.");
     phase = "catalog lookup";
     const catalog = await get(`/api/products?search=${encodeURIComponent(prefix)}`);
@@ -78,7 +83,7 @@ async function main() {
     const httpRedirect = [302, 303, 307, 308].includes(staleDashboard.status) && staleDashboard.headers.get("location")?.includes("/login");
     const streamedRedirect = staleDashboard.status === 200 && /<meta[^>]+id="__next-page-redirect"[^>]+content="[^\"]*url=\/login"/.test(dashboardBody);
     if (!httpRedirect && !streamedRedirect) throw new SmokeFailure(`Revoked-cookie dashboard failed redirect verification (status ${staleDashboard.status}, redirectDigest=${dashboardBody.includes("NEXT_REDIRECT;replace;/login;")}).`);
-    return { standaloneHttp: "PASS", catalogSql: "PASS", productServerRender: "PASS", unauthenticatedAdminRedirect: "PASS", signedProfileRead: "PASS", copiedCookieRevocation: "PASS", revokedDashboardRedirect: "PASS" };
+    return { standaloneHttp: "PASS", firstHealthMs, firstHealthLimitMs: 30_000, catalogSql: "PASS", productServerRender: "PASS", unauthenticatedAdminRedirect: "PASS", signedProfileRead: "PASS", copiedCookieRevocation: "PASS", revokedDashboardRedirect: "PASS" };
   } catch (error) {
     if (error instanceof SmokeFailure) throw error;
     const allowedCodes = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT"]);

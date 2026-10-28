@@ -192,6 +192,8 @@ See [OTP rollout and operations](OTP_SECURITY_RUNBOOK.md) for coordinated schema
 
 ## Batch 11 — AUD-010: database-backed session revocation
 
+Implementation commit: [218d10a](https://github.com/asiburrahman/amar-gadget/commit/218d10a).
+
 New JWTs carry a required nonnegative account session version; central validation checks the current verified account/version/email/role on every protected entry point. The database trigger increments the version for password hash, email, role, verification and seller-status changes, covering operator/provisioning paths too. It rejects version rollback and preserves sessions on ordinary profile edits. Password change compares the original credential/version, revokes all sessions, expires the current cookie and redirects the UI to sign in. Reset requires a fresh login; email verification/change return the planned post-mutation cookie. Legacy password upgrades reload their resulting version and cannot overwrite a winning reset. Login rejects credential changes while password work was in flight.
 
 The previously signature-only me/profile/avatar/password routes now use current database authority. The navigation proxy remains optimistic; layouts/actions/APIs enforce revocation. Its fallback secret and sensitive error logging are removed, and cryptographic helpers are separated from password code. Legacy JWTs without a version intentionally require sign-in after coordinated deployment. Unsafe first-user token-printing and fixed-credential HTTP scripts are removed. Profile/avatar errors touched by this boundary change no longer return raw exceptions; complete input/media policies remain separate tasks.
@@ -201,6 +203,12 @@ Validation: **167 tests across 20 suites pass**, including 13 integration cases 
 Built standalone HTTP verification proves an actual signed profile read, then 401/profile and unauthenticated/me after revocation, plus dashboard login redirect. An initial health probe failed without a classified cause; the next run reached the dashboard check, where a 200 streaming redirect was incorrectly treated as access. The assertion was corrected against the installed Next redirect guide to require its actual login meta redirect (or an HTTP redirect); the complete follow-up smoke passed. No application authorization bypass was found in that streaming response. Safe phase/network diagnostics were retained. This does not establish general cold-start reliability or actual browser/provider readiness.
 
 See [session policy and rollout](SESSION_SECURITY_RUNBOOK.md). No production migration/deployment, live provider operation or real browser walkthrough occurred. Next: **AUD-011 — consistent account validation and account/IP request budgets**. All remaining tasks stay in scope.
+
+### Follow-up: bounded cold-start measurement (AUD-042 release evidence)
+
+The final rebuild after the password-change race-response correction passed, but its first health smoke timed out again at the old ten-second request deadline while the child server remained running. This reproduces a cold-start/probe issue; the prior successful runs do not establish reliable ten-second readiness. The immediately preceding built-server smoke had twice passed the full signed-cookie revocation and dashboard checks. No protected-access regression is inferred from a health timeout, and the timeout is not counted as a successful smoke.
+
+The runner now separates a bounded thirty-second initial health budget from the unchanged ten-second subsequent-request budgets and reports actual first-health milliseconds. A new build passed, followed immediately by a complete smoke pass: **first health response 14,171 ms, initial limit 30,000 ms**; all catalog/server-render/signed-cookie/API-revocation/dashboard checks passed within their subsequent-request limits. This directly explains why a ten-second probe was insufficient on this run, without establishing the underlying latency cause. The measurement is diagnostic instrumentation, not a production readiness/performance fix; startup behavior and actual deployment readiness remain open under AUD-042/044.
 
 ## Public contribution evidence
 
