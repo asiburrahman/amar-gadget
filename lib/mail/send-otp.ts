@@ -1,9 +1,12 @@
 import { randomInt } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { transporter } from "./nodemailer";
+import { getMailTransport, MailConfigurationError } from "./nodemailer";
 
 export async function sendOtpEmail(email: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const transporter = getMailTransport();
+    const from = process.env.SMTP_FROM?.trim();
+    if (!from) throw new MailConfigurationError();
     // Generate 6-digit numeric OTP code
     const code = randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
@@ -24,7 +27,7 @@ export async function sendOtpEmail(email: string): Promise<{ success: boolean; e
 
     // Send email using Nodemailer
     const mailOptions = {
-      from: `"Amar Gadget Security" <${process.env.SMTP_FROM || "asibur311@gmail.com"}>`,
+      from,
       to: email,
       subject: "🔒 Amar Gadget Account Verification Code",
       html: `
@@ -53,8 +56,8 @@ export async function sendOtpEmail(email: string): Promise<{ success: boolean; e
     }
 
     return { success: true };
-  } catch (error: any) {
-    console.error("Error sending OTP email:", error);
-    return { success: false, error: error.message || "Failed to generate OTP" };
+  } catch {
+    console.error("OTP email delivery failed; no code or credential was logged.");
+    return { success: false, error: "Email delivery is temporarily unavailable. Please retry shortly." };
   }
 }

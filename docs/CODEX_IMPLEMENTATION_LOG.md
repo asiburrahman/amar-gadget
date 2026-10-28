@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 12 original tasks plus AUD-050 implemented (13 of 50 tracked tasks); 37 original tasks remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 12 original tasks plus AUD-050 implemented (13 of 51 tracked tasks); 37 original tasks and external credential-revocation confirmation for AUD-051 remain open (38 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -162,6 +162,8 @@ The dependency check also exposed existing vulnerable packages: full `npm audit`
 
 ## Batch 9 — AUD-050: framework/dependency security and reviewed vendor mitigation
 
+Implementation commit: [c3d3fe2](https://github.com/asiburrahman/amar-gadget/commit/c3d3fe2).
+
 Next/eslint-config-next are aligned at 16.4.3, React/React DOM at 19.2.9, the Prisma 7 client/CLI/config/adapters at 7.10.1, Zod at 4.6.7 and Nodemailer at 10.2.1. Compatible Jest/ts-jest and targeted transitive updates resolve the audited high/moderate dependency graph without a forced major/downgrade. The package declares Prisma-compatible Node requirements, and the README records current versions. The updated installed Next migration/route/action/standalone guides were read. Jest ignores generated standalone output to avoid a duplicate-package crawl. Docker dependency installation now honors the lockfile without a fallback install and explicitly applies the reviewed patch in its builder.
 
 **Production dependency audit: 0 vulnerabilities. Full registry audit: 6 low-severity entries**, from deepmerge and its development-only Jest/ts-jest ancestry. No upstream fixed release exists at review time. A small committed `patch-package` mitigation preserves literal data keys with own data-property definitions, preventing returned-object prototype poisoning in all three merge write sites. It applies to CJS/UMD/source, is reproduced by clean install with failure checking, and retains the real package version. Five regressions reproduce the original vulnerable behavior in an isolated reference and prove installed mitigated behavior, normal descriptors, nested values and all write branches. The full registry scan remains nonzero and is reported transparently; no arbitrary advisory suppression or fake version was added. Neither deepmerge nor Jest appears in the inspected standalone production dependency directory. See [additional findings](ADDITIONAL_AUDIT_FINDINGS.md), [machine-readable audit snapshot](dependency-security-2026-10-28.json) and [patch rationale](../patches/README.md).
@@ -169,6 +171,12 @@ Next/eslint-config-next are aligned at 16.4.3, React/React DOM at 19.2.9, the Pr
 Validation: clean `npm ci` including automatic patch/client generation; **116 tests across 16 suites**; TypeScript, affected-file lint, schema validation, fresh six-migration install plus seed and preserved legacy upgrade fixture; production build; and real local standalone HTTP queries proving catalog SQL, product server rendering and unauthenticated admin redirection. The initial generic HTTP smoke failed once; improved safe phase diagnostics and five successful follow-up runs, including after a new build, did not reproduce an application fault. This is recorded rather than omitted. The runner is reproducible with `TEST_DATABASE_URL` pointing only at a local `audit_*` database and `npm run smoke:standalone`; it removes its own fixtures/process. No hosted browser/provider or container validation is inferred. Docker is not installed here. Builds use the disposable database and build-time environment-validation bypass; no production database or deployment was changed.
 
 The original full remaining-task objective stays active. Next: **AUD-009 — purpose/user-bound, hashed, single-use OTP and atomic email-change verification**. AUD-044 retains browser/CI/release verification and upstream patch follow-up scope.
+
+## Security interruption — AUD-051: remove exposed SMTP fallback
+
+Tracked hardcoded SMTP authentication fallback was discovered while tracing OTP delivery for AUD-009. It is removed in favor of explicitly configured credentials and sender; transport is created only when needed, requires TLS/STARTTLS appropriately and has bounded timeouts. Missing configuration fails before OTP writes. Mail failure returns/logs a controlled message without raw provider details or credential/code output. The original credential is not repeated in documentation or used for a provider request.
+
+Nine focused transport/configuration regressions cover missing settings/sender, valid TLS configuration, invalid ports, actual configured sender selection, delivery failure cleanup and redacted errors. Full local validation: **125 tests across 17 suites**, TypeScript and affected-file ESLint pass. No new standalone build, live SMTP or account action is represented as passed for this isolated hotfix. **This task remains open for the account owner's revocation/rotation confirmation**, since current-source removal does not revoke a historically exposed credential. See [AUD-051](ADDITIONAL_AUDIT_FINDINGS.md). Independent AUD-009 implementation continues while that external action is pending.
 
 ## Public contribution evidence
 

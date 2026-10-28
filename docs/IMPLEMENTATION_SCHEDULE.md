@@ -8,6 +8,8 @@ Standing owner instruction after AUD-007: complete **all remaining 40 tasks**, o
 
 New findings are additive, not replacements for that scope. The dependency scan during AUD-008 identified urgent AUD-050; see [additional audit findings](ADDITIONAL_AUDIT_FINDINGS.md). It is prioritized immediately after AUD-008, before continuing account-security work.
 
+AUD-009 delivery tracing also found tracked SMTP fallback credentials (AUD-051). The code hotfix is separate; the task stays open for the account owner's credential-revocation confirmation. Independent original work continues while that external action is pending.
+
 | Phase | Tasks, in working order | Outcome |
 | --- | --- | --- |
 | 1 — Completed foundation | AUD-001, 002, 003, 012, 013 | Transactions, JSON-LD safety, visibility and seller data/state guards |
@@ -33,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-050 — dependency security remediation with explicit development vendor mitigation.** Current total: 12 original tasks plus AUD-050 implemented (13 of 50 tracked tasks); 37 original tasks open. **Next: AUD-009 — purpose/user-bound hashed OTP and atomic email-change verification.** The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for test evidence, the transparent residual low registry alert and outstanding external verification.
+**Latest fully completed step: AUD-050 — dependency security remediation with explicit development vendor mitigation.** Current total: 12 original tasks plus AUD-050 implemented (13 of 51 tracked tasks); 37 original tasks plus AUD-051's external revocation confirmation open (38 total). **Active: AUD-009 — purpose/user-bound hashed OTP and atomic email-change verification.** AUD-051's source hotfix is separate from the pending owner action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
 
 ## Owner-provided introduction
 
