@@ -25,6 +25,8 @@ model User {
   reviews     Review[]
   wishlists   Wishlist[]
   addresses   Address[]
+  otpTokens   OtpToken[]
+  otpThrottles OtpThrottle[]
 }
 
 model Category {
@@ -204,10 +206,30 @@ model Banner {
 
 model OtpToken {
   id        String   @id @default(uuid())
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
   email     String
-  code      String
+  purpose   String
+  codeHash  String @db.VarChar(64)
+  accountFingerprint String @db.VarChar(64)
+  attempts Int @default(0)
+  deliveredAt DateTime?
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  @@index([email])
+  @@unique([userId, purpose])
+  @@index([email, purpose, expiresAt])
+}
+
+model OtpThrottle {
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose String
+  verificationWindowStart DateTime @default(now())
+  verificationAttempts Int @default(0)
+  sendWindowStart DateTime @default(now())
+  sendCount Int @default(0)
+  lastSentAt DateTime?
+
+  @@id([userId, purpose])
 }

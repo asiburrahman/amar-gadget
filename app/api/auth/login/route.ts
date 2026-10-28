@@ -4,6 +4,7 @@ import { loginSchema } from "@/lib/validations/auth";
 import { verifyPassword, hashPassword, passwordNeedsRehash, PasswordWorkloadBusy, signJwtToken } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { otpDeliveryFailure } from "@/lib/otp-response";
 
 export async function POST(req: Request) {
   try {
@@ -57,12 +58,9 @@ export async function POST(req: Request) {
     // 2.5 Check if user is verified
     if (!user.isVerified) {
       // Send fresh OTP to the unverified user
-      const otpResult = await sendOtpEmail(user.email);
+      const otpResult = await sendOtpEmail({ userId: user.id, email: user.email, purpose: "REGISTRATION" });
       if (!otpResult.success) {
-        return NextResponse.json(
-          { success: false, message: "Unable to send a verification code right now." },
-          { status: 503 }
-        );
+        return otpDeliveryFailure(otpResult);
       }
       return NextResponse.json(
         {

@@ -24,6 +24,7 @@ databaseSuite("compatible password storage migration", () => {
     const url = new URL(process.env.TEST_DATABASE_URL!);
     if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.pathname.startsWith("/audit_")) throw new Error("Password integration tests require a disposable local audit_* database.");
     process.env.DATABASE_URL = url.toString();
+    process.env.OTP_SECRET = "isolated-password-migration-otp-key-at-least-32-bytes";
     db = (await import("@/lib/prisma")).prisma;
     ({ POST: login } = await import("@/app/api/auth/login/route"));
   }, 30_000);
@@ -73,9 +74,11 @@ databaseSuite("compatible password storage migration", () => {
     expect((await register(request({ name: "Local test buyer", email, password, confirmPassword: password, role: "USER" }))).status).toBe(200);
     let user = await db.user.findUniqueOrThrow({ where: { email } });
     expect(user.password).toMatch(/^scrypt\$v1\$/);
-    await db.otpToken.create({ data: { email, code: "123456", expiresAt: new Date(Date.now() + 60_000) } });
+    const { issueOtp } = await import("@/lib/otp");
+    let otp = "";
+    await issueOtp({ userId: user.id, email, purpose: "PASSWORD_RESET" }, async (code) => { otp = code; });
     const { POST: reset } = await import("@/app/api/auth/reset-password/route");
-    expect((await reset(request({ email, otp: "123456", newPassword: "New reset!123", confirmPassword: "New reset!123" }))).status).toBe(200);
+    expect((await reset(request({ email, otp, newPassword: "New reset!123", confirmPassword: "New reset!123" }))).status).toBe(200);
     user = await db.user.findUniqueOrThrow({ where: { email } });
     expect(await verifyPassword("New reset!123", user.password)).toBe(true);
     expect(await db.otpToken.count({ where: { email } })).toBe(0);

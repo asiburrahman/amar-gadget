@@ -1,63 +1,23 @@
-import { randomInt } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+import { issueOtp, OtpError, type OtpPurpose } from "@/lib/otp";
 import { getMailTransport, MailConfigurationError } from "./nodemailer";
 
-export async function sendOtpEmail(email: string): Promise<{ success: boolean; error?: string }> {
+export type OtpMailResult = { success: true } | { success: false; error: string; status: number; retryAfter?: number };
+
+export async function sendOtpEmail(context: { userId: string; email: string; purpose: OtpPurpose; expectedAccountFingerprint?: string }): Promise<OtpMailResult> {
   try {
-    const transporter = getMailTransport();
+    const transport = getMailTransport();
     const from = process.env.SMTP_FROM?.trim();
     if (!from) throw new MailConfigurationError();
-    // Generate 6-digit numeric OTP code
-    const code = randomInt(100000, 1000000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-
-    // Delete any previous OTP tokens for this email
-    await prisma.otpToken.deleteMany({
-      where: { email: email.toLowerCase() },
-    });
-
-    // Save fresh OtpToken in database
-    await prisma.otpToken.create({
-      data: {
-        email: email.toLowerCase(),
-        code,
-        expiresAt,
-      },
-    });
-
-    // Send email using Nodemailer
-    const mailOptions = {
-      from,
-      to: email,
-      subject: "🔒 Amar Gadget Account Verification Code",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #2563eb; margin: 0;">Amar Gadget</h1>
-            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Email Verification Security Code</p>
-          </div>
-          <p style="font-size: 14px; color: #1e293b;">Hello,</p>
-          <p style="font-size: 14px; color: #1e293b;">Thank you for registering on Amar Gadget. Please use the following 6-digit OTP verification code to authenticate your account:</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #2563eb; background-color: #eff6ff; padding: 12px 24px; border-radius: 8px; border: 1px dashed #2563eb; display: inline-block;">
-              ${code}
-            </span>
-          </div>
-          <p style="font-size: 12px; color: #64748b; text-align: center;">This verification code expires in 10 minutes. Do not share this code with anyone.</p>
-        </div>
-      `,
-    };
-
-    try {
-      await transporter.sendMail(mailOptions);
-    } catch (error) {
-      await prisma.otpToken.deleteMany({ where: { email: email.toLowerCase(), code } });
-      throw error;
-    }
-
+    const title = { REGISTRATION: "Verify your email", PASSWORD_RESET: "Reset your password", EMAIL_CHANGE: "Confirm your email change" }[context.purpose];
+    await issueOtp(context, (code) => transport.sendMail({
+      from, to: context.email.trim().toLowerCase(), subject: `Amar Gadget: ${title}`,
+      text: `${title}. Your Amar Gadget code is ${code}. It expires in 10 minutes. Do not share it. If you did not request this action, ignore this message.`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px"><h1>Amar Gadget</h1><h2>${title}</h2><p>Use this code to complete this specific request:</p><p style="font-size:32px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. Do not share it. If you did not request this action, ignore this message.</p></div>`,
+    }));
     return { success: true };
-  } catch {
+  } catch (error) {
+    if (error instanceof OtpError) return { success: false, error: error.message, status: error.status, retryAfter: error.retryAfter };
     console.error("OTP email delivery failed; no code or credential was logged.");
-    return { success: false, error: "Email delivery is temporarily unavailable. Please retry shortly." };
+    return { success: false, error: "Email delivery is temporarily unavailable. Please retry shortly.", status: 503 };
   }
 }

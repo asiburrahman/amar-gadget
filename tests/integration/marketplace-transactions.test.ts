@@ -43,6 +43,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
       throw new Error("Integration tests require a localhost database named audit_*.");
     }
     process.env.DATABASE_URL = url.toString();
+    process.env.OTP_SECRET = "isolated-marketplace-otp-test-key-at-least-32-bytes";
     process.env.STRIPE_SECRET_KEY = "sk_test_codex_integration_only";
     process.env.STRIPE_WEBHOOK_SECRET = "whsec_codex_integration_only";
     db = (await import("@/lib/prisma")).prisma;
@@ -374,9 +375,13 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
 
   it("consumes an OTP once and commits account verification", async () => {
     const email = `${prefix}-otp@example.invalid`;
-    const user = await db.user.create({ data: { email, isVerified: false } });
-    await db.otpToken.create({ data: { email, code: "123456", expiresAt: new Date(Date.now() + 60_000) } });
-    const request = () => new Request("http://localhost/api/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, otp: "123456" }) });
+    const password = "Registration Password!123";
+    const { hashPassword } = await import("@/lib/password");
+    const user = await db.user.create({ data: { email, password: await hashPassword(password), isVerified: false } });
+    const { issueOtp } = await import("@/lib/otp");
+    let otp = "";
+    await issueOtp({ userId: user.id, email, purpose: "REGISTRATION" }, async (code) => { otp = code; });
+    const request = () => new Request("http://localhost/api/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, otp, password }) });
     const responses = await Promise.all([verifyOtp(request()), verifyOtp(request())]);
     expect(responses.map((response) => response.status).sort()).toEqual([200, 400]);
     expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).isVerified).toBe(true);

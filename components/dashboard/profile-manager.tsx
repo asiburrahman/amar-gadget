@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import NextImage from "next/image";
 import { useAuth } from "@/hooks/use-auth";
 
 interface AddressData {
@@ -38,7 +39,7 @@ const BD_DISTRICTS = [
 ];
 
 export function ProfileManager({ initialRole }: ProfileManagerProps) {
-  const { user: authUser, refreshUser, updateUser, setUser } = useAuth();
+  const { refreshUser, updateUser, setUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,12 +53,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   const [avatar, setAvatar] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Email Change State
   const [newEmail, setNewEmail] = useState("");
+  const [emailCurrentPassword, setEmailCurrentPassword] = useState("");
+  const emailBusy = useRef(false);
   const [emailOtp, setEmailOtp] = useState("");
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -119,11 +122,11 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     }
 
     loadProfile();
-  }, []);
+  }, [setUser]);
 
   // Resend OTP countdown
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (resendTimer > 0) {
       interval = setInterval(() => {
         setResendTimer((prev) => prev - 1);
@@ -224,8 +227,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to upload image." });
       }
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Error reading image file." });
+    } catch (err) {
+      setProfileMsg({ type: "error", text: err instanceof Error ? err.message : "Error reading image file." });
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -254,8 +257,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to remove photo." });
       }
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Error removing photo." });
+    } catch (err) {
+      setProfileMsg({ type: "error", text: err instanceof Error ? err.message : "Error removing photo." });
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -293,8 +296,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to update profile." });
       }
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Something went wrong." });
+    } catch (err) {
+      setProfileMsg({ type: "error", text: err instanceof Error ? err.message : "Something went wrong." });
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -303,11 +306,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Request Email Change OTP
   const handleRequestEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (emailBusy.current) return;
     if (!newEmail || !newEmail.includes("@")) {
       setEmailMsg({ type: "error", text: "সঠিক নতুন ইমেইল এড্রেস লিখুন। (Please enter a valid new email address)" });
       return;
     }
+    if (!emailCurrentPassword) { setEmailMsg({ type: "error", text: "Enter your current password to request an email change." }); return; }
 
+    emailBusy.current = true;
     setIsSendingOtp(true);
     setEmailMsg(null);
 
@@ -315,23 +321,27 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       const res = await fetch("/api/user/change-email/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newEmail }),
+        body: JSON.stringify({ newEmail, currentPassword: emailCurrentPassword }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setIsOtpSent(true);
+        setNewEmail(data.email);
+        setEmailCurrentPassword("");
         setResendTimer(60);
         setEmailMsg({
           type: "success",
           text: `নতুন ইমেইলে (${newEmail}) ৬-সংখ্যার ওটিপি কোড পাঠানো হয়েছে। চেক করে নিচের ঘরে লিখুন।`,
         });
       } else {
+        if (res.status === 429) setResendTimer(Number(res.headers.get("Retry-After")) || 60);
         setEmailMsg({ type: "error", text: data.message || "Failed to send OTP code." });
       }
-    } catch (err: any) {
-      setEmailMsg({ type: "error", text: err.message || "Failed to send OTP code." });
+    } catch (err) {
+      setEmailMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to send OTP code." });
     } finally {
+      emailBusy.current = false;
       setIsSendingOtp(false);
     }
   };
@@ -339,11 +349,13 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Verify Email Change OTP
   const handleVerifyEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailOtp || emailOtp.length < 4) {
+    if (emailBusy.current) return;
+    if (!emailOtp || emailOtp.length !== 6) {
       setEmailMsg({ type: "error", text: "৬-সংখ্যার সঠিক ওটিপি কোড লিখুন। (Please enter the valid OTP)" });
       return;
     }
 
+    emailBusy.current = true;
     setIsVerifyingOtp(true);
     setEmailMsg(null);
 
@@ -355,18 +367,17 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success && typeof data.user?.email === "string") {
+        const confirmedEmail = data.user.email;
         setEmailMsg({
           type: "success",
           text: `ইমেইল সফলভাবে পরিবর্তন করা হয়েছে! আপনার বর্তমান ইমেইল: ${newEmail}`,
         });
-        if (profile) {
-          setProfile({ ...profile, email: newEmail, isVerified: true });
-        }
-        updateUser({ email: newEmail, isVerified: true });
+        setProfile((current) => current ? { ...current, email: confirmedEmail, isVerified: true } : current);
+        updateUser({ email: confirmedEmail, isVerified: true });
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", {
-            detail: { ...(profile || {}), email: newEmail, isVerified: true }
+            detail: data.user
           }));
         }
         setIsOtpSent(false);
@@ -376,9 +387,10 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       } else {
         setEmailMsg({ type: "error", text: data.message || "Invalid or expired OTP." });
       }
-    } catch (err: any) {
-      setEmailMsg({ type: "error", text: err.message || "Verification failed." });
+    } catch (err) {
+      setEmailMsg({ type: "error", text: err instanceof Error ? err.message : "Verification failed." });
     } finally {
+      emailBusy.current = false;
       setIsVerifyingOtp(false);
     }
   };
@@ -419,8 +431,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       } else {
         setPasswordMsg({ type: "error", text: data.message || "Failed to update password." });
       }
-    } catch (err: any) {
-      setPasswordMsg({ type: "error", text: err.message || "Something went wrong." });
+    } catch (err) {
+      setPasswordMsg({ type: "error", text: err instanceof Error ? err.message : "Something went wrong." });
     } finally {
       setIsUpdatingPassword(false);
     }
@@ -454,8 +466,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       } else {
         setAddressMsg({ type: "error", text: data.message || "Failed to save address." });
       }
-    } catch (err: any) {
-      setAddressMsg({ type: "error", text: err.message || "Something went wrong." });
+    } catch (err) {
+      setAddressMsg({ type: "error", text: err instanceof Error ? err.message : "Something went wrong." });
     } finally {
       setIsUpdatingAddress(false);
     }
@@ -494,7 +506,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               title="ছবি পরিবর্তন করতে ক্লিক করুন (Click to upload photo)"
             >
               {avatarPreview ? (
-                <img src={avatarPreview} alt={name || "User"} className="w-full h-full object-cover" />
+                <NextImage src={avatarPreview} alt={name || "User"} width={112} height={112} unoptimized className="w-full h-full object-cover" />
               ) : (
                 <span className="text-3xl sm:text-4xl font-black text-[#333e48]">
                   {(name || profile?.email || "U").charAt(0).toUpperCase()}
@@ -685,7 +697,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               {/* Image Preview Box */}
               <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#fed700] shadow-sm bg-white shrink-0 flex items-center justify-center relative">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                  <NextImage src={avatarPreview} alt="Preview" width={96} height={96} unoptimized className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-3xl font-black text-slate-400">
                     {(name || profile?.email || "U").charAt(0).toUpperCase()}
@@ -790,7 +802,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  ইমেইল পরিবর্তন করতে "ইমেইল পরিবর্তন" ট্যাবে যান (OTP ভেরিফিকেশন প্রযোজ্য)।
+                  ইমেইল পরিবর্তন করতে &quot;ইমেইল পরিবর্তন&quot; ট্যাবে যান (OTP ভেরিফিকেশন প্রযোজ্য)।
                 </p>
               </div>
 
@@ -869,10 +881,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           {!isOtpSent ? (
             <form onSubmit={handleRequestEmailOtp} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">নতুন ইমেইল এড্রেস (New Email Address) *</label>
+                <label htmlFor="email-change-target" className="text-xs font-bold text-[#333e48]">নতুন ইমেইল এড্রেস (New Email Address) *</label>
                 <input
+                  id="email-change-target"
                   type="email"
                   required
+                  disabled={isSendingOtp}
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="e.g. newemail@domain.com"
@@ -883,10 +897,15 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                 </p>
               </div>
 
+              <div className="space-y-1.5">
+                <label htmlFor="email-change-password" className="block text-xs font-bold">Current password</label>
+                <input id="email-change-password" type="password" autoComplete="current-password" required disabled={isSendingOtp} value={emailCurrentPassword} onChange={(event) => setEmailCurrentPassword(event.target.value)} className="w-full rounded-xl border border-gray-300 p-3 text-xs" />
+                <p className="text-xs text-slate-500">Confirm your current password before requesting or resending an email-change code.</p>
+              </div>
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={isSendingOtp || !newEmail}
+                  disabled={isSendingOtp || !newEmail || !emailCurrentPassword || resendTimer > 0}
                   className="px-6 py-2.5 bg-[#fed700] hover:bg-[#eec800] text-[#333e48] font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                 >
                   {isSendingOtp ? (
@@ -899,12 +918,13 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   )}
                 </button>
               </div>
+              {resendTimer > 0 && <p role="status" className="text-xs">Request another code after {resendTimer}s.</p>}
             </form>
           ) : (
             /* STEP 2: Enter OTP & Confirm */
             <form onSubmit={handleVerifyEmailOtp} className="space-y-5 bg-amber-50/50 border border-amber-200 rounded-2xl p-6">
               <div className="space-y-1">
-                <span className="text-xs font-bold text-amber-900">ভেরিফিকেশন কোড লিখুন (Enter OTP Code)</span>
+                <label htmlFor="email-change-code" className="text-xs font-bold text-amber-900">ভেরিফিকেশন কোড লিখুন (Enter OTP Code)</label>
                 <p className="text-xs text-amber-800">
                   <span className="font-bold">{newEmail}</span> ঠিকানায় পাঠানো ৬-সংখ্যার কোডটি প্রবেশ করান:
                 </p>
@@ -912,9 +932,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
               <div className="space-y-1.5">
                 <input
+                  id="email-change-code"
                   type="text"
                   required
                   maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   value={emailOtp}
                   onChange={(e) => setEmailOtp(e.target.value.replace(/[^0-9]/g, ""))}
                   placeholder="• • • • • •"
@@ -926,9 +949,11 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    disabled={isVerifyingOtp || isSendingOtp}
                     onClick={() => {
                       setIsOtpSent(false);
                       setEmailOtp("");
+                      setEmailCurrentPassword("");
                     }}
                     className="text-xs font-bold text-slate-500 hover:text-black underline cursor-pointer"
                   >
@@ -944,8 +969,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   ) : (
                     <button
                       type="button"
-                      onClick={handleRequestEmailOtp}
-                      disabled={isSendingOtp}
+                      onClick={() => { setIsOtpSent(false); setEmailOtp(""); setEmailCurrentPassword(""); }}
+                      disabled={isSendingOtp || isVerifyingOtp}
                       className="text-xs font-bold text-amber-800 hover:underline cursor-pointer"
                     >
                       কোড পুনরায় পাঠান
@@ -955,7 +980,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
                 <button
                   type="submit"
-                  disabled={isVerifyingOtp || emailOtp.length < 4}
+                  disabled={isVerifyingOtp || emailOtp.length !== 6}
                   className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                 >
                   {isVerifyingOtp ? (

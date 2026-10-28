@@ -4,6 +4,7 @@ import { registerSchema } from "@/lib/validations/auth";
 import { hashPassword, PasswordWorkloadBusy } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { otpDeliveryFailure } from "@/lib/otp-response";
 
 export async function POST(req: Request) {
   try {
@@ -69,12 +70,9 @@ export async function POST(req: Request) {
       if (updated.count !== 1) return NextResponse.json({ success: false, message: "The account changed. Please sign in or retry registration." }, { status: 409 });
 
       // Dispatch fresh OTP verification email
-      const otpResult = await sendOtpEmail(existingUser.email);
+      const otpResult = await sendOtpEmail({ userId: existingUser.id, email: existingUser.email, purpose: "REGISTRATION" });
       if (!otpResult.success) {
-        return NextResponse.json(
-          { success: false, message: "Unable to send a verification code right now." },
-          { status: 503 }
-        );
+        return otpDeliveryFailure(otpResult);
       }
 
       return NextResponse.json({
@@ -100,12 +98,9 @@ export async function POST(req: Request) {
     });
 
     // 3. Generate and send OTP verification code to email
-    const otpResult = await sendOtpEmail(newUser.email);
+    const otpResult = await sendOtpEmail({ userId: newUser.id, email: newUser.email, purpose: "REGISTRATION" });
     if (!otpResult.success) {
-      return NextResponse.json(
-        { success: false, message: "Unable to send a verification code right now." },
-        { status: 503 }
-      );
+      return otpDeliveryFailure(otpResult);
     }
 
     return NextResponse.json({

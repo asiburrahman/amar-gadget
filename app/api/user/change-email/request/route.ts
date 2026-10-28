@@ -1,100 +1,28 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifyJwtToken } from "@/lib/auth";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/session";
+import { verifyPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
+import { accountEmailSchema } from "@/lib/validations/auth";
+import { otpAccountFingerprint } from "@/lib/otp";
+import { otpDeliveryFailure, otpErrorResponse } from "@/lib/otp-response";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
+const schema = z.object({ newEmail: accountEmailSchema, currentPassword: z.string().min(1) });
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth_token")?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please sign in." },
-        { status: 401 }
-      );
-    }
-
-    const payload = await verifyJwtToken(token);
-    if (!payload?.sub) {
-      return NextResponse.json(
-        { success: false, message: "Invalid session." },
-        { status: 401 }
-      );
-    }
-
-    const { newEmail } = await req.json();
-
-    if (!newEmail || typeof newEmail !== "string") {
-      return NextResponse.json(
-        { success: false, message: "Please provide a valid new email address." },
-        { status: 400 }
-      );
-    }
-
-    const normalizedNewEmail = newEmail.trim().toLowerCase();
-
-    // Basic email format check
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(normalizedNewEmail)) {
-      return NextResponse.json(
-        { success: false, message: "Invalid email format." },
-        { status: 400 }
-      );
-    }
-
-    const currentUser = await prisma.user.findUnique({
-      where: { id: payload.sub as string },
-      select: { id: true, email: true },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { success: false, message: "User not found." },
-        { status: 404 }
-      );
-    }
-
-    if (currentUser.email.toLowerCase() === normalizedNewEmail) {
-      return NextResponse.json(
-        { success: false, message: "The new email is the same as your current email." },
-        { status: 400 }
-      );
-    }
-
-    // Check if new email is already taken by another account
-    const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedNewEmail },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, message: "This email address is already registered to another account." },
-        { status: 400 }
-      );
-    }
-
-    // Send OTP verification email to the new email address
-    const otpResult = await sendOtpEmail(normalizedNewEmail);
-
-    if (!otpResult.success) {
-      return NextResponse.json(
-        { success: false, message: otpResult.error || "Failed to send verification code." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `A 6-digit verification code has been sent to ${normalizedNewEmail}. Please enter it to confirm the change.`,
-      email: normalizedNewEmail,
-    });
-  } catch (error: any) {
-    console.error("POST /api/user/change-email/request error:", error);
-    return NextResponse.json(
-      { success: false, message: error.message || "An unexpected error occurred." },
-      { status: 500 }
-    );
-  }
+    if (!(await rateLimit(getClientIp(req.headers), 5, 60, "email-change-request")).success) return NextResponse.json({ success: false, message: "Too many requests. Try again shortly." }, { status: 429 });
+    const actor = await getCurrentUser();
+    if (!actor) return NextResponse.json({ success: false, message: "Please sign in." }, { status: 401 });
+    const parsed = schema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Enter a valid new email and your current password." }, { status: 400 });
+    const { newEmail, currentPassword } = parsed.data;
+    const account = await prisma.user.findUnique({ where: { id: actor.id } });
+    if (!account?.password || !(await verifyPassword(currentPassword, account.password))) return NextResponse.json({ success: false, message: "Current password could not be verified. Set a password first if your account does not have one." }, { status: 400 });
+    if (newEmail === account.email || await prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } })) return NextResponse.json({ success: false, message: "Choose a different available email address." }, { status: 409 });
+    const result = await sendOtpEmail({ userId: account.id, email: newEmail, purpose: "EMAIL_CHANGE", expectedAccountFingerprint: otpAccountFingerprint(account) });
+    if (!result.success) return otpDeliveryFailure(result);
+    return NextResponse.json({ success: true, message: "A six-digit email-change code was sent to the new address.", email: newEmail });
+  } catch (error) { return otpErrorResponse(error); }
 }

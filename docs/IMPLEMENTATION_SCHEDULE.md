@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest fully completed step: AUD-050 — dependency security remediation with explicit development vendor mitigation.** Current total: 12 original tasks plus AUD-050 implemented (13 of 51 tracked tasks); 37 original tasks plus AUD-051's external revocation confirmation open (38 total). **Active: AUD-009 — purpose/user-bound hashed OTP and atomic email-change verification.** AUD-051's source hotfix is separate from the pending owner action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
+**Latest fully completed step: AUD-009 — purpose/user-bound hashed OTP and atomic email-change verification.** Current total: 13 original tasks plus AUD-050 implemented (14 of 51 tracked tasks); 36 original tasks plus AUD-051's external revocation confirmation open (37 total). **Next: AUD-010 — revoke prior sessions after password reset/change and centralize session validation.** AUD-051's source hotfix is separate from the pending owner action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
 
 ## Owner-provided introduction
 

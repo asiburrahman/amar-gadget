@@ -1,99 +1,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { signJwtToken } from "@/lib/auth";
+import { signJwtToken, verifyPassword, hashPassword, passwordNeedsRehash } from "@/lib/auth";
 import { verifyOtpSchema } from "@/lib/validations/auth";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { prepareOtpAttempt, consumeVerifiedOtp, otpAccountFingerprint } from "@/lib/otp";
+import { otpErrorResponse } from "@/lib/otp-response";
 
 export async function POST(req: Request) {
   try {
-    const limit = await rateLimit(getClientIp(req.headers), 5, 60, "auth-verify-otp");
-    if (!limit.success) {
-      return NextResponse.json({ success: false, message: "Too many verification attempts. Try again shortly." }, { status: 429 });
-    }
-
-    const parsed = verifyOtpSchema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, message: "Email and OTP verification code are required." },
-        { status: 400 }
-      );
-    }
-    const { email, otp } = parsed.data;
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // Find latest OTP token for email
-    const otpRecord = await prisma.otpToken.findFirst({
-      where: {
-        email: normalizedEmail,
-        code: otp,
-        expiresAt: { gte: new Date() },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!otpRecord) {
-      return NextResponse.json(
-        { success: false, message: "Invalid or expired OTP verification code." },
-        { status: 400 }
-      );
-    }
-
-    // Find user and mark as verified
-    const user = await prisma.$transaction(async (tx) => {
-      const claimed = await tx.otpToken.deleteMany({
-        where: { id: otpRecord.id, expiresAt: { gte: new Date() } },
-      });
-      if (claimed.count !== 1) return null;
-
-      const foundUser = await tx.user.findUnique({ where: { email: normalizedEmail } });
-      if (!foundUser) return null;
-      await tx.user.update({
-        where: { id: foundUser.id },
-        data: { isVerified: true },
-      });
-      await tx.otpToken.deleteMany({ where: { email: normalizedEmail } });
-      return foundUser;
-    });
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: "Invalid or expired OTP verification code." },
-        { status: 400 }
-      );
-    }
-
-    // Generate signed JWT token
-    const token = await signJwtToken({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    });
-
-    const response = NextResponse.json({
-      success: true,
-      message: "Email successfully verified!",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    });
-
-    response.cookies.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 604800, // 7 days
-      path: "/",
-    });
-
+    if (!(await rateLimit(getClientIp(req.headers), 5, 60, "auth-verify-otp")).success) return NextResponse.json({ success: false, message: "Too many verification attempts. Try again shortly." }, { status: 429 });
+    const parsed = verifyOtpSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Enter your email, six-digit signup code and registration password." }, { status: 400 });
+    const input = parsed.data;
+    const found = await prisma.user.findUnique({ where: { email: input.email } });
+    const invalid = () => NextResponse.json({ success: false, message: "Invalid or expired verification details. Use the password from registration or reset your password." }, { status: 400 });
+    if (!found || found.isVerified || !found.password) return invalid();
+    const ticket = await prepareOtpAttempt({ userId: found.id, email: input.email, purpose: "REGISTRATION" }, input.otp);
+    if (!ticket || ticket.accountFingerprint !== otpAccountFingerprint(found) || !(await verifyPassword(input.password, found.password))) return invalid();
+    const upgraded = passwordNeedsRehash(found.password) ? await hashPassword(input.password) : undefined;
+    // Validate signing configuration before committing verification. The
+    // locked account fingerprint is rechecked before this token is returned.
+    const token = await signJwtToken({ id: found.id, email: found.email, name: found.name, role: found.role });
+    const user = await consumeVerifiedOtp(ticket, (tx, current) => tx.user.update({ where: { id: current.id }, data: { isVerified: true, ...(upgraded ? { password: upgraded } : {}) } }));
+    if (!user) return invalid();
+    const response = NextResponse.json({ success: true, message: "Email successfully verified!", user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar, phone: user.phone, sellerStatus: user.sellerStatus, isVerified: user.isVerified } });
+    response.cookies.set("auth_token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 604800, path: "/" });
     return response;
-  } catch (error) {
-    console.error("OTP Verification Error:", error);
-    return NextResponse.json(
-      { success: false, message: "Internal server error during verification." },
-      { status: 500 }
-    );
-  }
+  } catch (error) { return otpErrorResponse(error); }
 }

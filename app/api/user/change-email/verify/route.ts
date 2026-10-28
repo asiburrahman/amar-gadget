@@ -1,121 +1,32 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { verifyJwtToken, signJwtToken } from "@/lib/auth";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/session";
+import { signJwtToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { accountEmailSchema, otpCodeSchema } from "@/lib/validations/auth";
+import { prepareOtpAttempt, consumeVerifiedOtp, otpAccountFingerprint } from "@/lib/otp";
+import { otpErrorResponse } from "@/lib/otp-response";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
+const schema = z.object({ newEmail: accountEmailSchema, otp: otpCodeSchema });
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth_token")?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please sign in." },
-        { status: 401 }
-      );
-    }
-
-    const payload = await verifyJwtToken(token);
-    if (!payload?.sub) {
-      return NextResponse.json(
-        { success: false, message: "Invalid session." },
-        { status: 401 }
-      );
-    }
-
-    const { newEmail, otp } = await req.json();
-
-    if (!newEmail || !otp) {
-      return NextResponse.json(
-        { success: false, message: "New email and 6-digit OTP code are required." },
-        { status: 400 }
-      );
-    }
-
-    const normalizedNewEmail = newEmail.trim().toLowerCase();
-    const trimmedOtp = otp.toString().trim();
-
-    // Find valid OTP record
-    const otpRecord = await prisma.otpToken.findFirst({
-      where: {
-        email: normalizedNewEmail,
-        code: trimmedOtp,
-        expiresAt: { gte: new Date() },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!otpRecord) {
-      return NextResponse.json(
-        { success: false, message: "Invalid or expired OTP verification code. Please try again." },
-        { status: 400 }
-      );
-    }
-
-    // Double check email uniqueness
-    const emailConflict = await prisma.user.findUnique({
-      where: { email: normalizedNewEmail },
-    });
-
-    if (emailConflict && emailConflict.id !== payload.sub) {
-      return NextResponse.json(
-        { success: false, message: "This email was recently taken by another account." },
-        { status: 400 }
-      );
-    }
-
-    // Update user's email and ensure isVerified is true
-    const updatedUser = await prisma.user.update({
-      where: { id: payload.sub as string },
-      data: {
-        email: normalizedNewEmail,
-        isVerified: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        avatar: true,
-        phone: true,
-        sellerStatus: true,
-        isVerified: true,
-      },
-    });
-
-    // Delete verified OTP tokens for this email
-    await prisma.otpToken.deleteMany({
-      where: { email: normalizedNewEmail },
-    });
-
-    // Re-issue JWT token with the new email
-    const newToken = await signJwtToken({
-      id: updatedUser.id,
-      email: updatedUser.email,
-      name: updatedUser.name,
-      role: updatedUser.role,
-    });
-
-    const response = NextResponse.json({
-      success: true,
-      message: "Email address successfully updated and verified!",
-      user: updatedUser,
-    });
-
-    response.cookies.set("auth_token", newToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: "/",
-    });
-
+    if (!(await rateLimit(getClientIp(req.headers), 5, 60, "email-change-verify")).success) return NextResponse.json({ success: false, message: "Too many verification attempts. Try again shortly." }, { status: 429 });
+    const actor = await getCurrentUser();
+    if (!actor) return NextResponse.json({ success: false, message: "Please sign in." }, { status: 401 });
+    const parsed = schema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Enter the new email and its six-digit email-change code." }, { status: 400 });
+    const { newEmail, otp } = parsed.data;
+    const invalid = () => NextResponse.json({ success: false, message: "Invalid or expired email-change code. Request a fresh code from this account." }, { status: 400 });
+    const ticket = await prepareOtpAttempt({ userId: actor.id, email: newEmail, purpose: "EMAIL_CHANGE" }, otp);
+    if (!ticket) return invalid();
+    const account = await prisma.user.findUnique({ where: { id: actor.id } });
+    if (!account || otpAccountFingerprint(account) !== ticket.accountFingerprint) return invalid();
+    const token = await signJwtToken({ id: account.id, email: newEmail, name: account.name, role: account.role });
+    const updated = await consumeVerifiedOtp(ticket, (tx, user) => tx.user.update({ where: { id: user.id }, data: { email: newEmail, isVerified: true }, select: { id: true, name: true, email: true, role: true, avatar: true, phone: true, sellerStatus: true, isVerified: true } }));
+    if (!updated) return invalid();
+    const response = NextResponse.json({ success: true, message: "Email address updated and verified.", user: updated });
+    response.cookies.set("auth_token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 604800, path: "/" });
     return response;
-  } catch (error: any) {
-    console.error("POST /api/user/change-email/verify error:", error);
-    return NextResponse.json(
-      { success: false, message: error.message || "Failed to verify email update." },
-      { status: 500 }
-    );
-  }
+  } catch (error) { return otpErrorResponse(error); }
 }
