@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest fully completed step: AUD-010 — database-backed session revocation after credential/security-state changes.** Current total: 14 original tasks plus AUD-050 implemented (15 of 51 tracked tasks); 35 original tasks plus AUD-051's external revocation confirmation open (36 total). **Next: AUD-011 — consistent account validation and account/IP request budgets.** AUD-051's source hotfix is separate from the pending owner action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
+**Latest fully completed step: AUD-011 — consistent account validation and account/IP request budgets.** Current total: 15 original tasks plus AUD-050 implemented (16 of 51 tracked tasks); 34 original tasks plus AUD-051's external revocation confirmation open (35 total). **Next: AUD-039 — atomic profile/default-address mutation and consistency constraints.** AUD-051's source hotfix is separate from the pending owner action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
 
 ## Owner-provided introduction
 

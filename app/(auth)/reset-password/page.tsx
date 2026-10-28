@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { newPasswordSchema, PASSWORD_POLICY_MESSAGE } from "@/lib/validations/auth";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -15,14 +16,20 @@ function ResetPasswordForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const busy = useRef(false);
+  const navigationTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [completed, setCompleted] = useState(false);
+  useEffect(() => () => clearTimeout(navigationTimer.current), []);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy.current || completed) return;
     if (!email || !otp || !newPassword) return;
+    if (otp.length !== 6) { setMessage({ type: "error", text: "Enter the six-digit password-reset code." }); return; }
 
-    if (newPassword.length < 6) {
-      setMessage({ type: "error", text: "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।" });
+    if (!newPasswordSchema.safeParse(newPassword).success) {
+      setMessage({ type: "error", text: PASSWORD_POLICY_MESSAGE });
       return;
     }
 
@@ -31,6 +38,7 @@ function ResetPasswordForm() {
       return;
     }
 
+    busy.current = true;
     setLoading(true);
     setMessage(null);
 
@@ -47,12 +55,15 @@ function ResetPasswordForm() {
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
+        setCompleted(true);
+        setNewPassword("");
+        setConfirmPassword("");
         setMessage({
           type: "success",
           text: data.message || "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! লগইন পেইজে পাঠানো হচ্ছে...",
         });
-        setTimeout(() => {
+        navigationTimer.current = setTimeout(() => {
           router.push("/login");
         }, 2000);
       } else {
@@ -61,12 +72,13 @@ function ResetPasswordForm() {
           text: data.message || "পাসওয়ার্ড রিসেট ব্যর্থ হয়েছে। ওটিপি কোড সঠিক কিনা চেক করুন।",
         });
       }
-    } catch (err: any) {
+    } catch {
       setMessage({
         type: "error",
-        text: err.message || "Something went wrong.",
+        text: "Password reset is temporarily unavailable. Please retry.",
       });
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   };
@@ -101,8 +113,9 @@ function ResetPasswordForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[#333e48]">ইমেইল এড্রেস (Email Address) *</label>
+            <label htmlFor="reset-email" className="text-xs font-bold text-[#333e48]">ইমেইল এড্রেস (Email Address) *</label>
             <input
+              id="reset-email"
               type="email"
               required
               value={email}
@@ -113,8 +126,11 @@ function ResetPasswordForm() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[#333e48]">৬-সংখ্যার OTP কোড (Verification Code) *</label>
+            <label htmlFor="reset-code" className="text-xs font-bold text-[#333e48]">৬-সংখ্যার OTP কোড (Verification Code) *</label>
             <input
+              id="reset-code"
+              autoComplete="one-time-code"
+              inputMode="numeric"
               type="text"
               required
               maxLength={6}
@@ -126,24 +142,31 @@ function ResetPasswordForm() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড (New Password) *</label>
+            <label htmlFor="reset-new-password" className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড (New Password) *</label>
             <input
+              id="reset-new-password"
+              autoComplete="new-password"
               type={showPassword ? "text" : "password"}
               required
-              minLength={6}
+              minLength={8}
+              maxLength={128}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="কমপক্ষে ৬ অক্ষর"
+              placeholder="8–128 characters"
               className="w-full px-4 py-2.5 text-xs text-[#333e48] border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#fed700] transition"
             />
+            <p className="text-xs text-slate-500">{PASSWORD_POLICY_MESSAGE}</p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড পুনরায় লিখুন (Confirm Password) *</label>
+            <label htmlFor="reset-confirm-password" className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড পুনরায় লিখুন (Confirm Password) *</label>
             <input
+              id="reset-confirm-password"
+              autoComplete="new-password"
               type={showPassword ? "text" : "password"}
               required
-              minLength={6}
+              minLength={8}
+              maxLength={128}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="পুনরায় একই পাসওয়ার্ড লিখুন"
@@ -165,7 +188,7 @@ function ResetPasswordForm() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || completed}
             className="w-full py-3 bg-[#fed700] hover:bg-[#eec800] text-[#333e48] font-black text-xs rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? (

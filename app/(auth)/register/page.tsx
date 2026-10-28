@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { FormInput } from "@/components/shared/form-input";
 import { H1 } from "@/components/ui/typography";
 import { useAuth } from "@/hooks/use-auth";
+import { newPasswordSchema, PASSWORD_POLICY_MESSAGE } from "@/lib/validations/auth";
 
 function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -51,6 +53,9 @@ function EyeOffIcon({ className = "w-4 h-4" }: { className?: string }) {
 }
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const navigationTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(navigationTimer.current), []);
   const { user } = useAuth();
   const [role, setRole] = useState<"USER" | "MEMBER">("USER");
   const [name, setName] = useState("");
@@ -66,20 +71,20 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (user) {
-      if (user.role === "ADMIN") window.location.href = "/admin";
-      else if (user.role === "MEMBER") window.location.href = "/member/dashboard";
-      else window.location.href = "/user/dashboard";
+      if (user.role === "ADMIN") router.replace("/admin");
+      else if (user.role === "MEMBER") router.replace("/member/dashboard");
+      else router.replace("/user/dashboard");
     }
-  }, [user]);
+  }, [user, router]);
 
   // Real-time password verification rules
-  const hasMinLen = password.length >= 8;
+  const hasMinLen = password.length >= 8 && password.length <= 128;
   const hasUpper = /[A-Z]/.test(password);
   const hasLower = /[a-z]/.test(password);
   const hasNumber = /\d/.test(password);
   const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
 
-  const isPasswordValid = hasMinLen && hasUpper && hasLower && hasNumber && hasSpecial;
+  const isPasswordValid = newPasswordSchema.safeParse(password).success;
   const isPasswordMatch = password && confirmPassword && password === confirmPassword;
   const isPasswordMismatch = Boolean(confirmPassword && password !== confirmPassword);
 
@@ -96,7 +101,7 @@ export default function RegisterPage() {
     }
 
     if (!isPasswordValid) {
-      setErrorMessage("Please ensure your password meets all 5 security requirements listed below.");
+      setErrorMessage(PASSWORD_POLICY_MESSAGE);
       return;
     }
 
@@ -139,8 +144,8 @@ export default function RegisterPage() {
 
       setSuccessMessage("✓ Registration successful! Sending OTP code to your email...");
 
-      setTimeout(() => {
-        window.location.href = `/verify-otp?email=${encodeURIComponent(email.toLowerCase())}`;
+      navigationTimer.current = setTimeout(() => {
+        router.replace(`/verify-otp?email=${encodeURIComponent(email.trim().toLowerCase())}`);
       }, 800);
     } catch (err) {
       console.error("Registration submission error:", err);
@@ -159,6 +164,11 @@ export default function RegisterPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+        setErrorMessage("Choose a PNG, JPEG or WebP image no larger than 5 MB.");
+        e.target.value = "";
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setAvatar(reader.result as string);
@@ -183,7 +193,7 @@ export default function RegisterPage() {
           </Link>
           <H1 className="text-2xl font-bold tracking-tight pt-2">Create Account</H1>
           <p className="text-xs text-muted-foreground">
-            Join Bangladesh's premier multi-vendor gadget marketplace.
+            Join Bangladesh&apos;s premier multi-vendor gadget marketplace.
           </p>
         </div>
 
@@ -236,7 +246,7 @@ export default function RegisterPage() {
             <div className="flex items-center space-x-3">
               <div className="h-12 w-12 rounded-full bg-muted border border-border overflow-hidden shrink-0 flex items-center justify-center relative">
                 {avatar ? (
-                  <img src={avatar} alt="Avatar" className="h-full w-full object-cover" />
+                  <Image src={avatar} alt="Avatar" width={80} height={80} unoptimized className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-lg">👤</span>
                 )}
@@ -336,7 +346,7 @@ export default function RegisterPage() {
               <p className="font-bold text-foreground mb-1">Password Requirements:</p>
               <div className={`flex items-center gap-1.5 ${hasMinLen ? "text-emerald-600 font-semibold" : "text-muted-foreground"}`}>
                 <span>{hasMinLen ? "✓" : "○"}</span>
-                <span>At least 8 characters</span>
+                <span>8–128 characters</span>
               </div>
               <div className={`flex items-center gap-1.5 ${hasUpper ? "text-emerald-600 font-semibold" : "text-muted-foreground"}`}>
                 <span>{hasUpper ? "✓" : "○"}</span>

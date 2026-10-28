@@ -3,17 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
 import { verifyPassword, hashPassword, passwordNeedsRehash, PasswordWorkloadBusy, signJwtToken } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
-import { getClientIp, rateLimit } from "@/lib/rate-limit";
 import { otpDeliveryFailure } from "@/lib/otp-response";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
 
 export async function POST(req: Request) {
   try {
-    const limit = await rateLimit(getClientIp(req.headers), 10, 60, "auth-login");
-    if (!limit.success) {
-      return NextResponse.json({ success: false, message: "Too many sign-in attempts. Try again shortly." }, { status: 429 });
-    }
+    await limitAccountIp(req, "auth-login");
 
-    const body = await req.json();
+    const body = await readAccountJson(req);
     const validated = loginSchema.safeParse(body);
 
     if (!validated.success) {
@@ -28,6 +25,7 @@ export async function POST(req: Request) {
     }
 
     const { email, password } = validated.data;
+    await limitAccountIdentity(email, "auth-login", 10, 60);
 
     // 1. Retrieve user from database
     let user = await prisma.user.findUnique({
@@ -116,13 +114,6 @@ export async function POST(req: Request) {
     return response;
   } catch (error) {
     if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
-    console.error("Login error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Internal server error during login.",
-      },
-      { status: 500 }
-    );
+    return accountErrorResponse(error);
   }
 }

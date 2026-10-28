@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { getCurrentUser } from "@/lib/session";
 import { signJwtToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { accountEmailSchema, otpCodeSchema } from "@/lib/validations/auth";
+import { emailChangeVerifySchema } from "@/lib/validations/auth";
 import { prepareOtpAttempt, consumeVerifiedOtp, otpAccountFingerprint } from "@/lib/otp";
-import { otpErrorResponse } from "@/lib/otp-response";
-import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
 
-const schema = z.object({ newEmail: accountEmailSchema, otp: otpCodeSchema });
 export async function POST(req: Request) {
   try {
-    if (!(await rateLimit(getClientIp(req.headers), 5, 60, "email-change-verify")).success) return NextResponse.json({ success: false, message: "Too many verification attempts. Try again shortly." }, { status: 429 });
+    await limitAccountIp(req, "email-change-verify", 5);
     const actor = await getCurrentUser();
     if (!actor) return NextResponse.json({ success: false, message: "Please sign in." }, { status: 401 });
-    const parsed = schema.safeParse(await req.json().catch(() => null));
+    await limitAccountIdentity(actor.id, "email-change-verify");
+    const parsed = emailChangeVerifySchema.safeParse(await readAccountJson(req));
     if (!parsed.success) return NextResponse.json({ success: false, message: "Enter the new email and its six-digit email-change code." }, { status: 400 });
     const { newEmail, otp } = parsed.data;
     const invalid = () => NextResponse.json({ success: false, message: "Invalid or expired email-change code. Request a fresh code from this account." }, { status: 400 });
@@ -28,5 +26,5 @@ export async function POST(req: Request) {
     const response = NextResponse.json({ success: true, message: "Email address updated and verified.", user: updated });
     response.cookies.set("auth_token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 604800, path: "/" });
     return response;
-  } catch (error) { return otpErrorResponse(error); }
+  } catch (error) { return accountErrorResponse(error); }
 }

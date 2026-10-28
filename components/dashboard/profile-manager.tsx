@@ -5,6 +5,7 @@ import Link from "next/link";
 import NextImage from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { newPasswordSchema, PASSWORD_POLICY_MESSAGE } from "@/lib/validations/auth";
 
 interface AddressData {
   id?: string;
@@ -284,13 +285,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success && data.user) {
         setProfileMsg({ type: "success", text: "প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে! (Profile updated successfully)" });
-        const updatedUser = { ...(profile || {}), name, phone, avatar };
-        if (profile) {
-          setProfile({ ...profile, name, phone, avatar });
-        }
-        updateUser({ name, phone, avatar });
+        const updatedUser = data.user;
+        setProfile((current) => current ? { ...current, ...updatedUser } : current);
+        setName(updatedUser.name || "");
+        setPhone(updatedUser.phone || "");
+        setAvatar(updatedUser.avatar || "");
+        updateUser(updatedUser);
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
         }
@@ -400,8 +402,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Password Update
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordMsg({ type: "error", text: "নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।" });
+    if (!newPasswordSchema.safeParse(newPassword).success) {
+      setPasswordMsg({ type: "error", text: PASSWORD_POLICY_MESSAGE });
       return;
     }
 
@@ -1050,12 +1052,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                 autoComplete="new-password"
                 type={showPassword ? "text" : "password"}
                 required
-                minLength={6}
+                minLength={8}
+                maxLength={128}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="কমপক্ষে ৬ অক্ষর (Minimum 6 characters)"
+                placeholder="8–128 characters"
                 className="w-full px-4 py-2.5 text-xs text-[#333e48] border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#fed700] transition"
               />
+              <p className="text-xs text-slate-500">{PASSWORD_POLICY_MESSAGE}</p>
             </div>
 
             {/* Confirm New Password */}
@@ -1066,7 +1070,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                 autoComplete="new-password"
                 type={showPassword ? "text" : "password"}
                 required
-                minLength={6}
+                minLength={8}
+                maxLength={128}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="পুনরায় নতুন পাসওয়ার্ড লিখুন"

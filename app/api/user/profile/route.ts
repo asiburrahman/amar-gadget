@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { validateSessionToken } from "@/lib/session-validation";
 import { prisma } from "@/lib/prisma";
+import { profileUpdateSchema } from "@/lib/validations/auth";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -64,6 +66,7 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
+    await limitAccountIp(req, "profile-update", 60);
     const cookieStore = await cookies();
     const token = cookieStore.get("auth_token")?.value;
 
@@ -83,8 +86,10 @@ export async function PUT(req: Request) {
       );
     }
 
-    const body = await req.json();
-    const { name, phone, avatar, address } = body;
+    await limitAccountIdentity(payload.sub, "profile-update", 30, 60);
+    const parsed = profileUpdateSchema.safeParse(await readAccountJson(req, 7 * 1024 * 1024 + 16 * 1024));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Check the profile/address fields and their length limits.", errors: parsed.error.flatten().fieldErrors }, { status: 400 });
+    const { name, phone, avatar, address } = parsed.data;
 
     const userId = payload.sub as string;
 
@@ -119,11 +124,11 @@ export async function PUT(req: Request) {
         await prisma.address.update({
           where: { id: defaultAddress.id },
           data: {
-            fullName: address.fullName || updatedUser.name || "Default Customer",
-            phone: address.phone || updatedUser.phone || "",
-            street: address.street || "",
-            city: address.city || "",
-            district: address.district || "",
+            fullName: address.fullName,
+            phone: address.phone,
+            street: address.street,
+            city: address.city,
+            district: address.district,
             zipCode: address.zipCode || null,
           },
         });
@@ -131,11 +136,11 @@ export async function PUT(req: Request) {
         await prisma.address.create({
           data: {
             userId,
-            fullName: address.fullName || updatedUser.name || "Default Customer",
-            phone: address.phone || updatedUser.phone || "",
-            street: address.street || "",
-            city: address.city || "",
-            district: address.district || "",
+            fullName: address.fullName,
+            phone: address.phone,
+            street: address.street,
+            city: address.city,
+            district: address.district,
             zipCode: address.zipCode || null,
             isDefault: true,
           },
@@ -148,11 +153,5 @@ export async function PUT(req: Request) {
       message: "Profile updated successfully!",
       user: updatedUser,
     });
-  } catch {
-    console.error("PUT /api/user/profile error:");
-    return NextResponse.json(
-      { success: false, message: "Failed to update profile." },
-      { status: 500 }
-    );
-  }
+  } catch (error) { return accountErrorResponse(error); }
 }

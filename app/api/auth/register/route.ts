@@ -3,17 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations/auth";
 import { hashPassword, PasswordWorkloadBusy } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
-import { getClientIp, rateLimit } from "@/lib/rate-limit";
 import { otpDeliveryFailure } from "@/lib/otp-response";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
 
 export async function POST(req: Request) {
   try {
-    const limit = await rateLimit(getClientIp(req.headers), 5, 60, "auth-register");
-    if (!limit.success) {
-      return NextResponse.json({ success: false, message: "Too many registration attempts. Try again shortly." }, { status: 429 });
-    }
+    await limitAccountIp(req, "auth-register", 5);
 
-    const body = await req.json();
+    const body = await readAccountJson(req, 7 * 1024 * 1024 + 16 * 1024);
     const validated = registerSchema.safeParse(body);
 
     if (!validated.success) {
@@ -28,6 +25,7 @@ export async function POST(req: Request) {
     }
 
     const { name, email, password, confirmPassword, role, avatar } = validated.data;
+    await limitAccountIdentity(email, "auth-register", 3, 600);
 
     if (confirmPassword && confirmPassword !== password) {
       return NextResponse.json(
@@ -111,13 +109,6 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
-    console.error("Registration error:", error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        message: "Internal server error during registration."
-      },
-      { status: 500 }
-    );
+    return accountErrorResponse(error);
   }
 }

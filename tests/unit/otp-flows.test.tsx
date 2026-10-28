@@ -1,14 +1,16 @@
 /** @jest-environment jsdom */
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import VerifyOtpPage from "../../app/(auth)/verify-otp/page";
+import ResetPasswordPage from "../../app/(auth)/reset-password/page";
 import { ProfileManager } from "../../components/dashboard/profile-manager";
 import { useAuthStore } from "../../stores/auth-store";
 
 const replace = jest.fn();
+const push = jest.fn();
 const setUser = jest.fn();
 const refreshUser = jest.fn();
 const updateUser = jest.fn();
-jest.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("email=signup%40example.invalid"), useRouter: () => ({ replace, refresh: jest.fn() }) }));
+jest.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("email=signup%40example.invalid"), useRouter: () => ({ replace, push, refresh: jest.fn() }) }));
 jest.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ setUser, refreshUser, updateUser }) }));
 const user = { id: "otp-ui", name: "Account owner", email: "old@example.invalid", role: "USER", phone: null, avatar: null, isVerified: true, createdAt: "2026-10-01T00:00:00Z", addresses: [] };
 const response = (body: unknown, status = 200, retryAfter?: string) => ({ ok: status < 400, status, json: async () => body, headers: new Headers(retryAfter ? { "Retry-After": retryAfter } : {}) }) as Response;
@@ -146,4 +148,23 @@ it.each([true, false])("clears local authentication and redirects only after a s
     expect(await screen.findByText("Credential conflict.")).toBeTruthy();
     expect(setUser).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
   }
+});
+
+it("applies the shared password policy before reset and clears secrets after server confirmation", async () => {
+  jest.useFakeTimers();
+  render(<ResetPasswordPage />);
+  fireEvent.change(screen.getByLabelText(/Verification Code/), { target: { value: "012345" } });
+  fireEvent.change(screen.getByLabelText(/\(New Password\)/), { target: { value: "12345678" } });
+  fireEvent.change(screen.getByLabelText(/Confirm Password/), { target: { value: "12345678" } });
+  fireEvent.click(screen.getByRole("button", { name: /Save New Password/ }));
+  expect(fetch).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText(/\(New Password\)/), { target: { value: "Reset password!123" } });
+  fireEvent.change(screen.getByLabelText(/Confirm Password/), { target: { value: "Reset password!123" } });
+  (fetch as jest.Mock).mockResolvedValueOnce(response({ success: true, message: "Sign in with your new password." }));
+  fireEvent.click(screen.getByRole("button", { name: /Save New Password/ }));
+  await act(async () => undefined);
+  expect((screen.getByLabelText(/\(New Password\)/) as HTMLInputElement).value).toBe("");
+  expect((screen.getByRole("button", { name: /Save New Password/ }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => { await jest.advanceTimersByTimeAsync(2000); });
+  expect(push).toHaveBeenCalledWith("/login");
 });

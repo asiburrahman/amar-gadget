@@ -69,8 +69,8 @@ export async function rateLimit(
       limit,
       remaining: Math.max(0, limit - requestCount),
     };
-  } catch (error) {
-    console.error("Rate limiting execution failed:", error);
+  } catch {
+    console.error("Distributed rate limiting is unavailable.");
     return {
       success: process.env.NODE_ENV !== "production",
       limit,
