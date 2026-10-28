@@ -2,11 +2,14 @@
 
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/order";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
+import { canonicalCheckoutRequest } from "@/lib/checkout-request";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
 
 function hashCheckoutToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -19,13 +22,48 @@ function matchesCheckoutToken(token: string, tokenHash: string | null) {
   return candidate.length === stored.length && timingSafeEqual(candidate, stored);
 }
 
+class CheckoutError extends Error {
+  constructor(message: string, readonly code: string) { super(message); }
+}
+
+const checkoutResultSelect = {
+  id: true, trackingNumber: true, status: true, paymentStatus: true,
+} satisfies Prisma.OrderSelect;
+
 export async function createOrder(input: CheckoutInput) {
   try {
     const validated = checkoutSchema.parse(input);
     const currentUser = await getCurrentUser();
-    const checkoutToken = randomBytes(32).toString("hex");
+    const ip = getClientIp(await headers());
+    const ipLimit = await rateLimit(ip, 30, 60, "checkout-create-ip");
+    const actor = currentUser?.id ?? validated.phone.replace(/\D/g, "");
+    const actorLimit = ipLimit.success && await rateLimit(
+      createHash("sha256").update(actor).digest("hex"), 10, 60,
+      currentUser ? "checkout-create-account" : "checkout-create-contact",
+    );
+    if (!ipLimit.success || !actorLimit || !actorLimit.success) {
+      return { success: false as const, code: "RATE_LIMITED", error: "Too many checkout attempts. Please wait a minute and try again." };
+    }
+    const checkoutToken = validated.checkoutToken;
+    const tokenHash = hashCheckoutToken(checkoutToken);
+    const requestHash = createHash("sha256")
+      .update(canonicalCheckoutRequest(validated, currentUser?.id ?? null)).digest("hex");
 
     const order = await prisma.$transaction(async (tx) => {
+      // Serialize the same attempt across requests/processes before any guest
+      // or stock writes. The database releases this lock on commit/rollback.
+      // Only a constant hash is sent as a parameter; no token/PII enters SQL.
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${tokenHash}, 0))`;
+      const existing = await tx.order.findUnique({
+        where: { checkoutTokenHash: tokenHash },
+        select: { ...checkoutResultSelect, checkoutRequestHash: true },
+      });
+      if (existing) {
+        if (existing.checkoutRequestHash !== requestHash) {
+          throw new CheckoutError("This checkout attempt belongs to different details. Start a new checkout.", "CHECKOUT_CONFLICT");
+        }
+        return existing;
+      }
       const user = currentUser
         ? await tx.user.findUnique({ where: { id: currentUser.id } })
         : await tx.user.create({
@@ -38,12 +76,13 @@ export async function createOrder(input: CheckoutInput) {
             },
           });
 
-      if (!user) throw new Error("Your account is no longer available. Please sign in again.");
+      if (!user) throw new CheckoutError("Your account is no longer available. Please sign in again.", "ACCOUNT_UNAVAILABLE");
 
       let subtotal = new Prisma.Decimal(0);
       const orderItems = [];
 
-      for (const item of validated.items) {
+      // A consistent lock order also avoids cart A/B vs B/A stock deadlocks.
+      for (const item of [...validated.items].sort((a, b) => a.productId.localeCompare(b.productId))) {
         const product = await tx.product.findUnique({
           where: { id: item.productId },
           include: { seller: { select: { sellerStatus: true } } },
@@ -54,7 +93,7 @@ export async function createOrder(input: CheckoutInput) {
           product.status !== "APPROVED" ||
           product.seller.sellerStatus !== "APPROVED"
         ) {
-          throw new Error("One or more selected products are no longer available.");
+          throw new CheckoutError("One or more selected products are no longer available.", "PRODUCT_UNAVAILABLE");
         }
 
         const stockUpdate = await tx.product.updateMany({
@@ -62,7 +101,7 @@ export async function createOrder(input: CheckoutInput) {
           data: { stock: { decrement: item.quantity } },
         });
         if (stockUpdate.count !== 1) {
-          throw new Error(`Insufficient stock for ${product.name}.`);
+          throw new CheckoutError(`Insufficient stock for ${product.name}.`, "OUT_OF_STOCK");
         }
 
         const unitPrice = product.discountPrice ?? product.price;
@@ -85,11 +124,11 @@ export async function createOrder(input: CheckoutInput) {
           (!coupon.minSpend || subtotal.gte(coupon.minSpend));
 
         if (!couponIsValid || !coupon) {
-          throw new Error("The coupon code is invalid, expired, or does not meet the minimum spend.");
+          throw new CheckoutError("The coupon code is invalid, expired, or does not meet the minimum spend.", "INVALID_COUPON");
         }
 
         if (coupon.discount.lte(0)) {
-          throw new Error("The coupon code is invalid.");
+          throw new CheckoutError("The coupon code is invalid.", "INVALID_COUPON");
         }
         if (coupon.isPercentage) {
           const percentage = Math.min(100, Math.max(0, Number(coupon.discount)));
@@ -102,7 +141,7 @@ export async function createOrder(input: CheckoutInput) {
       const shippingFee = subtotal.gt(0) && subtotal.lte(50000) ? 150 : 0;
       total = total.add(shippingFee);
       if (validated.paymentMethod === "STRIPE" && total.lt(1)) {
-        throw new Error("Card checkout requires an order total of at least BDT 1.");
+        throw new CheckoutError("Card checkout requires an order total of at least BDT 1.", "INVALID_TOTAL");
       }
 
       return tx.order.create({
@@ -116,12 +155,17 @@ export async function createOrder(input: CheckoutInput) {
           shippingPhone: validated.phone,
           trackingNumber: `AG-${randomBytes(4).toString("hex").toUpperCase()}`,
           couponCode: validated.couponCode?.trim().toUpperCase() || null,
-          checkoutTokenHash: hashCheckoutToken(checkoutToken),
+          checkoutTokenHash: tokenHash,
+          checkoutRequestHash: requestHash,
           items: { create: orderItems },
         },
-        select: { id: true, trackingNumber: true },
+        select: checkoutResultSelect,
       });
     });
+
+    if (order.status === "CANCELLED" || order.paymentStatus === "FAILED") {
+      return { success: false as const, code: "CHECKOUT_CLOSED", error: "This checkout is closed. Start a new checkout to place another order." };
+    }
 
     revalidatePath("/user/orders");
     revalidatePath("/admin/orders");
@@ -136,13 +180,23 @@ export async function createOrder(input: CheckoutInput) {
       success: true as const,
       orderId: order.id,
       trackingNumber: order.trackingNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
       ...(validated.paymentMethod === "STRIPE" ? { checkoutToken } : {}),
     };
   } catch (error) {
-    console.error("Error creating order:", error);
+    if (error instanceof ZodError) {
+      return { success: false as const, code: "INVALID_CHECKOUT", error: "Check your cart and shipping details, then try again." };
+    }
+    if (error instanceof CheckoutError) {
+      return { success: false as const, code: error.code, error: error.message };
+    }
+    // Never return database/provider exception details to a public action.
+    console.error("Order creation failed:", error);
     return {
       success: false as const,
-      error: error instanceof Error ? error.message : "Failed to process order",
+      code: "INTERNAL_ERROR",
+      error: "Unable to process checkout right now. Please try again.",
     };
   }
 }

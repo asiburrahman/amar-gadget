@@ -1,43 +1,42 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useCartStore, useHydratedStore } from "@/stores/cart-store";
+import React, { useState, useRef } from "react";
+import { useCartStore } from "@/stores/cart-store";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createOrder } from "@/server/actions/order/order-actions";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { getCheckoutAttempt, clearCheckoutAttempt, type CheckoutAttempt } from "@/lib/checkout-attempt";
+import type { CheckoutDetails } from "@/lib/validations/order";
 
 export default function CheckoutPage() {
   const { items, couponCode, discountPercentage, clearCart } = useCartStore();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const attemptRef = useRef<CheckoutAttempt | undefined>(undefined);
+  const submittingRef = useRef(false);
 
   const [formData, setFormData] = useState({
-    fullName: "",
-    phone: "",
-    street: "House 12, Road 5, Dhanmondi",
-    city: "Dhaka",
-    district: "Dhaka",
-    zipCode: "1212",
+    fullName: null as string | null,
+    phone: null as string | null,
+    street: "",
+    city: "",
+    district: "",
+    zipCode: "",
     paymentMethod: "COD" as "COD" | "STRIPE",
   });
 
-  useEffect(() => {
-    if (user) {
-      setFormData((prev) => ({
-        ...prev,
-        fullName: user.name || prev.fullName,
-        phone: (user as any).phone || prev.phone,
-      }));
-    }
-  }, [user]);
+  // Prefill untouched fields without an effect overwriting customer edits.
+  const fullName = formData.fullName ?? user?.name ?? "";
+  const phone = formData.phone ?? user?.phone ?? "";
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [canRestart, setCanRestart] = useState(false);
 
-  const subtotal = items.reduce((sum: number, item: any) => {
+  const subtotal = items.reduce((sum, item) => {
     const price = item.discountPrice || item.price;
     return sum + price * item.quantity;
   }, 0);
@@ -52,28 +51,31 @@ export default function CheckoutPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (items.length === 0) return;
+    if (items.length === 0 || authLoading || submittingRef.current) return;
 
+    submittingRef.current = true;
     setLoading(true);
     setErrorMsg("");
+    setCanRestart(false);
 
     try {
-      const result = await createOrder(
-        {
-          items: items.map((i: any) => ({ productId: i.id, quantity: i.quantity })),
-          fullName: formData.fullName,
-          phone: formData.phone,
-          street: formData.street,
-          city: formData.city,
-          district: formData.district,
-          zipCode: formData.zipCode,
-          paymentMethod: formData.paymentMethod,
-          couponCode: couponCode || undefined,
-        },
-      );
+      const details: CheckoutDetails = {
+        items: items.map((item) => ({ productId: item.id, quantity: item.quantity })),
+        fullName,
+        phone,
+        street: formData.street,
+        city: formData.city,
+        district: formData.district,
+        zipCode: formData.zipCode,
+        paymentMethod: formData.paymentMethod,
+        couponCode: couponCode || undefined,
+      };
+      const attempt = await getCheckoutAttempt(details, attemptRef.current);
+      attemptRef.current = attempt;
+      const result = await createOrder({ ...details, checkoutToken: attempt.token });
 
       if (result.success && result.orderId) {
-        if (formData.paymentMethod === "STRIPE") {
+        if (formData.paymentMethod === "STRIPE" && result.paymentStatus !== "PAID") {
           if (!result.checkoutToken) {
             setErrorMsg("Secure checkout could not be initialized. Please try again.");
             return;
@@ -97,13 +99,16 @@ export default function CheckoutPage() {
         }
 
         clearCart();
+        clearCheckoutAttempt(attempt.token);
         router.push(`/order-success/${result.orderId}`);
       } else {
         setErrorMsg(result.error || "Order creation failed. Please check form inputs.");
+        setCanRestart(result.code === "CHECKOUT_CLOSED" || result.code === "CHECKOUT_CONFLICT");
       }
-    } catch (err: any) {
-      setErrorMsg("An unexpected error occurred. Please try again.");
+    } catch {
+      setErrorMsg("Checkout could not be completed. Retry with the same details to safely resume your order.");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -128,7 +133,15 @@ export default function CheckoutPage() {
 
                 {errorMsg && (
                   <div className="p-3 text-xs font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
-                    {errorMsg}
+                    <p>{errorMsg}</p>
+                    {canRestart && (
+                      <button type="button" disabled={loading} className="mt-2 underline" onClick={() => {
+                        if (attemptRef.current) clearCheckoutAttempt(attemptRef.current.token);
+                        attemptRef.current = undefined;
+                        setCanRestart(false);
+                        setErrorMsg("Ready for a new checkout. Review your details and place the order again.");
+                      }}>Start a new checkout</button>
+                    )}
                   </div>
                 )}
 
@@ -139,7 +152,7 @@ export default function CheckoutPage() {
                       required
                       name="fullName"
                       placeholder="e.g. Asibur Rahman"
-                      value={formData.fullName}
+                      value={fullName}
                       onChange={handleChange}
                     />
                   </div>
@@ -150,7 +163,7 @@ export default function CheckoutPage() {
                       required
                       name="phone"
                       placeholder="e.g. 01700000000"
-                      value={formData.phone}
+                      value={phone}
                       onChange={handleChange}
                     />
                   </div>
@@ -242,7 +255,7 @@ export default function CheckoutPage() {
                 <h2 className="text-lg font-bold text-foreground border-b border-border pb-3">Order Items ({items.length})</h2>
 
                 <div className="divide-y divide-border max-h-60 overflow-y-auto pr-1 space-y-2">
-                  {items.map((item: any) => (
+                  {items.map((item) => (
                     <div key={item.id} className="pt-2 flex justify-between text-xs">
                       <div>
                         <p className="font-bold text-foreground line-clamp-1">{item.name}</p>
@@ -280,11 +293,11 @@ export default function CheckoutPage() {
 
                 <Button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || authLoading}
                   variant="default"
                   className="w-full h-12 font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
-                  {loading ? "Processing Order..." : "Confirm & Place Order"}
+                  {authLoading ? "Loading account..." : loading ? "Processing Order..." : "Confirm & Place Order"}
                 </Button>
               </div>
             </div>

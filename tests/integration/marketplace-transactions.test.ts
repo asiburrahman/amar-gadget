@@ -6,6 +6,7 @@ jest.mock("@/lib/session", () => ({
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
 jest.mock("next/headers", () => ({
   cookies: jest.fn().mockResolvedValue({ set: jest.fn(), get: jest.fn() }),
+  headers: jest.fn().mockResolvedValue(new Headers()),
 }));
 jest.mock("@/lib/auth", () => ({ signJwtToken: jest.fn().mockResolvedValue("integration-token") }));
 jest.mock("@/lib/rate-limit", () => ({
@@ -16,7 +17,10 @@ jest.mock("@/lib/rate-limit", () => ({
 import type { PrismaClient } from "@prisma/client";
 import type { CheckoutInput } from "@/lib/validations/order";
 import { publicProductWhere } from "@/lib/catalog-visibility";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { getCurrentUser } from "@/lib/session";
+import { rateLimit } from "@/lib/rate-limit";
+import { cookies } from "next/headers";
 
 const databaseSuite = process.env.TEST_DATABASE_URL ? describe : describe.skip;
 databaseSuite("PostgreSQL marketplace transactions", () => {
@@ -53,26 +57,28 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
       status: "APPROVED", sellerId, categoryId,
     } });
     productId = product.id;
-  });
+  }, 30_000); // Cold module compilation/adapter startup is separate from query timing.
 
   afterAll(async () => {
     if (!db) return;
-    // Setup may have failed midway: never pass an undefined fixture ID to a
-    // delete filter, because Prisma can omit it and broaden the operation.
-    if (productId) {
-      const orders = await db.order.findMany({ where: { items: { some: { productId } } }, select: { id: true, userId: true } });
-      guestUserIds.push(...orders.map((order) => order.userId));
-      await db.orderItem.deleteMany({ where: { productId } });
-      await db.order.deleteMany({ where: { id: { in: orders.map((order) => order.id) } } });
-      await db.product.delete({ where: { id: productId } });
-    }
-    if (categoryId) await db.category.delete({ where: { id: categoryId } });
-    await db.otpToken.deleteMany({ where: { email: { startsWith: prefix } } });
-    await db.user.deleteMany({ where: { OR: [{ id: { in: guestUserIds } }, { email: { startsWith: prefix } }] } });
-    await db.$disconnect();
-  });
+    try {
+      // Setup may have failed midway: never pass an undefined fixture ID to a
+      // delete filter, because Prisma can omit it and broaden the operation.
+      if (productId) {
+        const orders = await db.order.findMany({ where: { items: { some: { productId } } }, select: { id: true, userId: true } });
+        guestUserIds.push(...orders.map((order) => order.userId));
+        await db.orderItem.deleteMany({ where: { productId } });
+        await db.order.deleteMany({ where: { id: { in: orders.map((order) => order.id) } } });
+        await db.product.delete({ where: { id: productId } });
+      }
+      if (categoryId) await db.category.delete({ where: { id: categoryId } });
+      await db.otpToken.deleteMany({ where: { email: { startsWith: prefix } } });
+      await db.user.deleteMany({ where: { OR: [{ id: { in: guestUserIds } }, { email: { startsWith: prefix } }] } });
+    } finally { await db.$disconnect(); }
+  }, 30_000);
 
   const checkout = (overrides: Partial<CheckoutInput> = {}): CheckoutInput => ({
+    checkoutToken: randomBytes(32).toString("hex"),
     items: [{ productId, quantity: 1 }], fullName: "Codex test buyer", phone: "01700000000",
     street: "Test street", city: "Dhaka", district: "Dhaka", paymentMethod: "COD", ...overrides,
   });
@@ -110,6 +116,108 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     await db.product.update({ where: { id: productId }, data: { stock: 10 } });
   });
 
+  it("returns one order and one guest for concurrent retries of the same final-unit checkout", async () => {
+    await db.product.update({ where: { id: productId }, data: { stock: 1 } });
+    const input = checkout();
+    const usersBefore = await db.user.count();
+    const ordersBefore = await db.order.count({ where: { items: { some: { productId } } } });
+    const results = await Promise.all(Array.from({ length: 4 }, () => createOrder(input)));
+    expect(results.every((result) => result.success)).toBe(true);
+    expect(new Set(results.filter((result) => result.success).map((result) => result.orderId)).size).toBe(1);
+    expect(await db.user.count()).toBe(usersBefore + 1);
+    expect(await db.order.count({ where: { items: { some: { productId } } } })).toBe(ordersBefore + 1);
+    expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(0);
+    await db.product.update({ where: { id: productId }, data: { stock: 10 } });
+  });
+
+  it("replays the committed order without repricing or reserving stock again", async () => {
+    const input = checkout();
+    const first = await createOrder(input);
+    if (!first.success) throw new Error(first.error);
+    await db.product.update({ where: { id: productId }, data: { price: 2000, discountPrice: null, stock: 0 } });
+    try {
+      const retry = await createOrder(input);
+      expect(retry.success && retry.orderId).toBe(first.orderId);
+      const order = await db.order.findUniqueOrThrow({ where: { id: first.orderId } });
+      expect(Number(order.total)).toBe(1050);
+      expect(order.checkoutTokenHash).not.toBe(input.checkoutToken);
+      expect(order.checkoutRequestHash).toMatch(/^[a-f0-9]{64}$/);
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(0);
+    } finally {
+      await db.product.update({ where: { id: productId }, data: { price: 1000, discountPrice: 900, stock: 10 } });
+    }
+  });
+
+  it("recovers the committed order when response-cookie writing fails after commit", async () => {
+    const input = checkout();
+    const usersBefore = await db.user.count();
+    const ordersBefore = await db.order.count({ where: { items: { some: { productId } } } });
+    const log = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    (cookies as jest.Mock).mockResolvedValueOnce({ set: () => { throw new Error("Simulated lost response boundary"); } });
+    try {
+      expect(await createOrder(input)).toMatchObject({ success: false, code: "INTERNAL_ERROR" });
+      expect((await createOrder(input)).success).toBe(true);
+      expect(await db.user.count()).toBe(usersBefore + 1);
+      expect(await db.order.count({ where: { items: { some: { productId } } } })).toBe(ordersBefore + 1);
+    } finally { log.mockRestore(); }
+  });
+
+  it.each([
+    { street: "Different shipping address" },
+    { paymentMethod: "STRIPE" as const },
+    { couponCode: "DIFFERENT" },
+  ])("rejects changed payload reuse without modifying the original order: %j", async (change) => {
+    const input = checkout();
+    const first = await createOrder(input);
+    if (!first.success) throw new Error(first.error);
+    const stock = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+    const retry = await createOrder({ ...input, ...change });
+    expect(retry).toMatchObject({ success: false, code: "CHECKOUT_CONFLICT" });
+    expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock);
+    expect((await db.order.findUniqueOrThrow({ where: { id: first.orderId } })).paymentMethod).toBe("COD");
+  });
+
+  it("binds an attempt to its current account identity", async () => {
+    const input = checkout();
+    expect((await createOrder(input)).success).toBe(true);
+    (getCurrentUser as jest.Mock).mockResolvedValue({ id: sellerId, role: "MEMBER", sellerStatus: "APPROVED" });
+    try {
+      expect(await createOrder(input)).toMatchObject({ success: false, code: "CHECKOUT_CONFLICT" });
+    } finally {
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+    }
+  });
+
+  it("allows the same attempt after a failed transaction without retaining partial writes", async () => {
+    await db.product.update({ where: { id: productId }, data: { stock: 0 } });
+    const input = checkout();
+    expect(await createOrder(input)).toMatchObject({ success: false, code: "OUT_OF_STOCK" });
+    await db.product.update({ where: { id: productId }, data: { stock: 10 } });
+    expect((await createOrder(input)).success).toBe(true);
+    expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(9);
+  });
+
+  it("rejects excessive/malformed input before creating any transaction", async () => {
+    const transaction = jest.spyOn(db, "$transaction");
+    try {
+      expect(await createOrder(checkout({ checkoutToken: "invalid" }))).toMatchObject({ success: false, code: "INVALID_CHECKOUT" });
+      expect(await createOrder(checkout({ items: [{ productId, quantity: 101 }] }))).toMatchObject({ success: false, code: "INVALID_CHECKOUT" });
+      expect(await createOrder(checkout({ items: [{ productId, quantity: 1 }, { productId, quantity: 1 }] }))).toMatchObject({ success: false, code: "INVALID_CHECKOUT" });
+      expect(transaction).not.toHaveBeenCalled();
+    } finally { transaction.mockRestore(); }
+  });
+
+  it("denies rate-limited IPs and contacts before writes", async () => {
+    const transaction = jest.spyOn(db, "$transaction");
+    try {
+      (rateLimit as jest.Mock).mockResolvedValueOnce({ success: false });
+      expect(await createOrder(checkout())).toMatchObject({ success: false, code: "RATE_LIMITED" });
+      (rateLimit as jest.Mock).mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ success: false });
+      expect(await createOrder(checkout())).toMatchObject({ success: false, code: "RATE_LIMITED" });
+      expect(transaction).not.toHaveBeenCalled();
+    } finally { transaction.mockRestore(); }
+  });
+
   it("consumes an OTP once and commits account verification", async () => {
     const email = `${prefix}-otp@example.invalid`;
     const user = await db.user.create({ data: { email, isVerified: false } });
@@ -122,7 +230,8 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
   });
 
   it("verifies a signed payment event and tolerates duplicate delivery", async () => {
-    const result = await createOrder(checkout({ paymentMethod: "STRIPE" }));
+    const input = checkout({ paymentMethod: "STRIPE" });
+    const result = await createOrder(input);
     if (!result.success) throw new Error(result.error);
     const event = { type: "payment_intent.succeeded", data: { object: { id: "pi_codex_test", metadata: { orderId: result.orderId }, amount_received: 105000, currency: "bdt" } } };
     expect((await dispatch(event)).status).toBe(200);
@@ -131,17 +240,21 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     expect(order.paymentStatus).toBe("PAID");
     expect(order.status).toBe("PROCESSING");
     expect(order.paymentIntentId).toBe("pi_codex_test");
+    expect(await createOrder(input)).toMatchObject({ success: true, orderId: result.orderId, paymentStatus: "PAID" });
   });
 
   it("restocks an expired unpaid Stripe order exactly once", async () => {
     const stock = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
-    const result = await createOrder(checkout({ paymentMethod: "STRIPE" }));
+    const input = checkout({ paymentMethod: "STRIPE" });
+    const result = await createOrder(input);
     if (!result.success) throw new Error(result.error);
     const event = { type: "checkout.session.expired", data: { object: { metadata: { orderId: result.orderId } } } };
     expect((await dispatch(event)).status).toBe(200);
     expect((await dispatch(event)).status).toBe(200);
     expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock);
     expect((await db.order.findUniqueOrThrow({ where: { id: result.orderId } })).status).toBe("CANCELLED");
+    expect(await createOrder(input)).toMatchObject({ success: false, code: "CHECKOUT_CLOSED" });
+    expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(stock);
   });
 
   it("excludes approved products from unapproved sellers across catalog queries and counts", async () => {

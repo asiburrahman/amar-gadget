@@ -89,6 +89,7 @@ model Order {
   paymentStatus   String      @default("UNPAID") // UNPAID, PAID, FAILED
   paymentIntentId String?
   checkoutTokenHash String? @unique
+  checkoutRequestHash String? @db.VarChar(64)
   shippingAddress String?
   shippingPhone   String?
   trackingNumber  String?
