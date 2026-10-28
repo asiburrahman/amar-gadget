@@ -2,6 +2,8 @@
 
 By Asibur Rahman, with implementation assistance from OpenAI Codex.
 
+Owner-provided background: I completed graduation about four years ago. I currently work on programming with Codex and other platforms and have completed several web-development projects.
+
 ## What I investigated
 
 Amar Gadget is my Next.js multi-vendor marketplace. I asked Codex to audit how the storefront and dashboards connect to backend behavior, then implement and verify fixes on a public branch. The audit found 49 tasks, including a runtime database blocker that the existing 17 passing unit tests could not detect.
@@ -25,6 +27,6 @@ Codex helped connect a dependency capability mismatch to several user-visible fa
 
 ## Short introduction video draft
 
-“আমি আসিবুর রহমান। Amar Gadget নামে একটি multi-vendor marketplace তৈরি করছি। Codex দিয়ে audit করে দেখলাম, build আর unit test পাস করলেও database adapter-এর কারণে checkout ও OTP transaction কাজ করছিল না। Codex-এর সাহায্যে adapter ঠিক করেছি, বাস্তব local PostgreSQL-এ transaction tests যোগ করেছি, আর security ও seller access-এর সমস্যাও ঠিক করছি। পুরো code ও test evidence GitHub-এ আছে। এই ধরনের বাস্তব debugging workflow বাংলায় demo আর tutorial হিসেবে community-র সঙ্গে শেয়ার করতে চাই।”
+“আমি আসিবুর রহমান। প্রায় চার বছর আগে গ্রাজুয়েশন শেষ করেছি। এখন Codex ও অন্যান্য প্ল্যাটফর্ম দিয়ে programming করি; কয়েকটি web project-ও করেছি। আমার Amar Gadget marketplace-এ Codex দিয়ে audit করে checkout-এর database transaction সমস্যা খুঁজে ঠিক করেছি, real PostgreSQL tests যোগ করেছি। Code ও evidence GitHub-এ আছে। এই বাস্তব debugging workflow বাংলায় tutorial ও demo হিসেবে community-তে শেয়ার করতে চাই।”
 
 This is a draft for the owner to personalize and record; no video or community post has been published by this work.
