@@ -338,6 +338,8 @@ npm run lint
 
 [Implementation progress and validation evidence](docs/CODEX_IMPLEMENTATION_LOG.md) tracks fixes against the original audit. [The first technical case study](docs/CODEX_CONTENT_CASE_STUDY.md) explains the transaction blocker, security fixes, and reproducible checks.
 
+[The implementation sequence](docs/IMPLEMENTATION_SCHEDULE.md) covers every remaining task with completion rules and the next checkpoint.
+
 ### Codex-Assisted Development Record
 
 This change was made after reviewing authorization boundaries, checkout totals and payment state, catalog visibility, OTP handling, order tracking, and the checked-in Prisma migrations. The main engineering decision was to derive identities and prices on the server, then make payment confirmation depend on a verified Stripe webhook rather than client input.

@@ -29,7 +29,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**AUD-004 — idempotent, abuse-limited order creation.** AUD-005 reservation expiry is the next separate task; it will not be silently folded into or marked complete by AUD-004.
+**Latest completed step: AUD-004 — idempotent, abuse-limited order creation.** Current total: 6 of 49 tasks implemented, 43 open. **Next: AUD-005 — reservation expiry**. It is a separate task and has not been marked complete by AUD-004. See the implementation log for test evidence and outstanding external verification.
 
 ## Owner-provided introduction
 
