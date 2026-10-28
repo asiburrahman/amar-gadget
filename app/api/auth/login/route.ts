@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     const { email, password } = validated.data;
 
     // 1. Retrieve user from database
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
 
@@ -46,14 +46,25 @@ export async function POST(req: Request) {
 
     if (passwordNeedsRehash(user.password)) {
       const upgraded = await hashPassword(password);
-      const saved = await prisma.user.updateMany({ where: { id: user.id, password: user.password }, data: { password: upgraded } });
+      const saved = await prisma.user.updateMany({ where: { id: user.id, password: user.password, sessionVersion: user.sessionVersion }, data: { password: upgraded } });
       // Never overwrite a concurrent password reset. Another successful login
       // may already have upgraded this same password, so recheck that case.
       if (saved.count !== 1) {
-        const current = await prisma.user.findUnique({ where: { id: user.id }, select: { password: true } });
-        if (!(await verifyPassword(password, current?.password))) return NextResponse.json({ success: false, message: "Invalid email address or password." }, { status: 401 });
+        const current = await prisma.user.findUnique({ where: { id: user.id } });
+        if (!current || !(await verifyPassword(password, current.password))) return NextResponse.json({ success: false, message: "Invalid email address or password." }, { status: 401 });
+        user = current;
+      } else {
+        const current = await prisma.user.findUnique({ where: { id: user.id } });
+        if (!current || current.password !== upgraded) return NextResponse.json({ success: false, message: "Your credentials changed. Sign in again." }, { status: 401 });
+        user = current;
       }
     }
+
+    // Reject changes while password work was in flight. A later change still
+    // revokes this token through its captured version at every protected read.
+    const latest = await prisma.user.findUnique({ where: { id: user.id } });
+    if (!latest || latest.password !== user.password || latest.sessionVersion !== user.sessionVersion) return NextResponse.json({ success: false, message: "Your credentials changed. Sign in again." }, { status: 401 });
+    user = latest;
 
     // 2.5 Check if user is verified
     if (!user.isVerified) {
@@ -79,6 +90,7 @@ export async function POST(req: Request) {
       email: user.email,
       name: user.name,
       role: user.role,
+      sessionVersion: user.sessionVersion,
     });
 
     // 4. Attach HTTP-only auth_token cookie

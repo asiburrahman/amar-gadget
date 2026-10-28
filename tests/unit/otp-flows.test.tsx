@@ -8,7 +8,7 @@ const replace = jest.fn();
 const setUser = jest.fn();
 const refreshUser = jest.fn();
 const updateUser = jest.fn();
-jest.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("email=signup%40example.invalid"), useRouter: () => ({ replace }) }));
+jest.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("email=signup%40example.invalid"), useRouter: () => ({ replace, refresh: jest.fn() }) }));
 jest.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ setUser, refreshUser, updateUser }) }));
 const user = { id: "otp-ui", name: "Account owner", email: "old@example.invalid", role: "USER", phone: null, avatar: null, isVerified: true, createdAt: "2026-10-01T00:00:00Z", addresses: [] };
 const response = (body: unknown, status = 200, retryAfter?: string) => ({ ok: status < 400, status, json: async () => body, headers: new Headers(retryAfter ? { "Retry-After": retryAfter } : {}) }) as Response;
@@ -126,4 +126,24 @@ it("keeps the reauthentication form when email delivery fails", async () => {
   expect(screen.getByLabelText("Current password")).toBeTruthy();
   expect(screen.queryByLabelText(/Enter OTP Code/)).toBeNull();
   expect(setUser).not.toHaveBeenCalled();
+});
+
+it.each([true, false])("clears local authentication and redirects only after a successful password change: %s", async (success) => {
+  (fetch as jest.Mock).mockResolvedValueOnce(response({ success: true, user }));
+  render(<ProfileManager />);
+  fireEvent.click(await screen.findByRole("button", { name: /Security/ }));
+  setUser.mockClear();
+  fireEvent.change(screen.getByLabelText(/Current Password/), { target: { value: "Existing password!123" } });
+  fireEvent.change(screen.getByLabelText(/\(New Password\)/), { target: { value: "New password!123" } });
+  fireEvent.change(screen.getByLabelText(/Confirm New Password/), { target: { value: "New password!123" } });
+  (fetch as jest.Mock).mockResolvedValueOnce(response({ success, message: "Credential conflict." }, success ? 200 : 409));
+  fireEvent.click(screen.getByRole("button", { name: /Update Password/ }));
+  if (success) {
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?reason=password-changed"));
+    expect(setUser).toHaveBeenCalledWith(null);
+    expect((screen.getByLabelText(/Current Password/) as HTMLInputElement).value).toBe("");
+  } else {
+    expect(await screen.findByText("Credential conflict.")).toBeTruthy();
+    expect(setUser).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
+  }
 });

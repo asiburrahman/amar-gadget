@@ -6,6 +6,8 @@ module.exports = {
     "^@/(.*)$": "<rootDir>/$1",
   },
   transform: {
-    "^.+\\.tsx?$": ["ts-jest", { tsconfig: "tsconfig.json" }],
+    "^.+\\.[tj]sx?$": ["ts-jest", { tsconfig: "tsconfig.json" }],
   },
+  // jose publishes ESM; compile its actual implementation for CommonJS Jest.
+  transformIgnorePatterns: ["/node_modules/(?!jose/)"],
 };

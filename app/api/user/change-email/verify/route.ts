@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     if (!ticket) return invalid();
     const account = await prisma.user.findUnique({ where: { id: actor.id } });
     if (!account || otpAccountFingerprint(account) !== ticket.accountFingerprint) return invalid();
-    const token = await signJwtToken({ id: account.id, email: newEmail, name: account.name, role: account.role });
+    const token = await signJwtToken({ id: account.id, email: newEmail, name: account.name, role: account.role, sessionVersion: account.sessionVersion + 1 });
     const updated = await consumeVerifiedOtp(ticket, (tx, user) => tx.user.update({ where: { id: user.id }, data: { email: newEmail, isVerified: true }, select: { id: true, name: true, email: true, role: true, avatar: true, phone: true, sellerStatus: true, isVerified: true } }));
     if (!updated) return invalid();
     const response = NextResponse.json({ success: true, message: "Email address updated and verified.", user: updated });

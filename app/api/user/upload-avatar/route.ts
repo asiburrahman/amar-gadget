@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifyJwtToken } from "@/lib/auth";
+import { validateSessionToken } from "@/lib/session-validation";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -15,7 +15,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const payload = await verifyJwtToken(token);
+    const account = await validateSessionToken(token);
+    const payload = account ? { sub: account.id } : null;
     if (!payload?.sub) {
       return NextResponse.json(
         { success: false, message: "Invalid session." },
@@ -92,10 +93,10 @@ export async function POST(req: Request) {
       avatar: updatedUser.avatar,
       user: updatedUser,
     });
-  } catch (error: any) {
-    console.error("POST /api/user/upload-avatar error:", error);
+  } catch {
+    console.error("POST /api/user/upload-avatar error:");
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to upload avatar." },
+      { success: false, message: "Failed to upload avatar." },
       { status: 500 }
     );
   }
@@ -113,7 +114,8 @@ export async function DELETE() {
       );
     }
 
-    const payload = await verifyJwtToken(token);
+    const account = await validateSessionToken(token);
+    const payload = account ? { sub: account.id } : null;
     if (!payload?.sub) {
       return NextResponse.json(
         { success: false, message: "Invalid session." },
@@ -130,10 +132,10 @@ export async function DELETE() {
       success: true,
       message: "Profile photo removed successfully.",
     });
-  } catch (error: any) {
-    console.error("DELETE /api/user/upload-avatar error:", error);
+  } catch {
+    console.error("DELETE /api/user/upload-avatar error:");
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to remove avatar." },
+      { success: false, message: "Failed to remove avatar." },
       { status: 500 }
     );
   }

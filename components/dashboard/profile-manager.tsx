@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import NextImage from "next/image";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 
 interface AddressData {
@@ -39,6 +40,7 @@ const BD_DISTRICTS = [
 ];
 
 export function ProfileManager({ initialRole }: ProfileManagerProps) {
+  const router = useRouter();
   const { refreshUser, updateUser, setUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
@@ -423,11 +425,14 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       });
 
       const data = await res.json();
-      if (data.success) {
-        setPasswordMsg({ type: "success", text: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! (Password updated successfully)" });
+      if (res.ok && data.success) {
+        setPasswordMsg({ type: "success", text: "Password updated. All sessions signed out. Please sign in again." });
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setUser(null);
+        router.replace("/login?reason=password-changed");
+        router.refresh();
       } else {
         setPasswordMsg({ type: "error", text: data.message || "Failed to update password." });
       }
@@ -1024,8 +1029,10 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-lg">
             {/* Current Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#333e48]">বর্তমান পাসওয়ার্ড (Current Password) *</label>
+              <label htmlFor="password-change-current" className="text-xs font-bold text-[#333e48]">বর্তমান পাসওয়ার্ড (Current Password) *</label>
               <input
+                id="password-change-current"
+                autoComplete="current-password"
                 type={showPassword ? "text" : "password"}
                 required
                 value={currentPassword}
@@ -1037,8 +1044,10 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
             {/* New Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড (New Password) *</label>
+              <label htmlFor="password-change-new" className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড (New Password) *</label>
               <input
+                id="password-change-new"
+                autoComplete="new-password"
                 type={showPassword ? "text" : "password"}
                 required
                 minLength={6}
@@ -1051,8 +1060,10 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
             {/* Confirm New Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড নিশ্চিত করুন (Confirm New Password) *</label>
+              <label htmlFor="password-change-confirm" className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড নিশ্চিত করুন (Confirm New Password) *</label>
               <input
+                id="password-change-confirm"
+                autoComplete="new-password"
                 type={showPassword ? "text" : "password"}
                 required
                 minLength={6}

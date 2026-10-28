@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifyJwtToken } from "@/lib/auth";
+import { validateSessionToken } from "@/lib/session-validation";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,8 @@ export async function GET() {
       );
     }
 
-    const payload = await verifyJwtToken(token);
+    const account = await validateSessionToken(token);
+    const payload = account ? { sub: account.id } : null;
     if (!payload?.sub) {
       return NextResponse.json(
         { success: false, message: "Invalid session." },
@@ -52,10 +53,10 @@ export async function GET() {
     }
 
     return NextResponse.json({ success: true, user });
-  } catch (error: any) {
-    console.error("GET /api/user/profile error:", error);
+  } catch {
+    console.error("GET /api/user/profile error:");
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to load profile" },
+      { success: false, message: "Failed to load profile" },
       { status: 500 }
     );
   }
@@ -73,7 +74,8 @@ export async function PUT(req: Request) {
       );
     }
 
-    const payload = await verifyJwtToken(token);
+    const account = await validateSessionToken(token);
+    const payload = account ? { sub: account.id } : null;
     if (!payload?.sub) {
       return NextResponse.json(
         { success: false, message: "Invalid session." },
@@ -146,10 +148,10 @@ export async function PUT(req: Request) {
       message: "Profile updated successfully!",
       user: updatedUser,
     });
-  } catch (error: any) {
-    console.error("PUT /api/user/profile error:", error);
+  } catch {
+    console.error("PUT /api/user/profile error:");
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to update profile." },
+      { success: false, message: "Failed to update profile." },
       { status: 500 }
     );
   }

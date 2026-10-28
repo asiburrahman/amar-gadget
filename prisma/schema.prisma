@@ -17,6 +17,7 @@ model User {
   role         String      @default("USER") // USER, MEMBER (Seller), ADMIN
   sellerStatus String      @default("APPROVED") // APPROVED, PENDING, BLOCKED, REJECTED
   isVerified   Boolean     @default(false)
+  sessionVersion Int       @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 

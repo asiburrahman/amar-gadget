@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { SignJWT } from "jose";
 
 class SmokeFailure extends Error {}
 
@@ -14,13 +15,14 @@ async function main() {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.pathname.startsWith("/audit_") || url.search) throw new SmokeFailure("Use a disposable local audit_* TEST_DATABASE_URL without query overrides.");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString(), max: 2 }) });
   const prefix = `audit-http-${randomUUID()}`;
+  const signingKey = randomBytes(32).toString("hex");
   const controller = new AbortController();
   const abort = () => controller.abort();
   process.once("SIGINT", abort); process.once("SIGTERM", abort);
   let child, seller, category, product;
   let phase = "fixture setup";
   try {
-    seller = await db.user.create({ data: { email: `${prefix}@example.invalid`, role: "MEMBER", sellerStatus: "APPROVED" } });
+    seller = await db.user.create({ data: { email: `${prefix}@example.invalid`, role: "MEMBER", sellerStatus: "APPROVED", isVerified: true } });
     category = await db.category.create({ data: { name: prefix, slug: prefix } });
     product = await db.product.create({ data: { name: prefix, slug: prefix, price: 1234, stock: 2, status: "APPROVED", sellerId: seller.id, categoryId: category.id } });
     const probe = createServer();
@@ -31,7 +33,7 @@ async function main() {
     phase = "server startup";
     child = spawn(process.execPath, [resolve(".next/standalone/server.js")], { stdio: ["ignore", "pipe", "pipe"], env: {
       ...process.env, NODE_ENV: "production", HOSTNAME: "127.0.0.1", PORT: String(port), NEXT_TELEMETRY_DISABLED: "1", SKIP_ENV_VALIDATION: "true",
-      DATABASE_URL: url.toString(), DIRECT_URL: url.toString(), JWT_SECRET: randomBytes(32).toString("hex"),
+      DATABASE_URL: url.toString(), DIRECT_URL: url.toString(), JWT_SECRET: signingKey,
       UPSTASH_REDIS_REST_URL: "", UPSTASH_REDIS_REST_TOKEN: "",
     } });
     child.on("error", () => controller.abort());
@@ -43,7 +45,7 @@ async function main() {
       await delay(100, undefined, { signal: controller.signal });
     }
     const origin = `http://127.0.0.1:${port}`;
-    const get = (path) => fetch(`${origin}${path}`, { redirect: "manual", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
+    const get = (path, cookie) => fetch(`${origin}${path}`, { redirect: "manual", headers: cookie ? { Cookie: cookie } : undefined, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
     phase = "health lookup";
     const health = await get("/api/health");
     if (health.status !== 200) throw new SmokeFailure("Health HTTP smoke failed.");
@@ -58,9 +60,31 @@ async function main() {
     phase = "admin redirect";
     const admin = await get("/admin/orders");
     if (![302, 303, 307, 308].includes(admin.status) || !admin.headers.get("location")?.includes("/login")) throw new SmokeFailure(`Unauthenticated admin redirect smoke failed (status ${admin.status}).`);
-    return { standaloneHttp: "PASS", catalogSql: "PASS", productServerRender: "PASS", unauthenticatedAdminRedirect: "PASS" };
+    phase = "signed session profile read";
+    // Isolated fixture cookie, never an operator/customer credential. This
+    // exercises the built HTTP validator; login/reset routes have SQL tests.
+    const token = await new SignJWT({ sub: seller.id, email: seller.email, role: seller.role, sessionVersion: seller.sessionVersion })
+      .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("5m").sign(new TextEncoder().encode(signingKey));
+    const cookie = `auth_token=${token}`;
+    const profile = await get("/api/user/profile", cookie);
+    if (profile.status !== 200 || (await profile.json()).user?.id !== seller.id) throw new SmokeFailure("Signed profile HTTP read failed.");
+    await db.user.update({ where: { id: seller.id }, data: { sessionVersion: { increment: 1 } } });
+    phase = "copied-cookie revocation";
+    if ((await get("/api/user/profile", cookie)).status !== 401) throw new SmokeFailure("Revoked cookie retained profile access.");
+    const staleMe = await get("/api/auth/me", cookie);
+    if ((await staleMe.json()).success !== false) throw new SmokeFailure("Revoked cookie retained me access.");
+    const staleDashboard = await get("/member/profile", cookie);
+    const dashboardBody = await staleDashboard.text();
+    const httpRedirect = [302, 303, 307, 308].includes(staleDashboard.status) && staleDashboard.headers.get("location")?.includes("/login");
+    const streamedRedirect = staleDashboard.status === 200 && /<meta[^>]+id="__next-page-redirect"[^>]+content="[^\"]*url=\/login"/.test(dashboardBody);
+    if (!httpRedirect && !streamedRedirect) throw new SmokeFailure(`Revoked-cookie dashboard failed redirect verification (status ${staleDashboard.status}, redirectDigest=${dashboardBody.includes("NEXT_REDIRECT;replace;/login;")}).`);
+    return { standaloneHttp: "PASS", catalogSql: "PASS", productServerRender: "PASS", unauthenticatedAdminRedirect: "PASS", signedProfileRead: "PASS", copiedCookieRevocation: "PASS", revokedDashboardRedirect: "PASS" };
   } catch (error) {
-    throw error instanceof SmokeFailure ? error : new SmokeFailure(`Standalone HTTP/SQL smoke failed during ${phase}.`);
+    if (error instanceof SmokeFailure) throw error;
+    const allowedCodes = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT"]);
+    const code = allowedCodes.has(error?.cause?.code) ? error.cause.code : "unclassified";
+    const kind = ["AbortError", "TimeoutError", "TypeError"].includes(error?.name) ? error.name : "Error";
+    throw new SmokeFailure(`Standalone HTTP/SQL smoke failed during ${phase} (${kind}, ${code}, childExit=${child?.exitCode ?? "running"}).`);
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) {
       child.kill();

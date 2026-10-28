@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifyJwtToken } from "@/lib/auth";
+import { validateSessionToken } from "@/lib/session-validation";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,8 @@ export async function GET() {
       return NextResponse.json({ success: false, user: null });
     }
 
-    const payload = await verifyJwtToken(token);
+    const account = await validateSessionToken(token);
+    const payload = account ? { sub: account.id } : null;
     if (!payload || !payload.sub) {
       return NextResponse.json({ success: false, user: null });
     }
@@ -41,7 +42,7 @@ export async function GET() {
     const res = NextResponse.json({ success: true, user });
     res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     return res;
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, user: null });
   }
 }

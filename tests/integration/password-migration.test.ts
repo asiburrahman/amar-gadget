@@ -1,12 +1,13 @@
 jest.mock("next/headers", () => ({ cookies: jest.fn().mockResolvedValue({ get: () => ({ value: "local-test-token" }) }) }));
 jest.mock("@/lib/auth", () => ({ ...jest.requireActual("@/lib/password"), signJwtToken: jest.fn().mockResolvedValue("local-test-token"), verifyJwtToken: jest.fn() }));
 jest.mock("@/lib/mail/send-otp", () => ({ sendOtpEmail: jest.fn().mockResolvedValue({ success: true }) }));
+jest.mock("@/lib/session-validation", () => ({ validateSessionToken: jest.fn() }));
 jest.mock("@/lib/rate-limit", () => ({ getClientIp: () => "127.0.0.1", rateLimit: jest.fn().mockResolvedValue({ success: true }) }));
 
 import { pbkdf2Sync, randomBytes, randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword, verifyPassword } from "../../lib/password";
-import { verifyJwtToken } from "@/lib/auth";
+import { validateSessionToken } from "@/lib/session-validation";
 import { spawnSync } from "node:child_process";
 
 const databaseSuite = process.env.TEST_DATABASE_URL ? describe : describe.skip;
@@ -86,7 +87,7 @@ databaseSuite("compatible password storage migration", () => {
 
   it("requires a valid current password and persists an awaited versioned password change", async () => {
     const user = await buyer();
-    (verifyJwtToken as jest.Mock).mockResolvedValue({ sub: user.id });
+    (validateSessionToken as jest.Mock).mockResolvedValue({ id: user.id, sessionVersion: user.sessionVersion });
     const { POST: change } = await import("@/app/api/user/change-password/route");
     const input = { currentPassword: "Incorrect!123", newPassword: "Changed password!123", confirmPassword: "Changed password!123" };
     expect((await change(request(input))).status).toBe(400);

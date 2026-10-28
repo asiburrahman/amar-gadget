@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     const upgraded = passwordNeedsRehash(found.password) ? await hashPassword(input.password) : undefined;
     // Validate signing configuration before committing verification. The
     // locked account fingerprint is rechecked before this token is returned.
-    const token = await signJwtToken({ id: found.id, email: found.email, name: found.name, role: found.role });
+    const token = await signJwtToken({ id: found.id, email: found.email, name: found.name, role: found.role, sessionVersion: found.sessionVersion + 1 });
     const user = await consumeVerifiedOtp(ticket, (tx, current) => tx.user.update({ where: { id: current.id }, data: { isVerified: true, ...(upgraded ? { password: upgraded } : {}) } }));
     if (!user) return invalid();
     const response = NextResponse.json({ success: true, message: "Email successfully verified!", user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar, phone: user.phone, sellerStatus: user.sellerStatus, isVerified: user.isVerified } });
