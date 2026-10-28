@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getOrderById } from "@/server/actions/order/order-actions";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
+import { PaymentRecovery } from "@/components/checkout/payment-recovery";
 
 export default async function OrderSuccessPage({
   params,
@@ -17,7 +18,7 @@ export default async function OrderSuccessPage({
       <div className="min-h-screen bg-background py-16 flex items-center justify-center">
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold text-foreground">Order Not Found</h1>
-          <p className="text-sm text-muted-foreground">We couldn't retrieve the details for order ID: {id}</p>
+          <p className="text-sm text-muted-foreground">We couldn&apos;t retrieve the details for order ID: {id}</p>
           <Link href="/products">
             <Button variant="default">Back to Shop</Button>
           </Link>
@@ -44,6 +45,7 @@ export default async function OrderSuccessPage({
           </div>
 
           <div className="p-4 bg-muted/40 border border-border rounded-xl text-left text-xs space-y-2">
+            {order.paymentMethod === "STRIPE" && <PaymentRecovery orderId={order.id} compact />}
             <div className="flex justify-between font-bold text-foreground border-b border-border pb-2">
               <span>Delivery Status</span>
               <span className="text-emerald-600 uppercase">{order.status}</span>
@@ -71,7 +73,7 @@ export default async function OrderSuccessPage({
               ))}
             </div>
             <div className="flex justify-between text-sm font-extrabold text-foreground pt-1">
-              <span>Total Paid:</span>
+              <span>{order.paymentStatus === "PAID" ? "Total Paid:" : "Order Total:"}</span>
               <span className="text-primary">{formatCurrency(order.total)}</span>
             </div>
           </div>

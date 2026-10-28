@@ -181,6 +181,10 @@ export async function createOrder(input: CheckoutInput) {
       maxAge: 60 * 60 * 24,
       path: `/order-success/${order.id}`,
     });
+    (await cookies()).set("checkout_resume_token", checkoutToken, {
+      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
+      maxAge: 60 * 60 * 24, path: `/api/checkout/${order.id}`,
+    });
     return {
       success: true as const,
       orderId: order.id,

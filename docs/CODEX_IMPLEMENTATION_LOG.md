@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 7 tasks implemented, 42 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria.
+**Current checkpoint: 8 tasks implemented, 41 remain open.** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -93,6 +93,18 @@ An authenticated POST endpoint and separately supervised worker perform bounded 
 Validation: all four migrations passed on a fresh local PostgreSQL database; the previous-schema upgrade preserved an existing Stripe order and marked it as legacy/unknown instead of releasing it. **52 tests across 9 suites pass**, including 26 real PostgreSQL integration cases. Additional coverage proves abandoned release, overlapping cleanup, uncertain provider response, stable retry parameters, provider-expiry/payment races, authenticated sweeps, unavailable provider backoff and worker/webhook exactly-once restock. Stripe network responses are fixtures only in tests; the SDK signature check and SQL are real. TypeScript, affected-file lint, worker syntax, diff checks and production build pass. No live Stripe payment or production migration was performed.
 
 Next independent task: **AUD-006 — retain cart/context and resume the same checkout through Stripe cancellation, failures and completion**.
+
+## Batch 4 — AUD-006: payment cancellation, retry and cart recovery
+
+Checkout now retains its cart and records purchased line/quantity snapshots when an order is created. The dedicated `/checkout?resume=<orderId>` screen loads the saved items, shipping address and authoritative total through a private capability/owner-authorized API. A scoped HttpOnly cookie carries guest access; no capability is put in the URL. Authenticated users cannot use another account's leftover capability. Payment retries reuse the saved order/session; failures leave the cart intact. Cancellation first closes the provider session safely, then allows a new checkout.
+
+The confirmation screen polls server payment state for a bounded period and offers explicit refresh. Client query-string payment claims are ignored. Purchased quantities are removed only after verified payment (or accepted COD creation), once per saved snapshot. Additional quantities, unrelated items, and lines removed/re-added during payment are preserved. Pending context survives reload; a new visit to checkout resumes outstanding context instead of silently starting another order. A late paid/cancelled order keeps its cart and shows refund-review information.
+
+Migration `20261028180000_checkout_resume_version` preserves the exact cancel URL parameters for sessions requested before this revision; newly prepared sessions use the resume URL. The previously broken cart hydration helper is corrected as an adjacent requirement; AUD-045's remaining repository lint work is still open.
+
+Validation: **62 tests across 10 suites**, including real PostgreSQL ownership/session/cancellation cases and DOM interaction/storage-reload tests, plus TypeScript, affected-file lint and production build. Provider network responses are controlled fixtures only in tests, never application fallbacks. Five migrations are now required for a fresh installation. Live hosted Stripe/real-device walkthrough and production rollout remain external verification; no production database or provider payment was modified.
+
+Next independent task: **AUD-007 — authoritative coupon validation and shared server quote calculation**.
 
 ## Public contribution evidence
 

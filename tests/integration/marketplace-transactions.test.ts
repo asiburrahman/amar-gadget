@@ -415,4 +415,66 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
       expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before + 1);
     } finally { retrieve.mockRestore(); }
   });
+
+  it("protects guest resume context with the scoped capability and ignores client payment claims", async () => {
+    const input = checkout({ paymentMethod: "STRIPE" });
+    const created = await createOrder(input);
+    if (!created.success) throw new Error(created.error);
+    const { GET } = await import("@/app/api/checkout/[orderId]/route");
+    const context = { params: Promise.resolve({ orderId: created.orderId }) };
+    expect((await GET(new Request("http://localhost/api/checkout/x?paid=true"), context)).status).toBe(404);
+    const cookieStore = { set: jest.fn(), get: jest.fn().mockReturnValue({ value: input.checkoutToken }) };
+    (cookies as jest.Mock).mockResolvedValue(cookieStore);
+    try {
+      (getCurrentUser as jest.Mock).mockResolvedValue({ id: sellerId, role: "MEMBER" });
+      expect((await GET(new Request("http://localhost/api/checkout/x"), context)).status).toBe(404);
+      (getCurrentUser as jest.Mock).mockResolvedValue(null);
+      const result = await GET(new Request("http://localhost/api/checkout/x?paid=true&session_id=forged"), context);
+      expect(result.status).toBe(200);
+      expect((await result.json()).order).toMatchObject({ id: created.orderId, paymentStatus: "UNPAID", total: 1050 });
+      expect(result.headers.get("cache-control")).toBe("private, no-store");
+    } finally { (cookies as jest.Mock).mockResolvedValue({ set: jest.fn(), get: jest.fn() }); (getCurrentUser as jest.Mock).mockResolvedValue(null); }
+  });
+
+  it("resumes the same provider session and cancels safely through the authenticated API", async () => {
+    const input = checkout({ paymentMethod: "STRIPE" });
+    await db.product.update({ where: { id: productId }, data: { stock: 100 } });
+    const created = await createOrder(input);
+    if (!created.success) throw new Error(created.error);
+    const { POST } = await import("@/app/api/checkout/[orderId]/route");
+    const session = sessionFor(created.orderId);
+    const create = jest.spyOn(stripe.checkout.sessions, "create").mockResolvedValue(session as never);
+    const retrieve = jest.spyOn(stripe.checkout.sessions, "retrieve").mockResolvedValue(session as never);
+    const expire = jest.spyOn(stripe.checkout.sessions, "expire").mockResolvedValue({ ...session, status: "expired" } as never);
+    const context = { params: Promise.resolve({ orderId: created.orderId }) };
+    const request = (action: string) => new Request("http://localhost/api/checkout/x", { method: "POST", body: JSON.stringify({ action }) });
+    (cookies as jest.Mock).mockResolvedValue({ set: jest.fn(), get: jest.fn().mockReturnValue({ value: input.checkoutToken }) });
+    try {
+      expect((await POST(request("pay"), context)).status).toBe(200);
+      expect((await POST(request("pay"), context)).status).toBe(200);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0][0]?.cancel_url).toContain(`/checkout?resume=${created.orderId}`);
+      const before = (await db.product.findUniqueOrThrow({ where: { id: productId } })).stock;
+      expect((await POST(request("cancel"), context)).status).toBe(200);
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before + 1);
+      expect((await POST(request("cancel"), context)).status).toBe(200);
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before + 1);
+    } finally {
+      create.mockRestore(); retrieve.mockRestore(); expire.mockRestore();
+      (cookies as jest.Mock).mockResolvedValue({ set: jest.fn(), get: jest.fn() });
+    }
+  });
+
+  it("preserves pre-upgrade provider request parameters for idempotent recovery", async () => {
+    const orderId = await stripeOrder();
+    await db.order.update({ where: { id: orderId }, data: {
+      stripeSessionRequestedAt: new Date(), stripeCheckoutOrigin: "https://original.example",
+      stripeCheckoutVersion: 1, reservationExpiresAt: new Date(Date.now() + 1860_000),
+    } });
+    const create = jest.spyOn(stripe.checkout.sessions, "create").mockResolvedValue(sessionFor(orderId) as never);
+    try {
+      await startStripeCheckout(orderId, "https://new-request.example");
+      expect(create.mock.calls[0][0]?.cancel_url).toBe("https://original.example/checkout");
+    } finally { create.mockRestore(); }
+  });
 });

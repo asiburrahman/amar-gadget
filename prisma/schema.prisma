@@ -96,6 +96,7 @@ model Order {
   stripeSessionRequestedAt DateTime?
   stripeCheckoutSessionId String? @unique
   stripeCheckoutOrigin String?
+  stripeCheckoutVersion Int @default(1)
   shippingAddress String?
   shippingPhone   String?
   trackingNumber  String?

@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     const session = await startStripeCheckout(orderId, base.origin);
     return NextResponse.json({ success: true, url: session.url, sessionId: session.id, paid: session.payment_status === "paid" });
   } catch (error) {
-    if (error instanceof CheckoutUnavailable) return NextResponse.json({ success: false, code: "CHECKOUT_CLOSED", message: error.message }, { status: 409 });
+    if (error instanceof CheckoutUnavailable) return NextResponse.json({ success: false, code: error.code, message: error.message }, { status: 409 });
     console.error("Stripe checkout could not be confirmed; reservation retained");
     return NextResponse.json({ success: false, message: "Unable to confirm card checkout. Retry this order shortly." }, { status: 503 });
   }

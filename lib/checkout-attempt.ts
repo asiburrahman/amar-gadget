@@ -3,7 +3,7 @@ import type { CheckoutDetails } from "@/lib/validations/order";
 
 const STORAGE_KEY = "amar-gadget-checkout-attempt-v1";
 type AttemptStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-export type CheckoutAttempt = { fingerprint: string; token: string };
+export type CheckoutAttempt = { fingerprint: string; token: string; orderId?: string };
 
 function browserStorage(): AttemptStorage | undefined {
   try { return globalThis.sessionStorage; } catch { return undefined; }
@@ -45,5 +45,18 @@ export function clearCheckoutAttempt(token: string, storage: AttemptStorage | un
   try {
     const stored: unknown = JSON.parse(storage?.getItem(STORAGE_KEY) || "null");
     if (isAttempt(stored) && stored.token === token) storage?.removeItem(STORAGE_KEY);
+  } catch { /* Storage is optional. */ }
+}
+
+export function bindCheckoutAttempt(attempt: CheckoutAttempt, orderId: string, storage: AttemptStorage | undefined = browserStorage()): CheckoutAttempt {
+  const bound = { ...attempt, orderId };
+  try { storage?.setItem(STORAGE_KEY, JSON.stringify(bound)); } catch { /* In-memory fallback remains valid. */ }
+  return bound;
+}
+
+export function clearCheckoutAttemptForOrder(orderId: string, storage: AttemptStorage | undefined = browserStorage()): void {
+  try {
+    const stored: unknown = JSON.parse(storage?.getItem(STORAGE_KEY) || "null");
+    if (isAttempt(stored) && stored.orderId === orderId) storage?.removeItem(STORAGE_KEY);
   } catch { /* Storage is optional. */ }
 }
