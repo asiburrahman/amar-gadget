@@ -8,6 +8,7 @@ export const createProductSchema = z.object({
   stock: z.number().int().nonnegative("Stock cannot be negative"),
   imageUrl: z.string().optional(),
   images: z.array(z.string()).optional().default([]),
+  uploadKeys: z.array(z.string().max(160)).max(8).optional(),
   categoryId: z.string().min(1, "Category is required"),
   brandId: z.string().optional().nullable(),
   isFeatured: z.boolean().optional().default(false),

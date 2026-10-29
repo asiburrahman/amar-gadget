@@ -267,6 +267,8 @@ Runtime settings are validated before the supported production launcher starts l
 
 Production requires complete Redis, SMTP, Stripe/reservation-worker and R2 settings. Development requires the database, keys and application origin; any enabled service group must be complete. Builds remove dotenv files from the standalone artifact and copy its public/static assets. Deploy with runtime environment injection and run `node start.cjs` from that artifact; `npm start` uses the same launcher and can explicitly load a private workspace `.env`. `SKIP_ENV_VALIDATION` does not bypass runtime checks. Use `/api/health` for process liveness and `/api/health/ready` for configured database/schema/Redis readiness. See the [runtime configuration runbook](docs/RUNTIME_CONFIGURATION_RUNBOOK.md).
 
+Product images upload directly to R2 with progress/retry and a saved cover/gallery; file bytes are not posted through Server Actions or stored as base64. Configure the bucket's exact-origin CORS and public domain using the [product-image runbook](docs/PRODUCT_IMAGES_RUNBOOK.md), which also documents dry-run unused-upload cleanup and the live bucket/browser release checks.
+
 ---
 
 ### Database Migration & Seeding

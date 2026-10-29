@@ -29,7 +29,8 @@ async function main() {
     seller = await db.user.create({ data: { email: `${prefix}@example.invalid`, password: await hashPassword(password), role: "MEMBER", sellerStatus: "APPROVED", isVerified: true } });
     redisFixture = await startRedisRestFixture(randomBytes(32).toString("hex"));
     category = await db.category.create({ data: { name: prefix, slug: prefix } });
-    product = await db.product.create({ data: { name: prefix, slug: prefix, price: 1234, stock: 2, status: "APPROVED", sellerId: seller.id, categoryId: category.id } });
+    const galleryUrls = [`https://media.example.invalid/${prefix}-front.png`, `https://media.example.invalid/${prefix}-back.png`];
+    product = await db.product.create({ data: { name: prefix, slug: prefix, price: 1234, stock: 2, status: "APPROVED", sellerId: seller.id, categoryId: category.id, imageUrl: galleryUrls[0], images: galleryUrls } });
     const probe = createServer();
     await new Promise((resolveListen, reject) => { probe.once("error", reject); probe.listen(0, "127.0.0.1", resolveListen); });
     const port = probe.address().port;
@@ -66,6 +67,7 @@ async function main() {
     const detail = await get(`/products/${prefix}`);
     const detailHtml = await detail.text();
     if (detail.status !== 200 || !detailHtml.includes(prefix)) throw new SmokeFailure(`Product page server-render smoke failed (status ${detail.status}).`);
+    if (!galleryUrls.every((url) => detailHtml.includes(`src="${url}"`)) || !detailHtml.includes(`aria-label="View image 2 of ${prefix}"`)) throw new SmokeFailure("Saved custom-domain product gallery failed server rendering.");
     phase = "packaged public and static assets";
     const stylesheet = detailHtml.match(/href="([^\"]*\/_next\/static\/[^\"]+\.css[^\"]*)"/)?.[1];
     if (!stylesheet || !stylesheet.startsWith("/_next/static/") || (await get(stylesheet)).status !== 200 || (await get("/file.svg")).status !== 200) throw new SmokeFailure("Standalone public/static assets are missing.");
@@ -100,7 +102,7 @@ async function main() {
     let unavailable;
     do { await delay(250); unavailable = await get("/api/health/ready"); } while (unavailable.status === 200 && Date.now() < outageDeadline);
     if (unavailable.status !== 503 || (await unavailable.json()).checks.redis !== false || (await get("/api/health")).status !== 200) throw new SmokeFailure("Redis outage was not distinguished from process liveness.");
-    return { standaloneHttp: "PASS", firstHealthMs, firstHealthLimitMs: 30_000, catalogSql: "PASS", productServerRender: "PASS", packagedAssets: "PASS", unauthenticatedAdminRedirect: "PASS", configuredLogin: "PASS", readiness: "PASS", redisOutageReadiness: "PASS", signedProfileRead: "PASS", copiedCookieRevocation: "PASS", revokedDashboardRedirect: "PASS" };
+    return { standaloneHttp: "PASS", firstHealthMs, firstHealthLimitMs: 30_000, catalogSql: "PASS", productServerRender: "PASS", savedCustomDomainGallery: "PASS", packagedAssets: "PASS", unauthenticatedAdminRedirect: "PASS", configuredLogin: "PASS", readiness: "PASS", redisOutageReadiness: "PASS", signedProfileRead: "PASS", copiedCookieRevocation: "PASS", revokedDashboardRedirect: "PASS" };
   } catch (error) {
     if (error instanceof SmokeFailure) throw error;
     const allowedCodes = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT"]);

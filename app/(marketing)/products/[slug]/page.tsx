@@ -2,7 +2,9 @@ import { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import Image from "next/image";
+import { ProductGallery } from "@/components/shared/product-gallery";
+import type { Prisma } from "@prisma/client";
+import Link from "next/link";
 import { ProductDetailActions } from "./_components/product-detail-actions";
 import { formatCurrency } from "@/lib/formatter";
 import { generateProductSchema } from "@/lib/seo/schema";
@@ -11,7 +13,7 @@ import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
 export const dynamic = "force-dynamic";
 
 const getProduct = cache(async (identifier: string) => {
-  let product: any = null;
+  let product: Prisma.ProductGetPayload<{ include: { category: true; brand: true; seller: { select: { id: true; name: true; sellerStatus: true } }; reviews: { include: { user: { select: { name: true; avatar: true } } } } } }> | null = null;
 
   try {
     // 1. Try finding by slug
@@ -135,15 +137,15 @@ export default async function ProductDetailPage({
         <div className="container mx-auto px-4 max-w-6xl">
           {/* Breadcrumb */}
           <div className="flex items-center text-xs text-muted-foreground mb-6 space-x-2">
-            <a href="/" className="hover:text-primary">Home</a>
+            <Link href="/" className="hover:text-primary">Home</Link>
             <span>/</span>
-            <a href="/products" className="hover:text-primary">Products</a>
+            <Link href="/products" className="hover:text-primary">Products</Link>
             <span>/</span>
             {product.category && (
               <>
-                <a href={`/products?categoryId=${product.category.id}`} className="hover:text-primary">
+                <Link href={`/products?categoryId=${product.category.id}`} className="hover:text-primary">
                   {product.category.name}
-                </a>
+                </Link>
                 <span>/</span>
               </>
             )}
@@ -153,24 +155,7 @@ export default async function ProductDetailPage({
           {/* Product Header & Main Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 bg-card border border-border p-6 md:p-8 rounded-2xl shadow-sm">
             {/* Left: Product Image */}
-            <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-muted/20 border border-border flex items-center justify-center">
-              {product.imageUrl ? (
-                <Image
-                  src={product.imageUrl}
-                  alt={product.name}
-                  fill
-                  priority
-                  className="object-contain p-4"
-                />
-              ) : (
-                <div className="text-muted-foreground font-medium text-sm">No Image Available</div>
-              )}
-              {product.discountPrice && (
-                <span className="absolute top-4 left-4 bg-emerald-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
-                  OFFER DEALS
-                </span>
-              )}
-            </div>
+            <ProductGallery name={product.name} imageUrl={product.imageUrl} images={product.images} offer={Boolean(product.discountPrice)} />
 
             {/* Right: Product Details & Purchase Actions */}
             <div className="flex flex-col justify-between space-y-6">

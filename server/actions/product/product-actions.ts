@@ -6,6 +6,8 @@ import { publicProductWhere } from "@/lib/catalog-visibility";
 import { createProductSchema, productQuerySchema, type CreateProductInput } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
+import { productMediaStore, ProductMediaError } from "@/lib/cloudflare/r2";
+import { randomUUID } from "node:crypto";
 
 export async function getProducts(queryParams: Record<string, unknown> = {}) {
   try {
@@ -59,7 +61,7 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
       if (maxPrice !== undefined) where.price.lte = maxPrice;
     }
 
-    let orderBy: any = { createdAt: "desc" };
+    let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
     if (sort === "price_low") orderBy = { price: "asc" };
     if (sort === "price_high") orderBy = { price: "desc" };
     if (sort === "rating") orderBy = { rating: "desc" };
@@ -90,7 +92,7 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
       totalPages: Math.ceil(total / limit),
       currentPage: page,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching products:", error);
     return { success: false, error: "Failed to fetch products", data: [], total: 0 };
   }
@@ -121,7 +123,7 @@ export async function getProductBySlug(slug: string) {
         discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
       },
     };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Error fetching product", data: null };
   }
 }
@@ -141,35 +143,47 @@ export async function createProduct(input: CreateProductInput) {
     }
 
     const validated = createProductSchema.parse(input);
-    const slug = validated.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now();
+    // Persist only canonical verified object URLs, never caller-selected URLs
+    // or inline image bytes. The first selected image is the cover.
+    if (validated.imageUrl || validated.images.length) return { success: false, error: "Upload product images using the image picker." };
+    const slug = (validated.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "product") + "-" + randomUUID();
 
-    const product = await prisma.product.create({
-      data: {
-        name: validated.name,
-        slug,
-        description: validated.description,
-        price: validated.price,
-        discountPrice: validated.discountPrice ?? null,
-        stock: validated.stock,
-        imageUrl: validated.imageUrl || "/images/product-placeholder.png",
-        images: validated.images || [],
-        categoryId: validated.categoryId,
-        brandId: validated.brandId || null,
-        sellerId: targetSeller.id,
-        status: "PENDING_APPROVAL",
-        isFeatured: validated.isFeatured || false,
-      },
-    });
+    const product = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${targetSeller.id} FOR UPDATE`;
+      const current = await tx.user.findUnique({ where: { id: targetSeller.id }, select: { isVerified: true, role: true, sellerStatus: true, sessionVersion: true } });
+      if (!current?.isVerified || current.sessionVersion !== targetSeller.sessionVersion || !["MEMBER", "ADMIN"].includes(current.role.toUpperCase()) || (current.role.toUpperCase() === "MEMBER" && current.sellerStatus !== "APPROVED")) throw new ProductMediaError("Your seller access changed. Sign in again before submitting.");
+      // The cleanup operator takes the same owner lock: a selected old upload
+      // either gets referenced here, or is removed before verification fails.
+      const images = await productMediaStore().verify(validated.uploadKeys ?? [], targetSeller.id);
+      return tx.product.create({
+        data: {
+          name: validated.name,
+          slug,
+          description: validated.description,
+          price: validated.price,
+          discountPrice: validated.discountPrice ?? null,
+          stock: validated.stock,
+          imageUrl: images[0],
+          images,
+          categoryId: validated.categoryId,
+          brandId: validated.brandId || null,
+          sellerId: targetSeller.id,
+          status: "PENDING_APPROVAL",
+          isFeatured: validated.isFeatured || false,
+        },
+      });
+    }, { timeout: 15_000, maxWait: 5000 });
 
     revalidatePath("/products");
     revalidatePath("/member/dashboard");
     revalidatePath("/admin");
     revalidatePath("/admin/products");
 
-    return { success: true, data: product };
-  } catch (error: any) {
-    console.error("Error creating product:", error);
-    return { success: false, error: error.message || "Failed to create product" };
+    return { success: true, data: { id: product.id, slug: product.slug } };
+  } catch (error: unknown) {
+    if (error instanceof ProductMediaError) return { success: false, error: error.message };
+    console.error("Product creation failed.");
+    return { success: false, error: "Unable to submit the product. Check the fields and uploaded images, then try again." };
   }
 }
 
@@ -180,7 +194,7 @@ export async function getCategories() {
       include: { _count: { select: { products: { where: publicProductWhere } } } },
     });
     return { success: true, data: categories };
-  } catch (error) {
+  } catch {
     return { success: false, data: [] };
   }
 }
@@ -192,7 +206,7 @@ export async function getBrands() {
       include: { _count: { select: { products: { where: publicProductWhere } } } },
     });
     return { success: true, data: brands };
-  } catch (error) {
+  } catch {
     return { success: false, data: [] };
   }
 }

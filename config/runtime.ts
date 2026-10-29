@@ -36,7 +36,7 @@ export const runtimeFields = {
   R2_ACCOUNT_ID: optional(z.string().regex(/^[a-fA-F0-9]{32}$/)),
   R2_ACCESS_KEY_ID: optional(nonempty), R2_SECRET_ACCESS_KEY: optional(nonempty),
   R2_BUCKET_NAME: optional(z.string().min(1).max(63).regex(/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/)),
-  R2_PUBLIC_URL: optional(networkUrl),
+  R2_PUBLIC_URL: optional(networkUrl.refine((value) => { try { const url = new URL(value); return url.pathname === "/" && !url.search; } catch { return false; } })),
   CHECKOUT_SWEEP_SECRET: optional(privateSecretSchema),
   CHECKOUT_SWEEP_DATABASE: optional(z.string().min(1).max(63)),
 };

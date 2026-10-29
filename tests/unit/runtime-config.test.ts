@@ -34,6 +34,9 @@ it("returns only field names on invalid private configuration", () => {
   try { validateRuntimeConfig({ ...configured(), JWT_SECRET: privateValue }); throw new Error("Bad secret accepted"); }
   catch (error) { expect(error).toBeInstanceOf(RuntimeConfigurationError); expect(String(error)).toContain("JWT_SECRET"); expect(String(error)).not.toContain(privateValue); }
 });
+it.each(["https://media.example.invalid?token=incorrect", "https://media.example.invalid/object-path"])("rejects a non-origin R2 public base %s", (R2_PUBLIC_URL) => {
+  expect(() => validateRuntimeConfig({ ...configured(), R2_PUBLIC_URL })).toThrow(RuntimeConfigurationError);
+});
 it("validates SMTP sender/port consistently with the transport and rejects header injection", () => {
   expect(readMailTransportConfig({ ...configured(), SMTP_PORT: "465" }).SMTP_PORT).toBe(465);
   expect(() => readMailTransportConfig({ ...configured(), SMTP_PORT: "bad" })).toThrow(RuntimeConfigurationError);

@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/formatter";
 import { ShoppingCart } from "@/components/icons/ShoppingCart";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
+import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 
 interface ProductCardProps {
   id: string;
@@ -30,7 +31,6 @@ export const ProductCard = ({
   id,
   slug,
   name,
-  description,
   price,
   discountPrice,
   stock,
@@ -101,6 +101,7 @@ export const ProductCard = ({
           <Link href={`/products/${slug || id}`} className="block relative w-full h-full">
             {imageUrl ? (
               <Image
+                unoptimized={productImageNeedsDirectDelivery(imageUrl)}
                 src={imageUrl}
                 alt={name}
                 fill

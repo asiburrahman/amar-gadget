@@ -14,7 +14,7 @@ Production requires complete groups:
 - Redis: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
 - Mail: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`. Port defaults to 587; 465 uses implicit TLS and other ports require STARTTLS. Sender/host/port validation matches the actual mail transport.
 - Card payments/reservation supervision: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CHECKOUT_SWEEP_SECRET`, `CHECKOUT_SWEEP_DATABASE`. The sweep key must be distinct from JWT/OTP keys, and the target must match the database name in the connection URL. Deploy/supervise the worker separately as described in the reservation runbook; startup validation does not run that worker for you.
-- Storage: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`. The account ID must be a 32-digit hexadecimal account identifier.
+- Storage: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`. The account ID must be a 32-digit hexadecimal account identifier. The public URL is the bucket's public origin without path/query/fragment; see [direct product-image uploads and CORS](PRODUCT_IMAGES_RUNBOOK.md).
 
 In development a service group can be entirely absent, but partially enabled groups are rejected. Missing Redis retains the explicit development-only limiter policy; production cannot boot without it. Configured Redis requests have a fresh two-second abort signal and no automatic retry. Provider failures remain fail-closed in production.
 

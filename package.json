@@ -24,7 +24,9 @@
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
     "smoke:runtime": "node scripts/smoke-runtime-config.mjs",
     "smoke:ingress": "node scripts/smoke-ingress.mjs",
-    "test:gateway": "node --test tests/native/ingress-gateway.test.mjs"
+    "test:gateway": "node --test tests/native/ingress-gateway.test.mjs",
+    "cleanup:product-images": "tsx scripts/cleanup-product-images.ts",
+    "config:r2-cors": "tsx scripts/print-product-image-cors.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
