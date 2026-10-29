@@ -168,3 +168,26 @@ it("applies the shared password policy before reset and clears secrets after ser
   await act(async () => { await jest.advanceTimersByTimeAsync(2000); });
   expect(push).toHaveBeenCalledWith("/login");
 });
+
+it.each([true, false])("shows the committed default-address result or preserves edits after failure: %s", async (success) => {
+  (fetch as jest.Mock).mockResolvedValueOnce(response({ success: true, user }));
+  render(<ProfileManager />);
+  fireEvent.click(await screen.findByRole("button", { name: /\(Address\)/ }));
+  expect((screen.getByLabelText(/\(District\)/) as HTMLInputElement).value).toBe("");
+  fireEvent.change(screen.getByLabelText(/Recipient Name/), { target: { value: "  Delivery owner  " } });
+  fireEvent.change(screen.getByLabelText(/\(Phone\)/), { target: { value: "01700000000" } });
+  fireEvent.change(screen.getByLabelText(/Street Address/), { target: { value: "  Actual street  " } });
+  fireEvent.change(screen.getByLabelText(/City \/ Thana/), { target: { value: "Actual city" } });
+  fireEvent.change(screen.getByLabelText(/\(District\)/), { target: { value: "Feni" } });
+  const confirmed = { id: "default", fullName: "Delivery owner", phone: "01700000000", street: "Actual street", city: "Actual city", district: "Feni", zipCode: null, isDefault: true };
+  (fetch as jest.Mock).mockResolvedValueOnce(response(success ? { success: true, user: { ...user, addresses: [confirmed] } } : { success: false, message: "Save failed; nothing changed." }, success ? 200 : 503));
+  fireEvent.click(screen.getByRole("button", { name: /Save Address/ }));
+  if (success) {
+    await waitFor(() => expect((screen.getByLabelText(/Street Address/) as HTMLInputElement).value).toBe("Actual street"));
+    expect((screen.getByLabelText(/Recipient Name/) as HTMLInputElement).value).toBe("Delivery owner");
+  } else {
+    expect(await screen.findByText("Save failed; nothing changed.")).toBeTruthy();
+    expect((screen.getByLabelText(/Street Address/) as HTMLInputElement).value).toBe("  Actual street  ");
+  }
+  expect((screen.getByLabelText(/\(District\)/) as HTMLInputElement).value).toBe("Feni");
+});

@@ -105,7 +105,7 @@ databaseSuite("account endpoint validation and independent budgets", () => {
     const body = await unavailable.json(); expect(body.accepted).toBe(true); expect(JSON.stringify(body)).not.toContain("Provider detail");
   });
   it("redacts database exceptions from profile responses and logs", async () => {
-    const update = jest.spyOn(db.user, "update").mockRejectedValueOnce(new Error("private connection and payload details"));
+    const update = jest.spyOn(db, "$transaction").mockRejectedValueOnce(new Error("private connection and payload details"));
     const log = jest.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       const result = await profile(req({ name: "Failure case" }));

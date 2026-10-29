@@ -84,9 +84,10 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   const [addressPhone, setAddressPhone] = useState("");
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
-  const [district, setDistrict] = useState("Dhaka");
+  const [district, setDistrict] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [isUpdatingAddress, setIsUpdatingAddress] = useState(false);
+  const addressBusy = useRef(false);
   const [addressMsg, setAddressMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Load user data
@@ -110,7 +111,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
             setAddressPhone(defAddr.phone || data.user.phone || "");
             setStreet(defAddr.street || "");
             setCity(defAddr.city || "");
-            setDistrict(defAddr.district || "Dhaka");
+            setDistrict(defAddr.district || "");
             setZipCode(defAddr.zipCode || "");
           } else {
             setAddressFullName(data.user.name || "");
@@ -448,6 +449,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Address Update
   const handleUpdateAddress = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (addressBusy.current) return;
+    addressBusy.current = true;
     setIsUpdatingAddress(true);
     setAddressMsg(null);
 
@@ -468,14 +471,23 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success && data.user?.addresses?.[0]) {
         setAddressMsg({ type: "success", text: "ঠিকানা সফলভাবে সংরক্ষণ করা হয়েছে! (Address saved successfully)" });
+        const confirmed = data.user.addresses[0];
+        setAddressFullName(confirmed.fullName);
+        setAddressPhone(confirmed.phone);
+        setStreet(confirmed.street);
+        setCity(confirmed.city);
+        setDistrict(confirmed.district);
+        setZipCode(confirmed.zipCode || "");
+        setProfile((current) => current ? { ...current, ...data.user } : current);
       } else {
         setAddressMsg({ type: "error", text: data.message || "Failed to save address." });
       }
     } catch (err) {
       setAddressMsg({ type: "error", text: err instanceof Error ? err.message : "Something went wrong." });
     } finally {
+      addressBusy.current = false;
       setIsUpdatingAddress(false);
     }
   };
@@ -1146,8 +1158,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           <form onSubmit={handleUpdateAddress} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">প্রাপকের নাম (Recipient Name) *</label>
+                <label htmlFor="delivery-name" className="text-xs font-bold text-[#333e48]">প্রাপকের নাম (Recipient Name) *</label>
                 <input
+                  id="delivery-name"
+                  autoComplete="shipping name"
+                  maxLength={120}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={addressFullName}
@@ -1158,8 +1174,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">যোগাযোগের মোবাইল (Phone) *</label>
+                <label htmlFor="delivery-phone" className="text-xs font-bold text-[#333e48]">যোগাযোগের মোবাইল (Phone) *</label>
                 <input
+                  id="delivery-phone"
+                  autoComplete="shipping tel"
+                  maxLength={32}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={addressPhone}
@@ -1170,8 +1190,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="md:col-span-2 space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">রাস্তা / বাসা / এলাকা (Street Address) *</label>
+                <label htmlFor="delivery-street" className="text-xs font-bold text-[#333e48]">রাস্তা / বাসা / এলাকা (Street Address) *</label>
                 <input
+                  id="delivery-street"
+                  autoComplete="shipping street-address"
+                  maxLength={500}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={street}
@@ -1182,8 +1206,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">থানা / শহর (City / Thana) *</label>
+                <label htmlFor="delivery-city" className="text-xs font-bold text-[#333e48]">থানা / শহর (City / Thana) *</label>
                 <input
+                  id="delivery-city"
+                  autoComplete="shipping address-level2"
+                  maxLength={100}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={city}
@@ -1194,23 +1222,34 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">জেলা (District) *</label>
-                <select
+                <label htmlFor="delivery-district" className="text-xs font-bold text-[#333e48]">জেলা (District) *</label>
+                <input
+                  id="delivery-district"
+                  list="delivery-district-suggestions"
+                  autoComplete="shipping address-level1"
+                  required
+                  maxLength={100}
+                  disabled={isUpdatingAddress}
                   value={district}
                   onChange={(e) => setDistrict(e.target.value)}
                   className="w-full px-4 py-2.5 text-xs text-[#333e48] border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#fed700] transition bg-white"
-                >
+                />
+                <datalist id="delivery-district-suggestions">
                   {BD_DISTRICTS.map((dist) => (
                     <option key={dist} value={dist}>
                       {dist}
                     </option>
                   ))}
-                </select>
+                </datalist>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">পোস্টাল কোড (Zip / Postal Code)</label>
+                <label htmlFor="delivery-postal" className="text-xs font-bold text-[#333e48]">পোস্টাল কোড (Zip / Postal Code)</label>
                 <input
+                  id="delivery-postal"
+                  autoComplete="shipping postal-code"
+                  maxLength={20}
+                  disabled={isUpdatingAddress}
                   type="text"
                   value={zipCode}
                   onChange={(e) => setZipCode(e.target.value)}

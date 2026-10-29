@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest fully completed step: AUD-011 — consistent account validation and account/IP request budgets.** Current total: 15 original tasks plus AUD-050 implemented (16 of 51 tracked tasks); 34 original tasks plus AUD-051's external revocation confirmation open (35 total). **Next: AUD-039 — atomic profile/default-address mutation and consistency constraints.** AUD-051's source hotfix is separate from the pending owner action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
+**Latest fully completed step: AUD-039 — atomic profile/default-address mutation and consistency constraints.** Current total: 16 original tasks plus AUD-050 implemented (17 of 51 tracked tasks); 33 original tasks plus AUD-051's external credential revocation open (34 total). **Next: AUD-040 — runtime configuration, fail-fast service requirements and readiness/liveness.** On 29 October 2026 the owner confirmed revocation has not yet occurred; source remediation does not perform that provider action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
 
 ## Owner-provided introduction
 

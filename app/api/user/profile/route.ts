@@ -42,7 +42,8 @@ export async function GET() {
         isVerified: true,
         createdAt: true,
         addresses: {
-          orderBy: { isDefault: "desc" },
+          where: { isDefault: true },
+          take: 1,
         },
       },
     });
@@ -93,60 +94,31 @@ export async function PUT(req: Request) {
 
     const userId = payload.sub as string;
 
-    // Update user basic profile fields
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...(typeof name === "string" && { name: name.trim() }),
-        ...(typeof phone === "string" && { phone: phone.trim() }),
-        ...(typeof avatar === "string" && { avatar: avatar.trim() }),
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        avatar: true,
-        role: true,
-        sellerStatus: true,
-        isVerified: true,
-        createdAt: true,
-      },
-    });
-
-    // Update or create default address if address information is provided
-    if (address && (address.street || address.city || address.district)) {
-      const defaultAddress = await prisma.address.findFirst({
-        where: { userId, isDefault: true },
-      });
-
-      if (defaultAddress) {
-        await prisma.address.update({
-          where: { id: defaultAddress.id },
-          data: {
-            fullName: address.fullName,
-            phone: address.phone,
-            street: address.street,
-            city: address.city,
-            district: address.district,
-            zipCode: address.zipCode || null,
-          },
-        });
-      } else {
-        await prisma.address.create({
-          data: {
-            userId,
-            fullName: address.fullName,
-            phone: address.phone,
-            street: address.street,
-            city: address.city,
-            district: address.district,
-            zipCode: address.zipCode || null,
-            isDefault: true,
-          },
-        });
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      // Lock order matches credential/OTP writers. Recheck session authority
+      // after acquiring the lock, before either half of this mutation.
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+      const current = await tx.user.findUnique({ where: { id: userId }, select: { sessionVersion: true, isVerified: true } });
+      if (!current?.isVerified || current.sessionVersion !== account?.sessionVersion) return null;
+      const changes = {
+        ...(name !== undefined ? { name } : {}),
+        ...(phone !== undefined ? { phone } : {}),
+        ...(avatar !== undefined ? { avatar } : {}),
+      };
+      if (Object.keys(changes).length) await tx.user.update({ where: { id: userId }, data: changes });
+      if (address) {
+        const existing = await tx.address.findFirst({ where: { userId, isDefault: true }, select: { id: true } });
+        const data = { ...address, zipCode: address.zipCode || null };
+        if (existing) await tx.address.update({ where: { id: existing.id }, data });
+        else await tx.address.create({ data: { ...data, userId, isDefault: true } });
       }
-    }
+      return tx.user.findUniqueOrThrow({ where: { id: userId }, select: {
+        id: true, name: true, email: true, phone: true, avatar: true, role: true,
+        sellerStatus: true, isVerified: true, createdAt: true,
+        addresses: { where: { isDefault: true }, take: 1 },
+      } });
+    });
+    if (!updatedUser) return NextResponse.json({ success: false, message: "Your account changed. Sign in again before saving." }, { status: 409 });
 
     return NextResponse.json({
       success: true,

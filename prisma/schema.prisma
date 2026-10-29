@@ -182,6 +182,10 @@ model Address {
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  // At most one default per user is enforced by the partial unique index
+  // Address_one_default_per_user in the reviewed SQL migration.
 }
 
 model Coupon {

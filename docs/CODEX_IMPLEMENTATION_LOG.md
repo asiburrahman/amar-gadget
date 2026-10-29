@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 15 original tasks plus AUD-050 implemented (16 of 51 tracked tasks); 34 original tasks and external credential-revocation confirmation for AUD-051 remain open (35 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 16 original tasks plus AUD-050 implemented (17 of 51 tracked tasks); 33 original tasks and external credential revocation for AUD-051 remain open (34 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -212,6 +212,8 @@ The runner now separates a bounded thirty-second initial health budget from the 
 
 ## Batch 12 — AUD-011: consistent account validation and request budgets
 
+Implementation commit: [149b735](https://github.com/asiburrahman/amar-gadget/commit/149b735).
+
 Registration, reset, change and operator-created new passwords share the established registration strength policy with an explicit 8–128-character bound. Login/current-password proof preserve existing password bytes and remain compatible with older credentials. Shared bounded schemas cover names, email, confirmation, profile, required address fields and image references; profile privilege fields, unsafe/malformed URLs and database-incompatible null characters are rejected before writes. Registration/reset/profile forms use the same policy, and normalized profile values come from the server response.
 
 A bounded streaming JSON reader rejects malformed/invalid UTF-8 bodies with 400 and declared/actual oversized bodies with 413. Sensitive mutations enforce separate IP and account/email budgets through the configured distributed limiter before password work or writes. Identity keys are digested and operation-scoped, with conservative Retry-After responses; a new source IP does not reset the target email's account budget. Public reset/resend responses consistently acknowledge a request for absent/deliverable/undeliverable accounts without asserting delivery. Internal/provider/SQL errors are not returned or logged raw by the changed account handlers/limiter. This is not a timing-indistinguishability claim; synchronous provider timing remains an explicit boundary in the runbook.
@@ -219,6 +221,18 @@ A bounded streaming JSON reader rejects malformed/invalid UTF-8 bodies with 400 
 Validation: **188 tests across 22 suites pass**, including 20 new schema/streamed-body/SQL endpoint cases and a password-reset DOM regression. TypeScript, all affected-file lint, diff checks and final production build pass. Immediate standalone HTTP smoke passes, including actual signed profile reads, SQL catalog, revoked-cookie API denial and dashboard login redirect; first health response **6,215 ms** within the distinct thirty-second startup budget. No new migration is needed. The current repository-wide lint remains open: **68 errors, 60 warnings**. Tests control the limiter/SMTP boundary; no real provider delivery, Redis request, production deployment or browser walkthrough is claimed.
 
 See [account input and rate policy](ACCOUNT_INPUT_RUNBOOK.md) for exact budgets, compatibility and limitations. Bounded legacy raster-data avatars remain pending AUD-038's storage/signature/lifecycle work. Profile/address atomic consistency remains the next separate task, **AUD-039**; runtime/proxy boundaries follow as AUD-040/041. Every remaining task stays in scope.
+
+## Batch 13 — AUD-039: atomic profile and default-address saves
+
+Profile/default-address writes now execute in one PostgreSQL transaction under the account lock, rechecking current verification/session authority before any mutation. Failure after a profile write rolls it back with the address operation. Simultaneous first saves serialize and update one coherent default rather than creating duplicates or mixing profile/address snapshots. A partial unique index enforces at most one default per account even for direct SQL; zero defaults and multiple nondefault addresses remain valid. Server-derived ownership and strict input schemas reject client address-ID/owner injection.
+
+Migration `20261028220000_atomic_profile_default` preserves every legacy address row/content/timestamp, retaining the most recently updated default per account with deterministic creation/ID ties and demoting duplicate flags. Fresh nine-migration install/seed and an eight-to-nine upgrade with deliberately ambiguous defaults pass. Exact pre/post account/order/history/address comparisons confirm preservation and the intended deterministic flags. See [profile/default-address rollout](PROFILE_ADDRESS_RUNBOOK.md) for review and coordinated deployment; no production migration occurred.
+
+The editor reads only an actual default, uses normalized committed values, retains edits on failure and disables overlapping saves/edits. Missing defaults do not preselect a district; district text completion permits actual locations outside the suggestion list. Full saved-address CRUD/checkout selection remains AUD-021.
+
+Validation: **197 tests across 23 suites pass**, including seven new real SQL cases and two DOM success/failure cases. The rollback case uses a real test-only SQL constraint rather than a simulated database result; direct concurrent SQL also proves the unique index. TypeScript, affected-file lint, Prisma schema validation, whitespace checks and final production build pass. Immediate standalone HTTP/SQL/signed-cookie smoke passes, with first health **6,357 ms** under the separate thirty-second startup budget. No actual browser/provider/deployment verification is inferred.
+
+On 29 October 2026 (Asia/Dhaka), the owner confirmed the SMTP credential has not yet been revoked. [AUD-051](ADDITIONAL_AUDIT_FINDINGS.md) remains open for that actual external action; no secret was requested or shared. Next original task: **AUD-040 — unify runtime configuration, fail-fast service requirements and readiness/liveness**. The full remaining-task objective stays active.
 
 ## Public contribution evidence
 
