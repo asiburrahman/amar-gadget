@@ -35,6 +35,7 @@ async function main() {
     assert.equal(login.status, 200); assert.ok(cookie);
     // Inspect only action metadata; never print the manifest's encryption key.
     const manifest = JSON.parse(await readFile(".next/standalone/.next/server/server-reference-manifest.json", "utf8"));
+    for (const retired of ["createProductAction", "getProductBySlug", "processOrderCheckout"]) assert.ok(!Object.values(manifest.node).some((value) => value.exportedName === retired), `Retired action ${retired} was compiled`);
     const call = async (name, args, route = "/admin/products", worker = "app/(dashboard)/admin/products/page") => {
       const reference = Object.entries(manifest.node).find(([, value]) => value.exportedName === name && value.workers?.[worker]);
       assert.ok(reference, `Missing compiled action ${name}`);

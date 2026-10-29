@@ -6,7 +6,8 @@ import { ProductGallery } from "../../components/shared/product-gallery";
 import { uploadProductImage } from "../../lib/client/product-image-upload";
 import { createProduct } from "../../server/actions/product/product-actions";
 
-jest.mock("next/navigation", () => ({ useRouter: () => ({ push: jest.fn() }) }));
+const navigation = { push: jest.fn() };
+jest.mock("next/navigation", () => ({ useRouter: () => navigation }));
 jest.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "seller", role: "MEMBER", sellerStatus: "APPROVED" }, loading: false }) }));
 jest.mock("@/server/actions/product/product-actions", () => ({ createProduct: jest.fn(), getCategories: jest.fn().mockResolvedValue({ success: true, data: [{ id: "category", name: "Phones" }] }), getBrands: jest.fn().mockResolvedValue({ success: true, data: [] }) }));
 
@@ -83,6 +84,38 @@ it("shows provider rejection and retries with a fresh upload before enabling sub
   fireEvent.click(screen.getByRole("button", { name: "Retry phone.png" }));
   await waitFor(() => expect(UploadXhr.instances).toHaveLength(2)); await finish(1);
   await waitFor(() => expect(changed).toHaveBeenLastCalledWith({ keys: [key(2)], ready: true }));
+});
+it("shows the actual seller form's successful pending-approval state, blocks resubmission and navigates once", async () => {
+  (createProduct as jest.Mock).mockResolvedValue({ success: true, data: { id: "saved-product", slug: "saved-product" } });
+  render(<AddProductPage />); await screen.findByRole("option", { name: "Phones" });
+  fireEvent.change(screen.getByLabelText("Product Title / Name *"), { target: { value: "Real phone" } });
+  fireEvent.change(screen.getByLabelText("Price (BDT) *"), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText("Category *"), { target: { value: "category" } });
+  choose([file()]); await waitFor(() => expect(UploadXhr.instances).toHaveLength(1)); await finish(0);
+  jest.useFakeTimers();
+  try {
+    const submit = screen.getByRole("button", { name: "Submit Product For Admin Approval" }), form = submit.closest("form")!;
+    await act(async () => fireEvent.submit(form));
+    expect(screen.getAllByRole("status").some((node) => node.textContent?.includes("Sent to Admin for approval"))).toBe(true);
+    expect(submit).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText("Product details")).toHaveProperty("disabled", true);
+    await act(async () => fireEvent.submit(form));
+    expect(createProduct).toHaveBeenCalledTimes(1); expect(navigation.push).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(2000)); expect(navigation.push).toHaveBeenCalledTimes(1); expect(navigation.push).toHaveBeenCalledWith("/member/dashboard");
+  } finally { jest.useRealTimers(); }
+});
+it("cancels a pending success navigation when the seller leaves the page", async () => {
+  (createProduct as jest.Mock).mockResolvedValue({ success: true, data: { id: "saved-product", slug: "saved-product" } });
+  const view = render(<AddProductPage />); await screen.findByRole("option", { name: "Phones" });
+  fireEvent.change(screen.getByLabelText("Product Title / Name *"), { target: { value: "Real phone" } });
+  fireEvent.change(screen.getByLabelText("Price (BDT) *"), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText("Category *"), { target: { value: "category" } });
+  choose([file()]); await waitFor(() => expect(UploadXhr.instances).toHaveLength(1)); await finish(0);
+  jest.useFakeTimers();
+  try {
+    await act(async () => fireEvent.submit(screen.getByRole("button", { name: "Submit Product For Admin Approval" }).closest("form")!));
+    view.unmount(); act(() => jest.advanceTimersByTime(2000)); expect(navigation.push).not.toHaveBeenCalled();
+  } finally { jest.useRealTimers(); }
 });
 it("rejects fractional stock and excessive discounts in the actual seller form instead of truncating them", async () => {
   render(<AddProductPage />); await screen.findByRole("option", { name: "Phones" });

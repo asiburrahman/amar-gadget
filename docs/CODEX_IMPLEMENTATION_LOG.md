@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 26 original tasks plus AUD-050 implemented (27 of 51 tracked tasks); 23 original tasks and external credential revocation for AUD-051 remain open (24 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 27 original tasks plus AUD-050 implemented (28 of 51 tracked tasks); 22 original tasks and external credential revocation for AUD-051 remain open (23 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -397,6 +397,20 @@ Validation: **469 Jest tests across 48 suites pass**, plus **5 native gateway/wo
 The prepared production server smoke exercises actual seller/admin login, owner index/editor HTML, compiled Next Action/Flight requests, real SQL gallery and cleanup writes, stale/foreign/revoked denial, administrator deletion and the dual-auth private cleanup route. Worker packaging and both real maintenance-worker subprocess signatures are verified. Existing compiled catalog/specification/campaign and runtime SEO/outage smokes pass. Initial smoke string matching was corrected to inspect the actual link URL because React splits dynamic text with HTML comments; application behavior was unchanged. See [media contracts, worker configuration and limits](PRODUCT_IMAGES_RUNBOOK.md).
 
 No production database, R2 bucket, credential or deployment was changed. On 29 October 2026 the owner again confirmed that SMTP revocation has not occurred; AUD-051 stays open. Next original task: **AUD-048 — consolidate legacy product/payment helpers and remove duplicate unsafe paths**. The full remaining-task objective stays active.
+
+## Batch 24 — AUD-048: remove legacy checkout/product paths and test the actual seller entry point
+
+Date: 29 October 2026 (Asia/Dhaka). Previous media lifecycle step: [`aa6dc6a`](https://github.com/asiburrahman/amar-gadget/commit/aa6dc6a).
+
+Scoped source/import searches confirmed that the legacy `lib/db-actions.ts` checkout had no application caller. It still exposed an importable order writer with caller-selected identity/payment intent, regular-price totals, missing quantity/availability rules and contradictory PAID/UNPAID state. That file is removed, rather than retained as a reusable compatibility path. This is removal of an unused unsafe helper, not a claim that an exposed payment exploit was found. Actual order creation remains the session/guest-derived, server-quoted, stock-guarded, idempotent `createOrder` flow. Stripe checkout/retry, verified webhook/provider confirmation and guarded COD fulfillment remain the implemented payment boundaries.
+
+Removed four unused empty Stripe helper modules and the unused marketing product-create wrapper. The seller form now has exactly one publication action; seller and administrator tests exercise that action directly with actual PostgreSQL, signed SDK HTTP and decoded images. Administrator submissions remain pending approval and cannot reuse another owner's upload. The unused unbounded `getProductBySlug` action is removed as well; product detail/API keep the shared bounded visible-product reader. Scoped source verification finds one product insert and one order insert in application code, with no remaining imports of retired helpers.
+
+The action now returns the committed product ID/slug even when subsequent cache invalidation fails, so a cache outage cannot falsely invite another creation attempt. The actual seller form blocks completed resubmission, disables its fields after success, and cancels delayed navigation on unmount. New DOM tests cover success, pending-approval feedback, exactly one submit/navigation and leaving the page; action/network mocks remain explicitly confined to those UI tests. The SQL/SDK test independently proves committed-result behavior after a cache error. No product-creation idempotency across browser reloads or deliberate new submissions is claimed.
+
+The development guide's unsafe legacy checkout/product/payment examples and alternate-action tests are replaced by links to actual implemented entry points and their contracts. Historical audit findings and earlier implementation checkpoints remain unchanged. The current media runbook reflects the sole publication action. The prepared catalog smoke verifies that retired action exports are absent from the actual compiled manifest, then executes the existing real Next Action/Flight mutation checks; the prepared owner-gallery/cleanup smoke passes too.
+
+Validation: **472 Jest tests across 48 suites pass**, including existing authoritative quote, stock, retry and signed-webhook regressions; TypeScript, affected-file ESLint, production build and diff checks pass. No schema change, production migration, provider operation or deployment occurred. Hosted Stripe/R2/browser certification remains AUD-044; SMTP revocation remains AUD-051, last confirmed not performed by the owner. Next original task: **AUD-021 — shipping address selection and address-management integration**. The full remaining-task objective stays active.
 
 ## Public contribution evidence
 

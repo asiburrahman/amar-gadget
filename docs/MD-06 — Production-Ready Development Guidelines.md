@@ -1,6 +1,6 @@
 # MD-06 — Production-Ready Development Guidelines
 
-The environment snippets below are historical design examples. [Runtime configuration and startup](RUNTIME_CONFIGURATION_RUNBOOK.md) now define the implemented contract: custom JWT/OTP authentication, production preflight and no runtime `SKIP_ENV_VALIDATION` permission. Follow that runbook and the implementation log when checking current behavior.
+Remaining code snippets are historical design examples, not current implementation instructions. [Runtime configuration and startup](RUNTIME_CONFIGURATION_RUNBOOK.md) now define the implemented contract: custom JWT/OTP authentication, production preflight and no runtime `SKIP_ENV_VALIDATION` permission. Follow that runbook and the implementation log when checking current behavior.
 
 This document outlines the detailed step-by-step checklist and phases for implementing production-ready, enterprise-grade code within the Amar Gadget repository. Every phase focuses on secure, highly-performant, and type-safe real-world code patterns.
 
@@ -40,74 +40,10 @@ export const env = validateEnv();
 ---
 
 ## Phase 2: Database Layer & Prisma Transactions
-Implement resilient database access patterns, transactional integrity, and optimized pagination models.
 
-### Step-by-Step Implementation:
-1. Initialize the Prisma client singleton mapping directly to the TypeScript-checked environment settings.
-2. Structure operations using ACID-compliant Prisma interactive transactions.
-3. Apply cursor-based pagination for high-performance listing routes.
+Use the actual transaction-capable [Prisma client](../lib/prisma.ts). The removed legacy checkout helper trusted caller identity/payment intent, omitted effective-price/quantity/visibility rules and wrote contradictory order/payment state. It had no application call site; this was a reuse risk, not evidence of an exposed endpoint.
 
-### Real Code Example (lib/db-actions.ts):
-```typescript
-import { prisma } from "@/lib/prisma";
-
-export async function processOrderCheckout({
-  userId,
-  cartItems,
-  paymentIntentId,
-}: {
-  userId: string;
-  cartItems: { productId: string; quantity: number }[];
-  paymentIntentId: string;
-}) {
-  return await prisma.$transaction(async (tx) => {
-    // 1. Calculate totals and check inventory
-    let totalAmount = 0;
-    const orderItemsData = [];
-
-    for (const item of cartItems) {
-      const product = await tx.product.findUnique({
-        where: { id: item.productId },
-      });
-
-      if (!product || product.stock < item.quantity) {
-        throw new Error(`Insufficient stock for product: ${product?.name || item.productId}`);
-      }
-
-      // Decrement inventory
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      });
-
-      totalAmount += Number(product.price) * item.quantity;
-      orderItemsData.push({
-        productId: item.productId,
-        quantity: item.quantity,
-        price: product.price,
-      });
-    }
-
-    // 2. Create the completed order record
-    const order = await tx.order.create({
-      data: {
-        userId,
-        total: totalAmount,
-        status: "PAID",
-        paymentIntentId,
-        items: {
-          create: orderItemsData,
-        },
-      },
-      include: {
-        items: true,
-      },
-    });
-
-    return order;
-  });
-}
-```
+Current checkout starts at [createOrder](../server/actions/order/order-actions.ts). It validates requests, derives session/guest identity, obtains a server quote, serializes the attempt, atomically reserves approved available stock and creates an unpaid order. Follow the implementation/checkout runbooks and real PostgreSQL tests. Do not restore a second order writer from a design example.
 
 ---
 
@@ -181,68 +117,12 @@ export const config = {
 ---
 
 ## Phase 4: Server Actions & Input Validation
-Design robust Next.js Server Actions incorporating absolute type schemas and detailed state reporting.
 
-### Step-by-Step Implementation:
-1. Decorate the modules with `"use server"`.
-2. Extract payload and perform validation against specific schemas using Zod.
-3. Protect against unauthorized mutations by checking the header-derived auth context.
-4. Catch errors safely and return consistent payload structures containing state flags.
+The actual [seller form](../app/(dashboard)/member/add-product/page.tsx) calls the sole [createProduct action](../server/actions/product/product-actions.ts). The unused marketing wrapper was removed in AUD-048. [Strict shared validation](../lib/validations/product.ts) accepts owner upload keys, not caller image URLs or inline bytes.
 
-### Real Code Example (app/(marketing)/products/_actions/create-product.ts):
-```typescript
-"use server";
+Both seller and administrator publication use current-authority checks, decoded-object verification and a transaction. Every new product starts pending approval. Administrators can feature their own products but cannot bypass approval. The action returns committed ID/slug data even if subsequent cache refresh fails. The UI retains failed submissions and disables completed submissions while navigating.
 
-import { prisma } from "@/lib/prisma";
-import { z } from "zod";
-
-const createProductSchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters"),
-  price: z.number().positive("Price must be greater than zero"),
-  stock: z.number().int().nonnegative(),
-  categoryId: z.string().uuid("Invalid category ID"),
-});
-
-export type ActionState = {
-  success: boolean;
-  message: string;
-  errors?: Record<string, string[]>;
-};
-
-export async function createProductAction(
-  userId: string,
-  userRole: string,
-  rawData: unknown
-): Promise<ActionState> {
-  if (userRole !== "MEMBER" && userRole !== "ADMIN") {
-    return { success: false, message: "Unauthorized action" };
-  }
-
-  const validated = createProductSchema.safeParse(rawData);
-  if (!validated.success) {
-    return {
-      success: false,
-      message: "Validation failed",
-      errors: validated.error.flatten().fieldErrors,
-    };
-  }
-
-  try {
-    await prisma.product.create({
-      data: {
-        ...validated.data,
-        sellerId: userId,
-        status: userRole === "ADMIN" ? "PUBLISHED" : "PENDING_APPROVAL",
-      },
-    });
-
-    return { success: true, message: "Product submitted successfully" };
-  } catch (error) {
-    console.error("Database operation failed:", error);
-    return { success: false, message: "Internal server error occurred" };
-  }
-}
-```
+Read the installed Next server-action/data-security guide before changing this boundary. Exported actions accept untrusted input; rendering restrictions are insufficient. Public detail uses the shared bounded visible-product reader in [lib/public-product.ts](../lib/public-product.ts), not an unbounded alternative.
 
 ---
 
@@ -339,60 +219,12 @@ export async function generatePresignedUploadUrl({
 ---
 
 ## Phase 7: Payment Processing & Stripe Webhooks
-Implement reliable checkouts and secure asynchronous updates via cryptographically signed webhooks.
 
-### Step-by-Step Implementation:
-1. Create Stripe Payment Intent on the server.
-2. Listen for incoming POST events on the webhook endpoint.
-3. Cryptographically check signature validity against the local webhook secret.
-4. Process events asynchronously, ensuring idempotency.
+Implemented paths: [Stripe configuration](../lib/stripe/stripe.ts), [durable checkout sessions](../lib/stripe/order-checkout.ts), [reservation/payment transitions](../lib/checkout-reservations.ts), [verified webhook](../app/api/stripe/webhook/route.ts). Empty checkout-session/customer/payment-intent/webhook helper exports were removed in AUD-048; they were placeholders, not integrations.
 
-### Real Code Example (app/api/stripe/webhook/route.ts):
-```typescript
-import { NextResponse } from "next/server";
-import Stripe from "stripe";
-import { prisma } from "@/lib/prisma";
+Checkout creates/retrieves a session for an existing authorized unpaid order. Browser redirects and submitted intent IDs do not prove payment. Verified webhooks and authenticated provider retrieval use amount/currency/method/session checks, order locks and idempotent transitions. Late payments stay cancelled for operator refund review. COD collection has its separate guarded fulfillment path.
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-01-27" as any,
-});
-
-export async function POST(req: Request) {
-  const body = await req.text();
-  const signature = req.headers.get("stripe-signature") || "";
-
-  let event: Stripe.Event;
-
-  try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
-  } catch (err: any) {
-    console.error(`⚠️ Webhook signature verification failed:`, err.message);
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-  }
-
-  if (event.type === "payment_intent.succeeded") {
-    const paymentIntent = event.data.object as Stripe.PaymentIntent;
-    
-    // Ensure Idempotency
-    const existingOrder = await prisma.order.findFirst({
-      where: { paymentIntentId: paymentIntent.id },
-    });
-
-    if (existingOrder && existingOrder.status !== "PAID") {
-      await prisma.order.update({
-        where: { id: existingOrder.id },
-        data: { status: "PAID" },
-      });
-    }
-  }
-
-  return NextResponse.json({ received: true });
-}
-```
+Follow the checkout/reservation runbooks and actual SQL/webhook tests. Hosted Stripe/browser verification remains a release gate; test signatures/fixtures are not live payment evidence.
 
 ---
 
@@ -534,38 +366,9 @@ export default async function ProductDetailPage({
 ---
 
 ## Phase 10: Testing & Test Mocks
-Enforce quality metrics using isolated unit testing frameworks.
 
-### Step-by-Step Implementation:
-1. Mock the Prisma client module completely.
-2. Execute target function asserting payload expectations against mock resolution.
+Test actual entry points. [Product media integration](../tests/integration/product-media.test.ts) calls the seller form's action with PostgreSQL, real SigV4 HTTP, AWS SDK and Sharp. It verifies seller/admin publication, ownership, approval, validation, provider failure, current authority and committed-result behavior. [Seller form DOM tests](../tests/unit/product-media-ui.test.tsx) explicitly mock network/action boundaries for gating, payloads, retry/cancellation, success, blocked resubmission and navigation cleanup. They do not certify hosted browser CORS.
 
-### Real Code Example (tests/unit/product-action.test.ts):
-```typescript
-import { createProductAction } from "@/server/actions/product/create-product";
-import { prisma } from "@/lib/prisma";
+[Marketplace transaction tests](../tests/integration/marketplace-transactions.test.ts) invoke actual checkout/quote/retry/signed-webhook handlers with an isolated database and explicit provider boundaries. [Prepared action smoke](../scripts/smoke-catalog-actions.mjs) exercises production Next Action/Flight transport and verifies retired exports are absent from the compiled manifest.
 
-// Mock Prisma client singleton
-jest.mock("@/lib/prisma", () => ({
-  prisma: {
-    product: {
-      create: jest.fn(),
-    },
-  },
-}));
-
-describe("createProductAction", () => {
-  it("should block non-members and non-admins from creating products", async () => {
-    const response = await createProductAction("user-1", "USER", {
-      name: "New iPhone",
-      price: 120000,
-      stock: 10,
-      categoryId: "cat-1",
-    });
-
-    expect(response.success).toBe(false);
-    expect(response.message).toBe("Unauthorized action");
-    expect(prisma.product.create).not.toHaveBeenCalled();
-  });
-});
-```
+Use TEST_DATABASE_URL only with an isolated local audit_* database. Run relevant Jest tests, TypeScript, affected-file lint, production build and prepared HTTP smokes. Record exact results and external limits in [the implementation log](CODEX_IMPLEMENTATION_LOG.md). Design snippets and passing mocked responses are not production evidence.

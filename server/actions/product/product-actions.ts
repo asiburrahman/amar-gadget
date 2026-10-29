@@ -11,7 +11,6 @@ import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { AccountRequestError, limitAccountIp, limitAccountIdentity } from "@/lib/account-request";
 import { getCatalogListing, CatalogQueryError, CatalogAccessError, type CatalogScope } from "@/lib/catalog-listing";
-import { publicProductMedia } from "@/lib/product-media-policy";
 
 export async function getProducts(queryParams: Record<string, unknown> = {}) {
   try {
@@ -35,37 +34,6 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
     return { success: false, error: "Products are temporarily unavailable. Try again later.", data: [], total: 0 };
   }
 }
-export async function getProductBySlug(slug: string) {
-  try {
-    const product = await prisma.product.findFirst({
-      where: { slug, ...publicProductWhere },
-      include: {
-        category: true,
-        brand: true,
-        seller: { select: { id: true, name: true } },
-        reviews: {
-          include: { user: { select: { name: true, avatar: true } } },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
-
-    if (!product) return { success: false, error: "Product not found", data: null };
-
-    return {
-      success: true,
-      data: {
-        ...product,
-        ...publicProductMedia(product),
-        price: Number(product.price),
-        discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
-      },
-    };
-  } catch {
-    return { success: false, error: "Error fetching product", data: null };
-  }
-}
-
 export async function createProduct(input: unknown) {
   try {
     const targetSeller = await getCurrentUserWithRole(["MEMBER", "ADMIN"]);
@@ -125,10 +93,11 @@ export async function createProduct(input: unknown) {
       });
     }, { timeout: 15_000, maxWait: 5000 });
 
-    revalidatePath("/products");
-    revalidatePath("/member/dashboard");
-    revalidatePath("/admin");
-    revalidatePath("/admin/products");
+    // The insert has committed. A cache error must not invite another insert
+    // by telling the seller that the first submission failed.
+    try {
+      for (const path of ["/products", "/member/dashboard", "/member/products", "/admin", "/admin/products"]) revalidatePath(path);
+    } catch { console.error("Committed product creation cache refresh unavailable."); }
 
     return { success: true, data: { id: product.id, slug: product.slug } };
   } catch (error: unknown) {

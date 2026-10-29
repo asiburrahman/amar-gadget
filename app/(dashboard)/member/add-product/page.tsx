@@ -35,6 +35,12 @@ export default function AddProductPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   useEffect(() => {
+    if (!successMsg) return;
+    const timer = setTimeout(() => router.push("/member/dashboard"), 2000);
+    return () => clearTimeout(timer);
+  }, [successMsg, router]);
+
+  useEffect(() => {
     async function loadData() {
       const [catRes, brandRes] = await Promise.all([getCategories(), getBrands()]);
       if (catRes.success && catRes.data) setCategories(catRes.data);
@@ -49,7 +55,7 @@ export default function AddProductPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading || !media.ready || authLoading || !user) return;
+    if (loading || successMsg || !media.ready || authLoading || !user) return;
     setLoading(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -73,7 +79,6 @@ export default function AddProductPage() {
 
       if (result.success) {
         setSuccessMsg("✓ Product successfully submitted! Sent to Admin for approval.");
-        setTimeout(() => router.push("/member/dashboard"), 2000);
       } else {
         setErrorMsg(result.error || "Failed to submit product.");
       }
@@ -124,6 +129,7 @@ export default function AddProductPage() {
       {successMsg && <div role="status" className="p-3 text-xs font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">{successMsg}</div>}
 
       <form onSubmit={handleSubmit} className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4 text-xs">
+        <fieldset disabled={loading || Boolean(successMsg)} className="space-y-4" aria-label="Product details">
         <div>
           <label htmlFor="product-name" className="font-bold block mb-1">Product Title / Name *</label>
           <Input
@@ -240,6 +246,7 @@ export default function AddProductPage() {
         <Button type="submit" disabled={loading || !media.ready || Boolean(successMsg)} variant="default" className="w-full h-11 font-bold text-xs">
           {loading ? "Submitting Product..." : "Submit Product For Admin Approval"}
         </Button>
+        </fieldset>
       </form>
     </div>
   );

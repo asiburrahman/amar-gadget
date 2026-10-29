@@ -14,7 +14,7 @@ import { startS3MediaFixture, validLargePng } from "../helpers/s3-media-fixture"
 import { cleanupProductImages } from "@/lib/product-media-cleanup";
 import { setTimeout as delay } from "node:timers/promises";
 import sharp from "sharp";
-import { createProductAction } from "@/app/(marketing)/products/_actions/create-product";
+import { revalidatePath } from "next/cache";
 import { rateLimit } from "@/lib/rate-limit";
 import * as decoder from "@/lib/validate-product-image";
 
@@ -106,12 +106,27 @@ databaseSuite("direct product media: actual SigV4 HTTP, SQL and application hand
       expect((await createProduct(input([prepared.fileKey]))).success).toBe(false);
     }
   });
-  it("shares validation and pending approval through the former alternate create action", async () => {
+  it("uses the seller form's actual action for administrators too and never autoapproves their new products", async () => {
     const prepared = await upload();
-    expect((await createProductAction({ name: prefix, price: 1, stock: 1, categoryId: category.id })).success).toBe(false);
-    expect((await createProductAction(input([prepared.fileKey]))).success).toBe(true);
-    const saved = await db.product.findFirstOrThrow({ where: { imageUrl: prepared.publicUrl } });
-    expect(saved.status).toBe("PENDING_APPROVAL"); expect(saved.images).toEqual([prepared.publicUrl]);
+    const admin = await db.user.create({ data: { email: `${prefix}-admin@example.invalid`, role: "ADMIN", isVerified: true } });
+    try {
+      (getCurrentUserWithRole as jest.Mock).mockResolvedValue(admin);
+      expect((await createProduct(input([prepared.fileKey]))).success).toBe(false);
+      const own = await upload();
+      expect((await createProduct({ ...input([own.fileKey]), isFeatured: true })).success).toBe(true);
+      const saved = await db.product.findFirstOrThrow({ where: { imageUrl: own.publicUrl } });
+      expect(saved.status).toBe("PENDING_APPROVAL"); expect(saved.sellerId).toBe(admin.id); expect(saved.isFeatured).toBe(true);
+    } finally {
+      await db.product.deleteMany({ where: { sellerId: admin.id } }); await db.user.delete({ where: { id: admin.id } });
+    }
+  });
+  it("returns the committed product identity after cache refresh failure instead of a false creation failure", async () => {
+    const prepared = await upload();
+    (revalidatePath as jest.Mock).mockImplementationOnce(() => { throw new Error("Cache unavailable fixture"); });
+    const result = await createProduct(input([prepared.fileKey]));
+    expect(result.success).toBe(true);
+    if (!result.success || !result.data) throw new Error("Expected the committed identity");
+    expect(await db.product.count({ where: { id: result.data.id, sellerId: seller.id, imageUrl: prepared.publicUrl, status: "PENDING_APPROVAL" } })).toBe(1);
   });
   it("rejects direct mass assignment, invalid references and account-budget denial before image processing", async () => {
     const prepared = await upload();
