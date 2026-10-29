@@ -57,12 +57,13 @@ databaseSuite("direct product media: actual SigV4 HTTP, SQL and application hand
     const first = await upload(), second = await upload();
     const keys = [second.fileKey, first.fileKey];
     expect(Buffer.byteLength(JSON.stringify(input(keys)))).toBeLessThan(2048);
-    const result = await createProduct(input(keys));
+    const result = await createProduct({ ...input(keys), specifications: [{ label: "Screen", value: "OLED" }] });
     expect(result.success).toBe(true);
     if (!result.success || !result.data) throw new Error("Product was not persisted");
     const saved = await db.product.findUniqueOrThrow({ where: { id: result.data.id } });
     expect(saved.images).toEqual([second.publicUrl, first.publicUrl]); expect(saved.imageUrl).toBe(second.publicUrl);
     expect(saved.status).toBe("PENDING_APPROVAL"); expect(saved.sellerId).toBe(seller.id);
+    expect(saved.specifications).toEqual([{ label: "Screen", value: "OLED" }]);
     expect(JSON.stringify(result)).not.toContain("data:image");
   });
   it("uses five-minute signed size/type/create-only uploads and blocks changed headers and overwrite", async () => {

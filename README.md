@@ -355,6 +355,8 @@ npm run lint
 
 [Catalog filtering and pagination contracts](docs/CATALOG_FILTERS_RUNBOOK.md) document the shared page/API/action queries, searchable brand/category choices and paid-delivered sales ranking implemented in AUD-019. Current implementation progress and remaining release checks are recorded in the implementation log.
 
+[Search and comparison contracts](docs/SEARCH_COMPARISON_RUNBOOK.md) cover the working header/search destination, four-product shareable selection and seller-supplied specifications persisted by AUD-020. This revision requires migration `20261029100000_product_specifications` before deployment; no technical data is invented for existing products.
+
 ### Codex-Assisted Development Record
 
 This change was made after reviewing authorization boundaries, checkout totals and payment state, catalog visibility, OTP handling, order tracking, and the checked-in Prisma migrations. The main engineering decision was to derive identities and prices on the server, then make payment confirmation depend on a verified Stripe webhook rather than client input.

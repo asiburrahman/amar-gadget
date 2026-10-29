@@ -1,69 +1,38 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
 import { useAuth } from "@/hooks/use-auth";
-import { Search } from "@/components/icons/Search";
+import { HeaderSearch } from "@/components/catalog/header-search";
+import { ComparisonLink } from "@/components/catalog/compare-button";
 import { User } from "@/components/icons/User";
 import { Menu } from "@/components/icons/Menu";
 import { ChevronDown } from "@/components/icons/ChevronDown";
 import { X } from "@/components/icons/X";
 
 export const ElectroHeader: React.FC = () => {
+  const pathname = usePathname();
+  return <HeaderContent key={pathname} pathname={pathname} />;
+};
+
+function HeaderContent({ pathname }: { pathname: string }) {
   const { user, logout } = useAuth();
-  const [activeUser, setActiveUser] = useState(user);
-
-  useEffect(() => {
-    setActiveUser(user);
-  }, [user]);
-
-  useEffect(() => {
-    const handleSync = (e: any) => {
-      if (e.detail) {
-        setActiveUser(e.detail);
-      }
-    };
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === "amar_gadget_user" && e.newValue) {
-        try {
-          setActiveUser(JSON.parse(e.newValue));
-        } catch (err) {}
-      }
-    };
-    window.addEventListener("amar_gadget_user_updated", handleSync);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("amar_gadget_user_updated", handleSync);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
-
-  const displayUser = activeUser || user;
+  const displayUser = user;
   const [isDepartmentOpen, setIsDepartmentOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("All Categories");
-  const [searchQuery, setSearchQuery] = useState("");
   const [activeLang, setActiveLang] = useState("Dollar (US)");
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  const pathname = usePathname();
   const cartItems = useCartStore((state) => state.items);
   const wishlistItems = useWishlistStore((state) => state.items);
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
   const totalCartPrice = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const wishlistCount = wishlistItems.length;
-
-  // Close dropdowns on page change
-  useEffect(() => {
-    setIsDepartmentOpen(false);
-    setIsMobileMenuOpen(false);
-    setIsUserMenuOpen(false);
-  }, [pathname]);
 
   const categories = [
     { name: "Value of the Day", href: "/deals", isBold: true, hasSub: false },
@@ -229,60 +198,14 @@ export const ElectroHeader: React.FC = () => {
 
           {/* Center: Search Bar with Category Selector */}
           <div className="hidden md:flex flex-1 max-w-2xl mx-2">
-            <form onSubmit={(e) => e.preventDefault()} className="flex items-center w-full h-10 rounded-full border-2 border-[#fed700] bg-white p-0.5 shadow-xs focus-within:ring-2 focus-within:ring-[#fed700]/50 transition-all">
-
-              {/* Search Input on Left */}
-              <input
-                type="text"
-                placeholder="Search for Products"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 pl-4 pr-3 py-1 text-xs sm:text-sm text-[#333e48] placeholder-gray-400 focus:outline-hidden bg-transparent"
-              />
-
-              {/* Category Select Dropdown on Right */}
-              <div className="relative border-l border-gray-200 pl-2 pr-2 flex items-center shrink-0">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="pl-1 pr-5 py-1 text-xs font-semibold text-gray-600 bg-transparent appearance-none cursor-pointer focus:outline-hidden"
-                >
-                  <option>All Categories</option>
-                  <option>Computers & Accessories</option>
-                  <option>Cameras, Audio & Video</option>
-                  <option>Mobiles & Tablets</option>
-                  <option>TV & Audio</option>
-                  <option>Watches & Eyewear</option>
-                  <option>Accessories</option>
-                </select>
-                <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 pointer-events-none" />
-              </div>
-
-              {/* Circular Search Button on Far Right */}
-              <button
-                type="submit"
-                className="w-8 h-8 rounded-full bg-[#fed700] hover:bg-[#eec800] text-[#333e48] flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-xs ml-0.5"
-                aria-label="Search"
-              >
-                <Search className="w-4 h-4 text-[#333e48]" />
-              </button>
-            </form>
+            <HeaderSearch />
           </div>
 
           {/* Right: Action Icons (Compare, Wishlist, Cart) */}
           <div className="flex items-center space-x-5 lg:space-x-6">
 
             {/* Compare / Refresh Icon */}
-            <Link href="/compare" className="hidden sm:flex items-center text-[#333e48] hover:text-black transition-colors relative group" title="Compare">
-              <div className="relative">
-                <svg className="w-5 h-5 text-[#333e48]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="absolute -top-2 -right-2 bg-[#fed700] text-[#333e48] text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center shadow-xs">
-                  0
-                </span>
-              </div>
-            </Link>
+            <ComparisonLink />
 
             {/* Wishlist Heart Icon */}
             <Link href="/wishlist" className="hidden sm:flex items-center text-[#333e48] hover:text-black transition-colors relative group" title="Wishlist">
@@ -315,21 +238,7 @@ export const ElectroHeader: React.FC = () => {
 
         {/* Mobile Search Bar */}
         <div className="mt-2 px-4 md:hidden">
-          <form onSubmit={(e) => e.preventDefault()} className="flex items-center w-full h-9 rounded-full border-2 border-[#fed700] bg-white p-0.5">
-            <input
-              type="text"
-              placeholder="Search for Products"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 pl-4 text-xs text-[#333e48] placeholder-gray-400 focus:outline-hidden bg-transparent"
-            />
-            <button
-              type="submit"
-              className="w-7 h-7 rounded-full bg-[#fed700] text-[#333e48] flex items-center justify-center cursor-pointer shrink-0"
-            >
-              <Search className="w-3.5 h-3.5 text-[#333e48]" />
-            </button>
-          </form>
+          <HeaderSearch mobile />
         </div>
       </div>
 

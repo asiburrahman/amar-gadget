@@ -108,6 +108,7 @@ export async function createProduct(input: unknown) {
           name: validated.name,
           slug,
           description: validated.description,
+          specifications: validated.specifications,
           price: validated.price,
           discountPrice: validated.discountPrice ?? null,
           stock: validated.stock,

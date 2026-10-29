@@ -10,6 +10,7 @@ import { ShoppingCart } from "@/components/icons/ShoppingCart";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
 import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
+import { CompareButton } from "@/components/catalog/compare-button";
 
 interface ProductCardProps {
   id: string;
@@ -176,6 +177,7 @@ export const ProductCard = ({
       {/* Footer Pricing & Sleek Add to Cart Button */}
       <div className="p-3 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800/80 mt-auto flex flex-col gap-2.5">
         {unitsSold !== undefined && <p className="text-[10px] text-muted-foreground">{unitsSold} units in paid, delivered orders</p>}
+        <CompareButton productId={id} name={name} />
         <div className="flex items-center justify-between min-w-0">
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">

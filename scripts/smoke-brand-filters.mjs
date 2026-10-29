@@ -24,6 +24,8 @@ async function main() {
     for (const [product, quantity, status, paymentStatus] of [[products[1], 3, "DELIVERED", "PAID"], [products[0], 99, "CANCELLED", "PAID"], [products[2], 99, "DELIVERED", "UNPAID"]]) {
       orders.push(await db.order.create({ data: { userId: seller.id, total: 100, status, paymentStatus, items: { create: { productId: product.id, quantity, price: 1 } } } }));
     }
+    await db.product.update({ where: { id: products[0].id }, data: { specifications: [{ label: "Screen", value: "OLED" }] } });
+    await db.product.update({ where: { id: products[1].id }, data: { specifications: [{ label: "screen", value: "LCD" }, { label: "Memory", value: "16 GB" }] } });
     redis = await startRedisRestFixture(randomBytes(32).toString("hex"));
     phase = "prepared server startup";
     child = await startStandaloneFixture(url.toString(), redis, { TRUSTED_PROXY_SECRET: secret });
@@ -67,7 +69,31 @@ async function main() {
     const choices = await get(`/api/catalog/options?kind=brand&search=${prefix}`); assert.equal(choices.status, 200); assert.equal((await choices.json()).total, 2);
     phase = "home page actual best-seller wiring";
     const home = await (await get("/")).text(); const section = home.split('aria-label="Best sellers"')[1]?.split("</section>")[0]; assert.ok(section); assert.ok(section.includes(products[1].name)); assert.ok(!section.includes(products[0].name));
-    return { actualBrandDirectoryLinks: "PASS", slugIdAndCaseAliases: "PASS", approvedSellerVisibility: "PASS", combinedBrandCategorySearchSale: "PASS", namedCollectionServerRender: "PASS", missingBrandEmptyState: "PASS", conflictingAndRepeatedFiltersRejected: "PASS", boundedPagesAndExactCount: "PASS", effectivePriceRangeAndSort: "PASS", renderedFilterControls: "PASS", paidDeliveredSalesRanking: "PASS", liveOptionEndpoint: "PASS", homepageBestSellers: "PASS" };
+    phase = "advertised search destination and real comparison specs";
+    const search = await get(`/search?${new URLSearchParams({ q: prefix, categoryId: categories[0].id })}`);
+    // Installed Next emits an explicit refresh destination after a streaming
+    // layout has sent 200; non-streaming requests can still return 307.
+    assert.ok([200, 307].includes(search.status));
+    const searchHtml = search.status === 200 ? await search.text() : "";
+    const location = search.headers.get("location") ?? searchHtml.match(/<meta[^>]*http-equiv="refresh"[^>]*content="[01];url=([^"]+)"/i)?.[1]?.replaceAll("&amp;", "&");
+    phase = "search streaming redirect destination";
+    assert.ok(location?.startsWith("/products?"));
+    const redirected = new URL(location, child.origin); assert.equal(redirected.searchParams.get("search"), prefix); assert.equal(redirected.searchParams.get("categoryId"), categories[0].id);
+    phase = "canonical search filtered results";
+    const actualResults = await (await get(redirected.pathname + redirected.search)).text(); assert.ok(actualResults.includes(products[0].name)); assert.ok(!actualResults.includes(products[1].name));
+    const compareQuery = new URLSearchParams(); for (const product of [products[0], products[1], products[4], products[5]]) compareQuery.append("product", product.id);
+    phase = "rendered comparison specs and visibility";
+    const compared = await get(`/compare?${compareQuery}`); assert.equal(compared.status, 200); const comparedHtml = await compared.text();
+    const table = comparedHtml.match(/<table[\s\S]*?<\/table>/)?.[0]; assert.ok(table);
+    for (const value of ["OLED", "LCD", "16 GB", "Not supplied"]) assert.ok(table.includes(value));
+    const visibleComparison = comparedHtml.replace(/<!--[\s\S]*?-->/g, "");
+    assert.ok(visibleComparison.includes("2 selected products are unavailable")); assert.ok(visibleComparison.includes("Remove product 4"));
+    assert.ok(!comparedHtml.includes(products[4].name)); assert.ok(!comparedHtml.includes(products[5].name));
+    phase = "detail specifications and header search forms";
+    const detail = await (await get(`/products/${products[0].slug}`)).text(); assert.ok(detail.includes("Technical specifications")); assert.ok(detail.includes("OLED")); assert.ok(detail.includes("to comparison"));
+    assert.ok(home.includes('action="/search"')); assert.ok(home.includes('name="q"')); assert.ok(home.includes('name="category"'));
+    const duplicate = await (await get(`/compare?product=${products[0].id}&product=${products[0].id}`)).text(); assert.ok(duplicate.includes("four distinct product IDs"));
+    return { actualBrandDirectoryLinks: "PASS", slugIdAndCaseAliases: "PASS", approvedSellerVisibility: "PASS", combinedBrandCategorySearchSale: "PASS", namedCollectionServerRender: "PASS", missingBrandEmptyState: "PASS", conflictingAndRepeatedFiltersRejected: "PASS", boundedPagesAndExactCount: "PASS", effectivePriceRangeAndSort: "PASS", renderedFilterControls: "PASS", paidDeliveredSalesRanking: "PASS", liveOptionEndpoint: "PASS", homepageBestSellers: "PASS", unifiedSearchRedirect: "PASS", realComparisonSpecifications: "PASS", hiddenComparisonProductsDenied: "PASS", productDetailSpecifications: "PASS", actualHeaderSearchForms: "PASS" };
   } finally {
     await child?.stop(); await redis?.close();
     await db.orderItem.deleteMany({ where: { orderId: { in: orders.map((item) => item.id) } } });

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { ProductImagePicker, type ProductImageSelection } from "@/components/forms/product-image-picker";
 import { createProductSchema, MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION } from "@/lib/validations/product";
+import { SpecificationEditor } from "@/components/catalog/specification-editor";
+import type { Specification } from "@/lib/validations/specifications";
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -27,6 +29,7 @@ export default function AddProductPage() {
   });
 
   const [media, setMedia] = useState<ProductImageSelection>({ keys: [], ready: false });
+  const [specifications, setSpecifications] = useState<Specification[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -55,6 +58,7 @@ export default function AddProductPage() {
       const candidate = createProductSchema.safeParse({
         name: formData.name,
         description: formData.description,
+        specifications,
         price: Number(formData.price),
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : undefined,
         stock: Number(formData.stock),
@@ -216,6 +220,7 @@ export default function AddProductPage() {
           </div>
         </div>
 
+        <SpecificationEditor value={specifications} onChange={setSpecifications} disabled={loading || Boolean(successMsg)} />
         <ProductImagePicker disabled={loading || Boolean(successMsg)} onChange={setMedia} />
 
         <div>

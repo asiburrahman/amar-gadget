@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/formatter";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
 import { ShoppingCart } from "@/components/icons/ShoppingCart";
+import { CompareButton } from "@/components/catalog/compare-button";
 
 export interface ShowcaseProduct {
   id: string;
@@ -34,25 +35,6 @@ interface ElectroCategoryShowcaseProps {
   categories: ShowcaseCategory[];
   allProducts: ShowcaseProduct[];
 }
-
-// Electro-style Compare and Heart SVG icons
-const CompareIcon = ({ className = "w-3.5 h-3.5" }: { className?: string }) => (
-  <svg
-    className={className}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M16 3h5v5" />
-    <path d="M4 20L21 3" />
-    <path d="M21 16v5h-5" />
-    <path d="M15 15l6 6" />
-    <path d="M4 4l5 5" />
-  </svg>
-);
 
 const HeartIcon = ({
   className = "w-3.5 h-3.5",
@@ -335,13 +317,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
 
                 {/* Electro Card Footer with Compare & Add to Wishlist */}
                 <div className="border-t border-gray-100 pt-3 mt-4 flex items-center justify-between text-xs text-[#77838f]">
-                  <Link
-                    href={`/compare?product=${heroProduct.id}`}
-                    className="inline-flex items-center gap-1.5 hover:text-[#0066cc] transition-colors"
-                  >
-                    <CompareIcon className="w-3.5 h-3.5" />
-                    <span>Compare</span>
-                  </Link>
+                  <CompareButton productId={heroProduct.id} name={heroProduct.name} />
 
                   <button
                     type="button"
@@ -540,13 +516,7 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
 
       {/* Electro Card Footer with Compare & Add to Wishlist */}
       <div className="border-t border-gray-100 pt-2.5 mt-3 flex items-center justify-between text-xs text-[#77838f]">
-        <Link
-          href={`/compare?product=${product.id}`}
-          className="inline-flex items-center gap-1 hover:text-[#0066cc] transition-colors"
-        >
-          <CompareIcon className="w-3.5 h-3.5" />
-          <span>Compare</span>
-        </Link>
+        <CompareButton productId={product.id} name={product.name} />
 
         <button
           type="button"

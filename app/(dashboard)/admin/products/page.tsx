@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/formatter";
 import { AdminProductManageActions } from "../_components/admin-product-manage-actions";
+import { AdminSpecificationEditor } from "@/components/catalog/admin-specification-editor";
 
 export default async function AdminProductsPage() {
   const products = await prisma.product.findMany({
@@ -77,12 +78,14 @@ export default async function AdminProductsPage() {
                     </div>
                   </div>
 
+                  <div className="space-y-3"><AdminSpecificationEditor productId={product.id} specifications={product.specifications} />
                   <AdminProductManageActions
                     productId={product.id}
                     currentPrice={numericPrice}
                     currentDiscountPrice={numericDiscountPrice}
                     currentStatus={product.status}
                   />
+                  </div>
                 </div>
               );
             })}

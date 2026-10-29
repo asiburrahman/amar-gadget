@@ -61,13 +61,19 @@ async function main() {
     const saved = await db.product.findUniqueOrThrow({ where: { id: product.id } });
     assert.equal(saved.price.toString(), "123.45"); assert.equal(saved.discountPrice.toString(), "99.99");
     phase = "valid product approval";
+    phase = "actual compiled specification mutation";
+    assert.equal((await call("adminUpdateSpecifications", [{ productId: product.id, specifications: [{ label: "Storage", value: "512 GB" }] }])).success, true);
+    assert.deepEqual((await db.product.findUniqueOrThrow({ where: { id: product.id } })).specifications, [{ label: "Storage", value: "512 GB" }]);
+    assert.equal((await call("adminUpdateSpecifications", [{ productId: product.id, specifications: [{ label: "Storage", value: "" }] }])).success, false);
+    phase = "valid product approval";
     assert.equal((await call("updateProductStatus", [product.id, "APPROVED"])).success, true);
     assert.equal((await db.product.findUniqueOrThrow({ where: { id: product.id } })).status, "APPROVED");
     phase = "copied administrator cookie revocation";
     await db.user.update({ where: { id: admin.id }, data: { sessionVersion: { increment: 1 } } });
     const revoked = await call("adminUpdateProductPrice", [product.id, 1, null]);
+    assert.equal((await call("adminUpdateSpecifications", [{ productId: product.id, specifications: [] }])).success, false);
     assert.equal(revoked.success, false); assert.equal((await db.product.findUniqueOrThrow({ where: { id: product.id } })).price.toString(), "123.45");
-    return { compiledNextActionTransport: "PASS", malformedRequestsLeaveProductUnchanged: "PASS", directCreateValidation: "PASS", serializablePriceResult: "PASS", exactPriceSqlWrite: "PASS", validApproval: "PASS", copiedAdminCookieRevoked: "PASS" };
+    return { compiledNextActionTransport: "PASS", malformedRequestsLeaveProductUnchanged: "PASS", directCreateValidation: "PASS", serializablePriceResult: "PASS", exactPriceSqlWrite: "PASS", specificationSqlMutation: "PASS", invalidAndRevokedSpecMutationDenied: "PASS", validApproval: "PASS", copiedAdminCookieRevoked: "PASS" };
   } finally {
     await child?.stop(); await redis?.close();
     try { if (product) await db.product.deleteMany({ where: { id: product.id } }); if (category) await db.category.delete({ where: { id: category.id } }); if (admin) await db.user.delete({ where: { id: admin.id } }); if (seller) await db.user.delete({ where: { id: seller.id } }); } finally { await db.$disconnect(); }

@@ -55,6 +55,7 @@ model Product {
   name          String
   slug          String      @unique
   description   String?
+  specifications Json      @default("[]")
   price         Decimal     @db.Decimal(10, 2)
   discountPrice Decimal?    @db.Decimal(10, 2)
   stock         Int

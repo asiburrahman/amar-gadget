@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MAX_PRODUCT_IMAGES } from "@/lib/product-media-policy";
 import { MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION, PRODUCT_STATUSES } from "@/lib/catalog-constants";
 import { catalogQuerySchema } from "@/lib/validations/catalog-query";
+import { specificationsSchema } from "@/lib/validations/specifications";
 export { MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION } from "@/lib/catalog-constants";
 
 export const catalogIdSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9-]+$/, "Invalid catalog identifier.");
@@ -17,6 +18,7 @@ export const productUploadKeySchema = z.string().max(160).regex(/^products\/[A-Z
 const fields = {
   name: z.string().trim().min(3, "Product name must be at least 3 characters.").max(120),
   description: z.string().max(MAX_PRODUCT_DESCRIPTION).optional(),
+  specifications: specificationsSchema.optional().default([]),
   price: productPriceSchema,
   discountPrice: productPriceSchema.nullable().optional(),
   stock: z.number().int().min(0).max(MAX_PRODUCT_STOCK),

@@ -59,6 +59,9 @@ it("blocks form submission until the gallery uploads finish, persists cover orde
   fireEvent.change(screen.getByLabelText("Product Title / Name *"), { target: { value: "Real phone" } });
   fireEvent.change(screen.getByLabelText("Price (BDT) *"), { target: { value: "100" } });
   fireEvent.change(screen.getByLabelText("Category *"), { target: { value: "category" } });
+  fireEvent.click(screen.getByRole("button", { name: "Add specification" }));
+  fireEvent.change(screen.getByLabelText("Specification 1"), { target: { value: "Screen" } });
+  fireEvent.change(screen.getByLabelText("Value 1"), { target: { value: "OLED" } });
   choose([file("first.png"), file("second.png")]);
   await waitFor(() => expect(UploadXhr.instances).toHaveLength(1));
   expect(submit).toHaveProperty("disabled", true); await finish(0);
@@ -69,6 +72,7 @@ it("blocks form submission until the gallery uploads finish, persists cover orde
   await waitFor(() => expect(createProduct).toHaveBeenCalledTimes(1));
   const payload = (createProduct as jest.Mock).mock.calls[0][0];
   expect(payload.uploadKeys).toEqual([key(2), key(1)]);
+  expect(payload.specifications).toEqual([{ label: "Screen", value: "OLED" }]);
   expect(payload.images).toEqual([]); expect(payload.imageUrl).toBeUndefined(); expect(JSON.stringify(payload)).not.toContain("base64");
 });
 it("shows provider rejection and retries with a fresh upload before enabling submission", async () => {

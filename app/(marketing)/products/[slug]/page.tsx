@@ -9,6 +9,8 @@ import { ProductDetailActions } from "./_components/product-detail-actions";
 import { formatCurrency } from "@/lib/formatter";
 import { generateProductSchema } from "@/lib/seo/schema";
 import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
+import { CompareButton } from "@/components/catalog/compare-button";
+import { specificationsSchema } from "@/lib/validations/specifications";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +117,7 @@ export default async function ProductDetailPage({
   const numericPrice = Number(product.price);
   const numericDiscountPrice = product.discountPrice ? Number(product.discountPrice) : null;
   const effectivePrice = numericDiscountPrice || numericPrice;
+  const specifications = specificationsSchema.parse(product.specifications);
 
   const jsonLd = generateProductSchema({
     id: product.id,
@@ -212,6 +215,7 @@ export default async function ProductDetailPage({
               </div>
 
               {/* Client Action Component */}
+              <CompareButton productId={product.id} name={product.name} />
               <ProductDetailActions
                 product={{
                   id: product.id,
@@ -225,6 +229,9 @@ export default async function ProductDetailPage({
               />
             </div>
           </div>
+          <section aria-label="Technical specifications" className="mt-8 border rounded-xl p-6"><h2 className="text-xl font-bold mb-4">Technical specifications</h2>
+            {specifications.length ? <dl>{specifications.map((spec) => <div key={spec.label} className="grid sm:grid-cols-2 gap-2 border-b py-3"><dt className="font-semibold">{spec.label}</dt><dd>{spec.value}</dd></div>)}</dl> : <p>No technical specifications supplied.</p>}
+          </section>
         </div>
       </main>
     </>
