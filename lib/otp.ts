@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Prisma, User, OtpToken } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { readPrivateSecret } from "@/config/runtime";
 
 export type OtpPurpose = "REGISTRATION" | "PASSWORD_RESET" | "EMAIL_CHANGE";
 const PURPOSES = new Set<OtpPurpose>(["REGISTRATION", "PASSWORD_RESET", "EMAIL_CHANGE"]);
@@ -14,9 +15,8 @@ export class OtpError extends Error {
 }
 
 function secret() {
-  const key = process.env.OTP_SECRET;
-  if (!key || Buffer.byteLength(key) < 32) throw new OtpError("Verification is temporarily unavailable.", 503);
-  return key;
+  try { return readPrivateSecret("OTP_SECRET"); }
+  catch { throw new OtpError("Verification is temporarily unavailable.", 503); }
 }
 export function otpAccountFingerprint(user: Pick<User, "email" | "password" | "isVerified" | "role" | "sellerStatus"> & { sessionVersion?: number }) {
   return createHash("sha256").update(JSON.stringify(["account-otp-v1", user.email, user.password, user.isVerified, user.role, user.sellerStatus, user.sessionVersion ?? 0])).digest("hex");

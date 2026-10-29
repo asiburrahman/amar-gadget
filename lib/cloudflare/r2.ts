@@ -1,22 +1,7 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { readStorageConfig } from "@/config/runtime";
 
-const accountId = process.env.R2_ACCOUNT_ID;
-const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-const bucketName = process.env.R2_BUCKET_NAME;
-
-// Initialize S3 Client conditionally to prevent crash in dev / pipeline
-const s3Client = accountId && accessKeyId && secretAccessKey
-  ? new S3Client({
-      region: "auto",
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    })
-  : null;
 
 export async function generatePresignedUploadUrl({
   filename,
@@ -49,9 +34,12 @@ export async function generatePresignedUploadUrl({
 
   const key = `uploads/${Date.now()}-${sanitizedFilename}`;
 
-  if (!s3Client || !bucketName) {
-    throw new Error("Cloudflare R2 credentials must be configured before uploads are available.");
-  }
+  const config = readStorageConfig();
+  const bucketName = config.R2_BUCKET_NAME;
+  const s3Client = new S3Client({
+    region: "auto", endpoint: `https://${config.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId: config.R2_ACCESS_KEY_ID, secretAccessKey: config.R2_SECRET_ACCESS_KEY },
+  });
 
   try {
     const command = new PutObjectCommand({

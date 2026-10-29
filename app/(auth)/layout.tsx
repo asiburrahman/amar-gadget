@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Navbar } from "@/components/navbar/navbar";
-import "@/config/env"; // Enforce environment validation on bootstrap
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {

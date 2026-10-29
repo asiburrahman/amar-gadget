@@ -1,13 +1,13 @@
 import { issueOtp, OtpError, type OtpPurpose } from "@/lib/otp";
-import { getMailTransport, MailConfigurationError } from "./nodemailer";
+import { getMailTransport } from "./nodemailer";
+import { readMailSender } from "@/config/runtime";
 
 export type OtpMailResult = { success: true } | { success: false; error: string; status: number; retryAfter?: number };
 
 export async function sendOtpEmail(context: { userId: string; email: string; purpose: OtpPurpose; expectedAccountFingerprint?: string }): Promise<OtpMailResult> {
   try {
     const transport = getMailTransport();
-    const from = process.env.SMTP_FROM?.trim();
-    if (!from) throw new MailConfigurationError();
+    const from = readMailSender();
     const title = { REGISTRATION: "Verify your email", PASSWORD_RESET: "Reset your password", EMAIL_CHANGE: "Confirm your email change" }[context.purpose];
     await issueOtp(context, (code) => transport.sendMail({
       from, to: context.email.trim().toLowerCase(), subject: `Amar Gadget: ${title}`,

@@ -7,8 +7,8 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start -H 0.0.0.0 -p 3000",
+    "build": "prisma generate && next build && node scripts/prepare-standalone.mjs",
+    "start": "node scripts/start-production.mjs",
     "tunnel": "cloudflared tunnel --url http://192.168.50.210:3000 --http-host-header 192.168.50.210:3000",
     "tunnel:local": "cloudflared tunnel --url http://localhost:3000",
     "postinstall": "patch-package --error-on-fail && prisma generate",
@@ -20,7 +20,8 @@
     "provision:admin": "tsx scripts/provision-admin.ts",
     "audit:dependencies": "npm audit",
     "audit:production": "npm audit --omit=dev",
-    "smoke:standalone": "node scripts/smoke-standalone.mjs"
+    "smoke:standalone": "node scripts/smoke-standalone.mjs",
+    "smoke:runtime": "node scripts/smoke-runtime-config.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

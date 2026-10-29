@@ -228,9 +228,10 @@ DATABASE_URL="postgresql://user:password@ep-sample.neon.tech/neondb?sslmode=requ
 DIRECT_URL="postgresql://user:password@ep-sample.neon.tech/neondb?sslmode=require"
 
 # JWT Authentication
-JWT_SECRET="your-super-secret-jwt-key-min-32-chars"
-NEXTAUTH_SECRET="your-nextauth-secret-key"
-NEXTAUTH_URL="http://localhost:3000"
+# Generate distinct private keys (at least 32 random bytes each).
+JWT_SECRET=""
+OTP_SECRET=""
+APP_URL="http://localhost:3000"
 
 # Nodemailer / SMTP (For OTP and password reset emails)
 SMTP_HOST="smtp.gmail.com"
@@ -248,8 +249,9 @@ R2_PUBLIC_URL="https://pub-xxxxxx.r2.dev"
 
 # Stripe Payments
 STRIPE_SECRET_KEY="sk_test_..."
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
+CHECKOUT_SWEEP_SECRET=""
+CHECKOUT_SWEEP_DATABASE="your-database-name"
 
 # Upstash Redis (For distributed rate limiting)
 UPSTASH_REDIS_REST_URL="https://your-upstash-redis.upstash.io"
@@ -259,6 +261,10 @@ UPSTASH_REDIS_REST_TOKEN="your-upstash-redis-token"
 NEXT_PUBLIC_GA_ID="G-XXXXXXXXXX"
 NEXT_PUBLIC_GTM_ID="GTM-XXXXXXX"
 ```
+
+Runtime settings are validated before the supported production launcher starts listening. `APP_URL` is the server's canonical checkout origin; public HTTPS is required, with HTTP allowed only for loopback testing. JWT, OTP and reservation-worker keys must be distinct private values of at least 32 bytes. NextAuth/OAuth credentials and a Stripe publishable key are not required by the implemented custom authentication/hosted Checkout flows.
+
+Production requires complete Redis, SMTP, Stripe/reservation-worker and R2 settings. Development requires the database, keys and application origin; any enabled service group must be complete. Builds remove dotenv files from the standalone artifact and copy its public/static assets. Deploy with runtime environment injection and run `node start.cjs` from that artifact; `npm start` uses the same launcher and can explicitly load a private workspace `.env`. `SKIP_ENV_VALIDATION` does not bypass runtime checks. Use `/api/health` for process liveness and `/api/health/ready` for configured database/schema/Redis readiness. See the [runtime configuration runbook](docs/RUNTIME_CONFIGURATION_RUNBOOK.md).
 
 ---
 

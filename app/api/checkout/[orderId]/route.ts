@@ -8,6 +8,7 @@ import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { applyStripeSession, reconcileReservation } from "@/lib/checkout-reservations";
 import { CheckoutUnavailable, startStripeCheckout } from "@/lib/stripe/order-checkout";
 import { getStripe } from "@/lib/stripe/stripe";
+import { readApplicationOrigin } from "@/config/runtime";
 
 type Context = { params: Promise<{ orderId: string }> };
 async function authorizedOrder(req: Request, context: Context) {
@@ -60,9 +61,7 @@ export async function POST(req: Request, context: Context) {
       if (order.stripeCheckoutSessionId) await applyStripeSession(await getStripe().checkout.sessions.retrieve(order.stripeCheckoutSessionId));
       return NextResponse.json({ refreshed: true });
     }
-    const origin = new URL(process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin);
-    if (process.env.NODE_ENV === "production" && (!process.env.NEXT_PUBLIC_APP_URL || origin.protocol !== "https:")) throw new Error("Configure HTTPS application origin");
-    const session = await startStripeCheckout(order.id, origin.origin);
+    const session = await startStripeCheckout(order.id, readApplicationOrigin());
     return NextResponse.json({ url: session.url, paid: session.payment_status === "paid", waiting: session.status === "complete" });
   } catch (error) {
     if (error instanceof CheckoutUnavailable) return NextResponse.json({ code: error.code, message: error.message }, { status: 409 });

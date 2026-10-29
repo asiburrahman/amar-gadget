@@ -43,6 +43,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
       throw new Error("Integration tests require a localhost database named audit_*.");
     }
     process.env.DATABASE_URL = url.toString();
+    process.env.APP_URL = "http://localhost";
     process.env.OTP_SECRET = "isolated-marketplace-otp-test-key-at-least-32-bytes";
     process.env.STRIPE_SECRET_KEY = "sk_test_codex_integration_only";
     process.env.STRIPE_WEBHOOK_SECRET = "whsec_codex_integration_only";

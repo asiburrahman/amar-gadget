@@ -1,15 +1,14 @@
 import nodemailer from "nodemailer";
+import { readMailTransportConfig } from "@/config/runtime";
 
 export class MailConfigurationError extends Error {
   constructor() { super("Email delivery is not configured."); }
 }
 
 export function getMailTransport() {
-  const host = process.env.SMTP_HOST?.trim();
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS;
-  const port = Number(process.env.SMTP_PORT || "587");
-  if (!host || !user || !pass || !Number.isInteger(port) || port < 1 || port > 65535) throw new MailConfigurationError();
+  let config: ReturnType<typeof readMailTransportConfig>;
+  try { config = readMailTransportConfig(); } catch { throw new MailConfigurationError(); }
+  const { SMTP_HOST: host, SMTP_USER: user, SMTP_PASS: pass, SMTP_PORT: port } = config;
   return nodemailer.createTransport({
     host, port, secure: port === 465, requireTLS: port !== 465,
     auth: { user, pass },

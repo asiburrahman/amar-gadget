@@ -1,9 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
+import { readPrivateSecret } from "@/config/runtime";
 
 function secretKey() {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || Buffer.byteLength(secret) < 32) throw new Error("JWT_SECRET requires at least 32 bytes.");
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(readPrivateSecret("JWT_SECRET"));
 }
 type TokenAccount = { id: string; email: string; name?: string | null; role: string; sessionVersion: number };
 

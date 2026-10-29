@@ -3,7 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 const secret = process.env.CHECKOUT_SWEEP_SECRET;
 const endpoint = new URL("/api/internal/checkout/expire", process.env.CHECKOUT_SWEEP_ORIGIN);
-if (!secret || secret.length < 32) throw new Error("Set CHECKOUT_SWEEP_SECRET (at least 32 characters)");
+if (!secret || Buffer.byteLength(secret) < 32 || secret.length > 4096) throw new Error("Set CHECKOUT_SWEEP_SECRET (at least 32 bytes)");
 if (endpoint.protocol !== "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)) throw new Error("The worker requires HTTPS or loopback");
 const stop = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => stop.abort());

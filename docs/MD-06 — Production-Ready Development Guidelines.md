@@ -1,5 +1,7 @@
 # MD-06 — Production-Ready Development Guidelines
 
+The environment snippets below are historical design examples. [Runtime configuration and startup](RUNTIME_CONFIGURATION_RUNBOOK.md) now define the implemented contract: custom JWT/OTP authentication, production preflight and no runtime `SKIP_ENV_VALIDATION` permission. Follow that runbook and the implementation log when checking current behavior.
+
 This document outlines the detailed step-by-step checklist and phases for implementing production-ready, enterprise-grade code within the Amar Gadget repository. Every phase focuses on secure, highly-performant, and type-safe real-world code patterns.
 
 ---

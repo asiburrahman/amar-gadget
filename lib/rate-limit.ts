@@ -1,13 +1,5 @@
-import { Redis } from "@upstash/redis";
 import { randomUUID } from "node:crypto";
-
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-// Conditionally initialize to prevent crashes if Redis is unconfigured (like in local dev)
-const redis = redisUrl && redisToken
-  ? new Redis({ url: redisUrl, token: redisToken })
-  : null;
+import { getRedisClient } from "@/lib/redis";
 
 /**
  * Extracts the real client IP address securely, prioritizing proxy headers 
@@ -38,19 +30,20 @@ export async function rateLimit(
   windowInSeconds = 60,
   namespace = "default"
 ) {
-  if (!redis) {
-    if (process.env.NODE_ENV === "production") {
-      console.error("Upstash Redis config missing in production; rate-limited request denied.");
-      return { success: false, limit, remaining: 0 };
-    }
-    return {
-      success: true,
-      limit,
-      remaining: limit,
-    };
-  }
-
   try {
+    const redis = getRedisClient();
+    if (!redis) {
+      if (process.env.NODE_ENV === "production") {
+        console.error("Upstash Redis config missing in production; rate-limited request denied.");
+        return { success: false, limit, remaining: 0 };
+      }
+      return {
+        success: true,
+        limit,
+        remaining: limit,
+      };
+    }
+
     const key = `ratelimit:${namespace}:${ip}`;
     const now = Math.floor(Date.now() / 1000);
     const clearBefore = now - windowInSeconds;

@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe/stripe";
 import { applyStripeSession, confirmStripePayment, releaseReservation } from "@/lib/checkout-reservations";
+import { readStripeSecret, readStripeWebhookSecret } from "@/config/runtime";
 
 export async function POST(req: Request) {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!process.env.STRIPE_SECRET_KEY || !webhookSecret) return NextResponse.json({ error: "Stripe configuration error" }, { status: 500 });
+  let webhookSecret: string;
+  try { readStripeSecret(); webhookSecret = readStripeWebhookSecret(); }
+  catch { return NextResponse.json({ error: "Stripe configuration error" }, { status: 503 }); }
   let event: Stripe.Event;
   try {
     event = getStripe().webhooks.constructEvent(await req.text(), req.headers.get("stripe-signature") || "", webhookSecret);

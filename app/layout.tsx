@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
-import "@/config/env"; // Enforce environment validation on bootstrap
 import "@/styles/globals.css";
 
 const fontSans = Geist({

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { CheckoutUnavailable, startStripeCheckout } from "@/lib/stripe/order-checkout";
+import { readApplicationOrigin } from "@/config/runtime";
 
 const requestSchema = z.object({ orderId: z.string().uuid(), checkoutToken: z.string().regex(/^[a-f0-9]{64}$/) });
 
@@ -15,9 +16,7 @@ export async function POST(req: Request) {
     const supplied = createHash("sha256").update(checkoutToken).digest();
     const stored = Buffer.from(order?.checkoutTokenHash ?? "", "hex");
     if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) return NextResponse.json({ success: false, message: "Order is not available for checkout." }, { status: 404 });
-    const base = new URL(process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin);
-    if (process.env.NODE_ENV === "production" && (!process.env.NEXT_PUBLIC_APP_URL || base.protocol !== "https:")) throw new Error("Configure an HTTPS application origin");
-    const session = await startStripeCheckout(orderId, base.origin);
+    const session = await startStripeCheckout(orderId, readApplicationOrigin());
     return NextResponse.json({ success: true, url: session.url, sessionId: session.id, paid: session.payment_status === "paid" });
   } catch (error) {
     if (error instanceof CheckoutUnavailable) return NextResponse.json({ success: false, code: error.code, message: error.message }, { status: 409 });

@@ -1,5 +1,7 @@
 # MD-01 — Amar Gadget Folder Structure (Production Architecture)
 
+This is a historical design specification. Current environment/startup requirements are defined by [the runtime runbook](RUNTIME_CONFIGURATION_RUNBOOK.md) and `config/runtime.ts`; older NextAuth settings and environment bypass examples below are superseded. Use the implementation log for verified feature status.
+
 ````md
 # MD-01 — Amar Gadget Folder Structure
 ## Production Architecture

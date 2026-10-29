@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 16 original tasks plus AUD-050 implemented (17 of 51 tracked tasks); 33 original tasks and external credential revocation for AUD-051 remain open (34 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 17 original tasks plus AUD-050 implemented (18 of 51 tracked tasks); 32 original tasks and external credential revocation for AUD-051 remain open (33 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -224,6 +224,8 @@ See [account input and rate policy](ACCOUNT_INPUT_RUNBOOK.md) for exact budgets,
 
 ## Batch 13 — AUD-039: atomic profile and default-address saves
 
+Implementation commit: [d444449](https://github.com/asiburrahman/amar-gadget/commit/d444449).
+
 Profile/default-address writes now execute in one PostgreSQL transaction under the account lock, rechecking current verification/session authority before any mutation. Failure after a profile write rolls it back with the address operation. Simultaneous first saves serialize and update one coherent default rather than creating duplicates or mixing profile/address snapshots. A partial unique index enforces at most one default per account even for direct SQL; zero defaults and multiple nondefault addresses remain valid. Server-derived ownership and strict input schemas reject client address-ID/owner injection.
 
 Migration `20261028220000_atomic_profile_default` preserves every legacy address row/content/timestamp, retaining the most recently updated default per account with deterministic creation/ID ties and demoting duplicate flags. Fresh nine-migration install/seed and an eight-to-nine upgrade with deliberately ambiguous defaults pass. Exact pre/post account/order/history/address comparisons confirm preservation and the intended deterministic flags. See [profile/default-address rollout](PROFILE_ADDRESS_RUNBOOK.md) for review and coordinated deployment; no production migration occurred.
@@ -233,6 +235,22 @@ The editor reads only an actual default, uses normalized committed values, retai
 Validation: **197 tests across 23 suites pass**, including seven new real SQL cases and two DOM success/failure cases. The rollback case uses a real test-only SQL constraint rather than a simulated database result; direct concurrent SQL also proves the unique index. TypeScript, affected-file lint, Prisma schema validation, whitespace checks and final production build pass. Immediate standalone HTTP/SQL/signed-cookie smoke passes, with first health **6,357 ms** under the separate thirty-second startup budget. No actual browser/provider/deployment verification is inferred.
 
 On 29 October 2026 (Asia/Dhaka), the owner confirmed the SMTP credential has not yet been revoked. [AUD-051](ADDITIONAL_AUDIT_FINDINGS.md) remains open for that actual external action; no secret was requested or shared. Next original task: **AUD-040 — unify runtime configuration, fail-fast service requirements and readiness/liveness**. The full remaining-task objective stays active.
+
+## Batch 14 — AUD-040: runtime contract, preflight and readiness
+
+Date: 29 October 2026 (Asia/Dhaka).
+
+One shared schema now supplies startup and the actual database/JWT/OTP/SMTP/Redis/Stripe/R2/sweep helpers. JWT/OTP/sweep key byte rules are consistent and private keys must be distinct. Production requires complete service groups, a matching worker database and an explicit server `APP_URL`; checkout origins no longer derive from untrusted request hosts or a public build variable. Unused NextAuth/OAuth/publishable-key requirements, database-variable fallbacks and runtime skip behavior are removed. Redis requests have a fresh two-second signal and no automatic retry.
+
+The supported production launcher validates compiled configuration before opening a listener and exits nonzero on missing/invalid fields. `npm start` can explicitly load a private workspace env file; the Docker/prepared artifact starts through `start.cjs` with injected environment. A real generated standalone dotenv file was observed without reading or publishing its content; the build now strips dotenv files, excludes private Docker inputs and packages public/static assets. Original private workspace files are not modified. Framework instrumentation also validates runtime startup. Installed Next source confirmed its banner is emitted before config loading and eager prepare can log failures without closing the listener; the explicit preflight avoids relying on that banner. This also clarifies earlier first-probe latency measurements without claiming a general performance fix.
+
+`/api/health` is liveness only. `/api/health/ready` reports configured DB/migration/Redis readiness with 200 or 503 and safe booleans, no-cache headers, bounded connection/query/Redis waits, per-worker singleflight and a five-second result cache. It does not perform vendor mail/payment/storage operations. A required-migration constant is checked against the checked-in migration history.
+
+Validation: **228 tests across 26 suites pass**, TypeScript and all affected-file lint/whitespace checks pass; final production build succeeds and removes its copied build env file. Actual prepared-server smoke proves missing JWT/Redis/origin/storage settings exit nonzero before the banner despite the old skip flag, no dotenv artifact, and database outage readiness 503/liveness 200. The full HTTP smoke proves real password/login/JWT/SQL, shipped CSS/public assets, healthy readiness and Redis outage 503/liveness 200 using the actual Upstash SDK against a local test-only REST boundary, plus copied-cookie revocation and dashboard redirect. Final first-health response: **717 ms**, excluding launcher preflight; no comparison/performance guarantee is inferred. Production dependency audit still reports **0 vulnerabilities**. No new migration is needed.
+
+Startup diagnostics initially treated Next's early banner as successful initialization; inspecting the installed source corrected that test assumption and motivated the pre-listen launcher. A test REST fixture initially omitted the SDK's base64 response encoding; it was corrected rather than weakening the real PING readiness check. Final smokes exercise the actual prepared entry point and protocol behavior. No production deployment, provider operation, actual browser walkthrough or container image build is claimed. Hosted SMTP/Stripe/R2/Upstash verification and full CI/release work remain open. AUD-051 still requires the owner's credential revocation.
+
+See [runtime configuration and startup](RUNTIME_CONFIGURATION_RUNBOOK.md). Next original task: **AUD-041 — trusted proxy/header ingress and exact production action origins**. The complete remaining-task objective stays active.
 
 ## Public contribution evidence
 

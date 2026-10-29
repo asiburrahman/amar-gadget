@@ -5,7 +5,9 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { SignJWT } from "jose";
+import { tsImport } from "tsx/esm/api";
+import { startRedisRestFixture } from "./testing/redis-rest-fixture.mjs";
+import { runtimeFixtureEnvironment } from "./testing/runtime-fixture.mjs";
 
 class SmokeFailure extends Error {}
 
@@ -15,14 +17,16 @@ async function main() {
   if (!["postgres:", "postgresql:"].includes(url.protocol) || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.pathname.startsWith("/audit_") || url.search) throw new SmokeFailure("Use a disposable local audit_* TEST_DATABASE_URL without query overrides.");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString(), max: 2 }) });
   const prefix = `audit-http-${randomUUID()}`;
-  const signingKey = randomBytes(32).toString("hex");
+  const password = `Audit!${randomBytes(24).toString("hex")}`;
   const controller = new AbortController();
   const abort = () => controller.abort();
   process.once("SIGINT", abort); process.once("SIGTERM", abort);
-  let child, seller, category, product;
+  let child, seller, category, product, redisFixture;
   let phase = "fixture setup";
   try {
-    seller = await db.user.create({ data: { email: `${prefix}@example.invalid`, role: "MEMBER", sellerStatus: "APPROVED", isVerified: true } });
+    const { hashPassword } = await tsImport("../lib/password.ts", import.meta.url);
+    seller = await db.user.create({ data: { email: `${prefix}@example.invalid`, password: await hashPassword(password), role: "MEMBER", sellerStatus: "APPROVED", isVerified: true } });
+    redisFixture = await startRedisRestFixture(randomBytes(32).toString("hex"));
     category = await db.category.create({ data: { name: prefix, slug: prefix } });
     product = await db.product.create({ data: { name: prefix, slug: prefix, price: 1234, stock: 2, status: "APPROVED", sellerId: seller.id, categoryId: category.id } });
     const probe = createServer();
@@ -31,10 +35,8 @@ async function main() {
     await new Promise((resolveClose) => probe.close(resolveClose));
     let ready = false, output = "";
     phase = "server startup";
-    child = spawn(process.execPath, [resolve(".next/standalone/server.js")], { stdio: ["ignore", "pipe", "pipe"], env: {
-      ...process.env, NODE_ENV: "production", HOSTNAME: "127.0.0.1", PORT: String(port), NEXT_TELEMETRY_DISABLED: "1", SKIP_ENV_VALIDATION: "true",
-      DATABASE_URL: url.toString(), DIRECT_URL: url.toString(), JWT_SECRET: signingKey,
-      UPSTASH_REDIS_REST_URL: "", UPSTASH_REDIS_REST_TOKEN: "",
+    child = spawn(process.execPath, [resolve(".next/standalone/start.cjs")], { stdio: ["ignore", "pipe", "pipe"], env: {
+      ...runtimeFixtureEnvironment(url.toString(), `http://127.0.0.1:${port}`, redisFixture),
     } });
     child.on("error", () => controller.abort());
     child.stdout.on("data", (chunk) => { if (!ready) { output = (output + chunk.toString()).slice(-4096); ready = output.includes("Ready"); } });
@@ -61,16 +63,24 @@ async function main() {
     if (catalog.status !== 200 || !Array.isArray(products) || !products.some((entry) => entry.id === product.id)) throw new SmokeFailure(`Real catalog HTTP/SQL smoke failed (status ${catalog.status}).`);
     phase = "product server render";
     const detail = await get(`/products/${prefix}`);
-    if (detail.status !== 200 || !(await detail.text()).includes(prefix)) throw new SmokeFailure(`Product page server-render smoke failed (status ${detail.status}).`);
+    const detailHtml = await detail.text();
+    if (detail.status !== 200 || !detailHtml.includes(prefix)) throw new SmokeFailure(`Product page server-render smoke failed (status ${detail.status}).`);
+    phase = "packaged public and static assets";
+    const stylesheet = detailHtml.match(/href="([^\"]*\/_next\/static\/[^\"]+\.css[^\"]*)"/)?.[1];
+    if (!stylesheet || !stylesheet.startsWith("/_next/static/") || (await get(stylesheet)).status !== 200 || (await get("/file.svg")).status !== 200) throw new SmokeFailure("Standalone public/static assets are missing.");
     phase = "admin redirect";
     const admin = await get("/admin/orders");
     if (![302, 303, 307, 308].includes(admin.status) || !admin.headers.get("location")?.includes("/login")) throw new SmokeFailure(`Unauthenticated admin redirect smoke failed (status ${admin.status}).`);
     phase = "signed session profile read";
-    // Isolated fixture cookie, never an operator/customer credential. This
-    // exercises the built HTTP validator; login/reset routes have SQL tests.
-    const token = await new SignJWT({ sub: seller.id, email: seller.email, role: seller.role, sessionVersion: seller.sessionVersion })
-      .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("5m").sign(new TextEncoder().encode(signingKey));
-    const cookie = `auth_token=${token}`;
+    // Real built login/signing/password/SDK paths with an isolated account
+    // and local REST provider fixture. No hosted provider is contacted.
+    const login = await fetch(`${origin}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: seller.email, password }), signal: AbortSignal.timeout(10_000) });
+    const cookie = login.headers.get("set-cookie")?.split(";")[0];
+    if (login.status !== 200 || !cookie || !(await login.json()).success) throw new SmokeFailure("Configured standalone login failed.");
+    phase = "readiness";
+    const readyResponse = await get("/api/health/ready");
+    const readyBody = await readyResponse.json();
+    if (readyResponse.status !== 200 || readyBody.status !== "READY") throw new SmokeFailure(`Configured readiness failed (HTTP ${readyResponse.status}, config=${readyBody.checks?.configuration === true}, db=${readyBody.checks?.database === true}, redis=${readyBody.checks?.redis === true}).`);
     const profile = await get("/api/user/profile", cookie);
     if (profile.status !== 200 || (await profile.json()).user?.id !== seller.id) throw new SmokeFailure("Signed profile HTTP read failed.");
     await db.user.update({ where: { id: seller.id }, data: { sessionVersion: { increment: 1 } } });
@@ -83,7 +93,13 @@ async function main() {
     const httpRedirect = [302, 303, 307, 308].includes(staleDashboard.status) && staleDashboard.headers.get("location")?.includes("/login");
     const streamedRedirect = staleDashboard.status === 200 && /<meta[^>]+id="__next-page-redirect"[^>]+content="[^\"]*url=\/login"/.test(dashboardBody);
     if (!httpRedirect && !streamedRedirect) throw new SmokeFailure(`Revoked-cookie dashboard failed redirect verification (status ${staleDashboard.status}, redirectDigest=${dashboardBody.includes("NEXT_REDIRECT;replace;/login;")}).`);
-    return { standaloneHttp: "PASS", firstHealthMs, firstHealthLimitMs: 30_000, catalogSql: "PASS", productServerRender: "PASS", unauthenticatedAdminRedirect: "PASS", signedProfileRead: "PASS", copiedCookieRevocation: "PASS", revokedDashboardRedirect: "PASS" };
+    phase = "Redis outage readiness";
+    redisFixture.setAvailable(false);
+    const outageDeadline = Date.now() + 8000;
+    let unavailable;
+    do { await delay(250); unavailable = await get("/api/health/ready"); } while (unavailable.status === 200 && Date.now() < outageDeadline);
+    if (unavailable.status !== 503 || (await unavailable.json()).checks.redis !== false || (await get("/api/health")).status !== 200) throw new SmokeFailure("Redis outage was not distinguished from process liveness.");
+    return { standaloneHttp: "PASS", firstHealthMs, firstHealthLimitMs: 30_000, catalogSql: "PASS", productServerRender: "PASS", packagedAssets: "PASS", unauthenticatedAdminRedirect: "PASS", configuredLogin: "PASS", readiness: "PASS", redisOutageReadiness: "PASS", signedProfileRead: "PASS", copiedCookieRevocation: "PASS", revokedDashboardRedirect: "PASS" };
   } catch (error) {
     if (error instanceof SmokeFailure) throw error;
     const allowedCodes = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT"]);
@@ -99,7 +115,7 @@ async function main() {
       if (product) await db.product.delete({ where: { id: product.id } });
       if (category) await db.category.delete({ where: { id: category.id } });
       if (seller) await db.user.delete({ where: { id: seller.id } });
-    } finally { await db.$disconnect(); process.removeListener("SIGINT", abort); process.removeListener("SIGTERM", abort); }
+    } finally { await db.$disconnect(); await redisFixture?.close(); process.removeListener("SIGINT", abort); process.removeListener("SIGTERM", abort); }
   }
 }
 main().then((result) => console.log(JSON.stringify(result))).catch((error) => { console.error(error instanceof SmokeFailure ? error.message : "Standalone HTTP/SQL smoke failed. Check the local database, build output and test environment; fixture cleanup was attempted."); process.exitCode = 1; });
