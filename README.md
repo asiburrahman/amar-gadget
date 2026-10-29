@@ -359,6 +359,8 @@ npm run lint
 
 [Campaigns, browser history and BDT pricing](docs/CAMPAIGNS_HISTORY_CURRENCY_RUNBOOK.md) document AUD-037's database-backed campaign management, real recently viewed products, current catalog offer policy and fixed checkout currency. Apply migration `20261029110000_catalog_campaigns` before deploying this revision. Campaign listing expiry does not change an independently configured product discount.
 
+[Canonical origin, sitemap and structured-data contracts](docs/SEO_RUNBOOK.md) document AUD-043. APP_URL supplies runtime SEO URLs; `/sitemap.xml` indexes bounded public-catalog/taxonomy files. `npm run smoke:seo` verifies actual prepared-server HTML/XML/headers under two runtime origins. Metadata is request-time, so the runbook also records the effect on formerly static pages.
+
 ### Codex-Assisted Development Record
 
 This change was made after reviewing authorization boundaries, checkout totals and payment state, catalog visibility, OTP handling, order tracking, and the checked-in Prisma migrations. The main engineering decision was to derive identities and prices on the server, then make payment confirmation depend on a verified Stripe webhook rather than client input.

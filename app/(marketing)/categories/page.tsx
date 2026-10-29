@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { publicProductWhere } from "@/lib/catalog-visibility";
 import { H1, P } from "@/components/ui/typography";
 import {
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
+    alternates: { canonical: '/categories' },
     title: "Product Categories | Amar Gadget",
     description:
       "Browse tech categories: Smartphones, Laptops, Audio, Smart Watches, Accessories, and Electronics organized with official warranty in Bangladesh.",
@@ -20,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function CategoriesPage() {
-  let categories: any[] = [];
+  let categories: Prisma.CategoryGetPayload<{ include: { products: { include: { category: { select: { name: true } } } } } }>[] = [];
 
   try {
     categories = await prisma.category.findMany({
@@ -50,7 +52,7 @@ export default async function CategoriesPage() {
   // Build format for ElectroCategoryShowcase
   const allProducts: ShowcaseProduct[] = [];
   const showcaseCategories: ShowcaseCategory[] = categories.map((cat) => {
-    const products: ShowcaseProduct[] = cat.products.map((p: any) => {
+    const products: ShowcaseProduct[] = cat.products.map((p) => {
       const prod: ShowcaseProduct = {
         id: p.id,
         slug: p.slug,

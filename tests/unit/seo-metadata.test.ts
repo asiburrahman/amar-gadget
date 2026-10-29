@@ -1,88 +1,37 @@
-import { createMetadata } from "../../lib/seo/metadata";
+import { createMetadata } from "@/lib/seo/metadata";
+import { canonicalUrl, productPath, categoryPath, publicImageUrl } from "@/lib/seo/urls";
+import { generateProductSchema, generateOrganizationSchema, generateWebsiteSchema } from "@/lib/seo/schema";
+import { privateIndexPath } from "@/lib/seo/policy";
 
-describe("SEO Metadata Factory (Phase 1)", () => {
-  it("generates default metadata with title, description, and canonical URL", () => {
-    const metadata = createMetadata({
-      title: "iPhone 16 Pro Max",
-      description: "Buy iPhone 15 Pro Max in Bangladesh",
-      canonicalUrl: "/products/iphone-16-pro-max",
-    });
-
-    expect(metadata.title).toBe("iPhone 16 Pro Max | Amar Gadget");
-    expect(metadata.description).toBe("Buy iPhone 15 Pro Max in Bangladesh");
-    expect(metadata.alternates?.canonical).toContain("/products/iphone-16-pro-max");
-    expect((metadata.openGraph as any)?.title).toBe("iPhone 16 Pro Max | Amar Gadget");
-    expect((metadata.openGraph as any)?.type).toBe("website");
-    expect((metadata.twitter as any)?.card).toBe("summary_large_image");
-    expect(metadata.robots).toEqual({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        "max-video-preview": -1,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-      },
-    });
-  });
-
-  it("prevents duplicate brand suffixes if title already contains Amar Gadget", () => {
-    const metadata = createMetadata({
-      title: "Explore Flagship Phones | Amar Gadget",
-      description: "Leading multi-vendor store",
-    });
-
-    expect(metadata.title).toBe("Explore Flagship Phones | Amar Gadget");
-  });
-
-  it("handles noIndex flag correctly for private or not found pages", () => {
-    const metadata = createMetadata({
-      title: "Product Not Found",
-      description: "The requested product does not exist.",
-      noIndex: true,
-    });
-
-    expect(metadata.title).toBe("Product Not Found | Amar Gadget");
-    expect(metadata.robots).toEqual({
-      index: false,
-      follow: false,
-      googleBot: {
-        index: false,
-        follow: false,
-        "max-video-preview": -1,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-      },
-    });
-  });
-
-  it("formats OpenGraph image URLs correctly for relative, protocol-relative, and absolute paths", () => {
-    const metadataWithRelativeImage = createMetadata({
-      title: "MacBook Air M3",
-      description: "Apple MacBook Air M3",
-      image: "/images/macbook.jpg",
-    });
-
-    const ogImages = (metadataWithRelativeImage.openGraph as any)?.images as any[];
-    expect(ogImages[0].url).toContain("/images/macbook.jpg");
-
-    const metadataWithAbsoluteImage = createMetadata({
-      title: "MacBook Air M3",
-      description: "Apple MacBook Air M3",
-      image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8",
-    });
-
-    const absoluteOgImages = (metadataWithAbsoluteImage.openGraph as any)?.images as any[];
-    expect(absoluteOgImages[0].url).toBe("https://images.unsplash.com/photo-1517336714731-489689fd1ca8");
-
-    const metadataWithProtocolRelative = createMetadata({
-      title: "MacBook Air M3",
-      description: "Apple MacBook Air M3",
-      image: "//cdn.example.com/macbook.jpg",
-    });
-
-    const protocolRelativeOgImages = (metadataWithProtocolRelative.openGraph as any)?.images as any[];
-    expect(protocolRelativeOgImages[0].url).toBe("https://cdn.example.com/macbook.jpg");
-  });
+beforeEach(() => { process.env.APP_URL = "https://seo.example.invalid"; });
+it("uses only current APP_URL for canonical, OG and schema origins, with no invented social/logo data", () => {
+  process.env.NEXT_PUBLIC_APP_URL = "https://old.invalid"; process.env.VERCEL_URL = "old.invalid";
+  const metadata = createMetadata({ title: "Phone", description: "Stored description", canonicalUrl: "/products/phone" });
+  expect(metadata.alternates?.canonical).toBe("https://seo.example.invalid/products/phone");
+  expect(metadata.openGraph).toMatchObject({ url: "https://seo.example.invalid/products/phone", title: "Phone | Amar Gadget" });
+  expect(metadata.openGraph).not.toHaveProperty("images"); expect(metadata.twitter).not.toHaveProperty("creator");
+  expect(generateOrganizationSchema()).not.toHaveProperty("contactPoint"); expect(generateOrganizationSchema()).not.toHaveProperty("logo");
+  expect(generateWebsiteSchema().potentialAction.target).toBe("https://seo.example.invalid/search?q={search_term_string}");
+  process.env.APP_URL = "https://another.example.invalid"; expect(canonicalUrl("/")).toBe("https://another.example.invalid/");
+});
+it("formats real relative/HTTPS media, omits unsafe media and prevents duplicate branding", () => {
+  expect(publicImageUrl("/file.svg")).toBe("https://seo.example.invalid/file.svg"); expect(publicImageUrl("//cdn.example.invalid/image.png")).toBe("https://cdn.example.invalid/image.png");
+  for (const image of ["javascript:alert(1)", "https://user:secret@example.invalid/x", "http://outside.invalid/x", ""]) expect(publicImageUrl(image)).toBeUndefined();
+  expect(createMetadata({ title: "Phone | Amar Gadget", description: "Actual", image: "/file.svg" }).title).toBe("Phone | Amar Gadget");
+});
+it.each(["//evil.invalid", "https://evil.invalid", "/\\evil.invalid", "/products#private", "/products\nother"])("rejects an unsafe canonical destination %s", (path) => expect(() => canonicalUrl(path)).toThrow());
+it("requires APP_URL instead of silently publishing a fallback domain", () => { delete process.env.APP_URL; expect(() => canonicalUrl("/")).toThrow("APP_URL"); });
+it("encodes actual slugs and uses stable ID destinations for unusable legacy slugs", () => {
+  expect(productPath("a & b")).toBe("/products/a%20%26%20b"); expect(productPath("..", "id")).toBe("/products/id"); expect(productPath("x".repeat(513), "id")).toBe("/products/id");
+  expect(categoryPath({ slug: "", id: "category-id" })).toBe("/categories/category-id");
+});
+it.each([0, 1])("derives stock=%s availability and actual offer URL/currency/price without invented validity or brand", (stock) => {
+  const schema = generateProductSchema({ id: "id", slug: "real-slug", name: "Real gadget", description: "Stored", stock, price: 90 });
+  expect(schema.offers).toEqual({ "@type": "Offer", url: "https://seo.example.invalid/products/real-slug", priceCurrency: "BDT", price: 90, availability: `https://schema.org/${stock ? "InStock" : "OutOfStock"}` });
+  expect(schema).not.toHaveProperty("brand"); expect(schema).not.toHaveProperty("image"); expect(schema.sku).toBe("id");
+});
+it.each(["/admin", "/member/orders", "/user/profile", "/api/products", "/checkout", "/order-success/id", "/cart", "/track-order", "/login", "/register", "/reset-password", "/wishlist", "/account", "/compare", "/search"])("marks personal/internal flow %s noindex", (path) => expect(privateIndexPath(path)).toBe(true));
+it("keeps public product routes indexable and emits noindex metadata when requested", () => {
+  expect(privateIndexPath("/products/private-case")).toBe(false);
+  expect(createMetadata({ title: "Private", description: "Private", noIndex: true }).robots).toMatchObject({ index: false, follow: false });
 });

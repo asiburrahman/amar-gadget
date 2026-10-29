@@ -3,6 +3,7 @@ import { H1, H2, P } from "@/components/ui/typography";
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
+    alternates: { canonical: '/about' },
     title: "About Us | Amar Gadget",
     description: "Learn about Amar Gadget, Bangladesh's leading multi-vendor marketplace for genuine electronics and flagship tech.",
   };
@@ -51,7 +52,7 @@ export default function AboutPage() {
             Connecting Bangladesh to Next-Gen Tech
           </H1>
           <P className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Amar Gadget is built to solve Bangladesh's gadget market challenges by providing a trusted multi-vendor marketplace for genuine electronics.
+            Amar Gadget is built to solve Bangladesh&apos;s gadget market challenges by providing a trusted multi-vendor marketplace for genuine electronics.
           </P>
         </div>
       </section>

@@ -4,6 +4,7 @@ import "@/styles/globals.css";
 
 export const metadata: Metadata = {
   title: "Amar Gadget | Authentication",
+  robots: { index: false, follow: false },
   description: "Sign in to your Amar Gadget account",
 };
 

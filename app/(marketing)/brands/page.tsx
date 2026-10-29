@@ -7,9 +7,12 @@ import { productImageUrlSchema } from "@/lib/validations/product";
 import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 import { H1, P } from "@/components/ui/typography";
 import { brandCollectionHref } from "@/lib/validations/catalog-brand";
+import { paginatedMetadata } from "@/lib/seo/metadata";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Browse Brands | Amar Gadget", description: "Browse marketplace brands and their available product collections." };
+export async function generateMetadata({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> {
+  return paginatedMetadata("/brands", "Browse brands", "Browse marketplace brands and their available product collections.", (searchParams ? await searchParams : {}).page);
+}
 
 export default async function BrandsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const query = searchParams ? await searchParams : {};

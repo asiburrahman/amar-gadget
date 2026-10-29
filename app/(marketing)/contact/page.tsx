@@ -4,6 +4,7 @@ import { FormInput } from "@/components/shared/form-input";
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
+    alternates: { canonical: '/contact' },
     title: "Contact & Support | Amar Gadget",
     description: "Get in touch with Amar Gadget customer support team for order inquiries, warranty claims, and seller partnerships.",
   };
@@ -22,7 +23,7 @@ export default function ContactPage() {
             Get in Touch With Us
           </H1>
           <P className="mt-3 text-muted-foreground text-base sm:text-lg max-w-xl mx-auto">
-            Have questions about an order, warranty claims, or vendor onboarding? We're here to help!
+            Have questions about an order, warranty claims, or vendor onboarding? We&apos;re here to help!
           </P>
         </div>
       </section>

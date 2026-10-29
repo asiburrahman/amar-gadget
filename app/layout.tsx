@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "@/styles/globals.css";
+import { connection } from "next/server";
+import { readApplicationOrigin } from "@/config/runtime";
 
 const fontSans = Geist({
   subsets: ["latin"],
@@ -20,10 +22,12 @@ const fontMono = Geist_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Amar Gadget | Premium Multi-Vendor Marketplace",
-  description: "The leading multi-vendor marketplace for electronics and gadgets in Bangladesh.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  // Resolve the deployed origin at request time; a reusable standalone artifact
+  // must not bake a build machine's hostname into every page.
+  await connection();
+  return { metadataBase: new URL(readApplicationOrigin()), title: "Amar Gadget | Multi-Vendor Marketplace", description: "Browse electronics and gadgets from marketplace sellers in Bangladesh." };
+}
 
 export default function RootLayout({
   children,

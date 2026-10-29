@@ -1,1 +1,7 @@
-import { MetadataRoute } from "next"; export default function robots(): MetadataRoute.Robots { return { rules: { userAgent: "*", allow: "/" }, sitemap: "https://amar-gadget.com/sitemap.xml" }; }
+import type { MetadataRoute } from "next";
+import { canonicalUrl } from "@/lib/seo/urls";
+export const dynamic = "force-dynamic";
+export default function robots(): MetadataRoute.Robots {
+  // Crawlers can observe noindex headers. Session guards protect private data.
+  return { rules: { userAgent: "*", allow: "/" }, sitemap: canonicalUrl("/sitemap.xml") };
+}

@@ -1,9 +1,10 @@
 import { Metadata } from "next";
-import { H1, H2, P } from "@/components/ui/typography";
+import { H1, P } from "@/components/ui/typography";
 import { generateFAQSchema } from "@/lib/seo/schema";
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
+    alternates: { canonical: '/faq' },
     title: "Frequently Asked Questions (FAQ) | Amar Gadget",
     description: "Find answers regarding warranty claims, delivery timelines, payment options, and vendor registration on Amar Gadget.",
   };

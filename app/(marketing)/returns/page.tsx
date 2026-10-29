@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { H1, P } from "@/components/ui/typography";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = { alternates: { canonical: '/returns' },
   title: "Returns & Exchange Policy | Amar Gadget",
   description: "Learn about Amar Gadget's 7-day hassle-free replacement and official return policy.",
 };

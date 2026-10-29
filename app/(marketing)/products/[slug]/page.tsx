@@ -1,86 +1,19 @@
 import { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
-import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ProductGallery } from "@/components/shared/product-gallery";
-import type { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { ProductDetailActions } from "./_components/product-detail-actions";
 import { formatCurrency } from "@/lib/formatter";
-import { generateProductSchema } from "@/lib/seo/schema";
+import { generateProductSchema, generateBreadcrumbSchema } from "@/lib/seo/schema";
 import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
 import { CompareButton } from "@/components/catalog/compare-button";
 import { specificationsSchema } from "@/lib/validations/specifications";
 import { RecordProductView } from "@/components/catalog/record-product-view";
+import { getPublicProduct } from "@/lib/public-product";
+import { productPath } from "@/lib/seo/urls";
+import { createMetadata } from "@/lib/seo/metadata";
 
 export const dynamic = "force-dynamic";
-
-const getProduct = cache(async (identifier: string) => {
-  let product: Prisma.ProductGetPayload<{ include: { category: true; brand: true; seller: { select: { id: true; name: true; sellerStatus: true } }; reviews: { include: { user: { select: { name: true; avatar: true } } } } } }> | null = null;
-
-  try {
-    // 1. Try finding by slug
-    product = await prisma.product.findUnique({
-      where: { slug: identifier },
-      include: {
-        category: true,
-        brand: true,
-        seller: { select: { id: true, name: true, sellerStatus: true } },
-        reviews: {
-          include: { user: { select: { name: true, avatar: true } } },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
-
-    // 2. If not found by slug, try by ID
-    if (!product) {
-      product = await prisma.product.findUnique({
-        where: { id: identifier },
-        include: {
-          category: true,
-          brand: true,
-          seller: { select: { id: true, name: true, sellerStatus: true } },
-          reviews: {
-            include: { user: { select: { name: true, avatar: true } } },
-            orderBy: { createdAt: "desc" },
-          },
-        },
-      });
-    }
-
-    // 3. Fallback for case-insensitive slug variations
-    if (!product) {
-      product = await prisma.product.findFirst({
-        where: {
-          slug: { equals: identifier, mode: "insensitive" },
-        },
-        include: {
-          category: true,
-          brand: true,
-          seller: { select: { id: true, name: true, sellerStatus: true } },
-          reviews: {
-            include: { user: { select: { name: true, avatar: true } } },
-            orderBy: { createdAt: "desc" },
-          },
-        },
-      });
-    }
-  } catch (error) {
-    console.error("Database product lookup error:", identifier, error);
-  }
-
-  if (product && (product.status !== "APPROVED" || product.seller.sellerStatus !== "APPROVED")) {
-    return null;
-  }
-
-  if (!product) return null;
-  const { seller, ...publicProduct } = product;
-  return {
-    ...publicProduct,
-    seller: { id: seller.id, name: seller.name },
-  };
-});
 
 export async function generateMetadata({
   params,
@@ -88,19 +21,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProduct(slug);
+  let product;
+  try { product = await getPublicProduct(slug); } catch { return { title: "Products unavailable | Amar Gadget", robots: { index: false, follow: false } }; }
 
-  if (!product) return { title: "Product Not Found | Amar Gadget" };
-
-  return {
-    title: `${product.name} | Amar Gadget`,
-    description: product.description || `Buy ${product.name} at best price in Bangladesh with official warranty.`,
-    openGraph: {
-      title: product.name,
-      description: product.description || undefined,
-      images: product.imageUrl ? [{ url: product.imageUrl }] : [],
-    },
-  };
+  if (!product) return { title: "Product not found | Amar Gadget", robots: { index: false, follow: false } };
+  const price = Number(product.discountPrice ?? product.price);
+  if (!Number.isFinite(price) || price < 0 || !Number.isInteger(product.stock) || product.stock < 0) return { title: "Product unavailable | Amar Gadget", robots: { index: false, follow: false } };
+  return createMetadata({ title: product.name, description: product.description || `View ${product.name} and current catalog availability.`, image: product.imageUrl ?? undefined, canonicalUrl: productPath(product.slug, product.id) });
 }
 
 export default async function ProductDetailPage({
@@ -109,12 +36,13 @@ export default async function ProductDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = await getProduct(slug);
+  const product = await getPublicProduct(slug);
 
   if (!product) {
     notFound();
   }
 
+  if (`/products/${encodeURIComponent(slug)}` !== productPath(product.slug, product.id)) permanentRedirect(productPath(product.slug, product.id));
   const numericPrice = Number(product.price);
   const numericDiscountPrice = product.discountPrice === null ? null : Number(product.discountPrice);
   const effectivePrice = numericDiscountPrice ?? numericPrice;
@@ -122,6 +50,7 @@ export default async function ProductDetailPage({
 
   const jsonLd = generateProductSchema({
     id: product.id,
+    slug: product.slug,
     name: product.name,
     description: product.description || "",
     image: product.imageUrl || "",
@@ -134,6 +63,7 @@ export default async function ProductDetailPage({
   return (
     <>
       <RecordProductView productId={product.id} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(generateBreadcrumbSchema([{ name: "Home", url: "/" }, { name: "Products", url: "/products" }, { name: product.name, url: productPath(product.slug, product.id) }])) }} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}

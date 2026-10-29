@@ -2,8 +2,11 @@ import Link from "next/link";
 import { getActiveCampaigns } from "@/lib/campaigns";
 import { CampaignCard } from "@/components/catalog/campaign-card";
 import { campaignPageSchema } from "@/lib/validations/campaign";
+import { paginatedMetadata } from "@/lib/seo/metadata";
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Current campaigns | Amar Gadget", description: "Active product campaigns using current catalog offers in BDT." };
+export async function generateMetadata({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  return paginatedMetadata("/deals", "Current campaigns", "Active product campaigns using current catalog offers in BDT.", (searchParams ? await searchParams : {}).page);
+}
 export default async function DealsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const query = searchParams ? await searchParams : {};
   const parsed = campaignPageSchema.safeParse(query.page);

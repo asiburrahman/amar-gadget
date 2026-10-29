@@ -15,8 +15,11 @@ import { BrandLogos } from "@/components/home/brand-logos";
 import { BottomWidgets } from "@/components/home/bottom-widgets";
 import { NewsletterBar } from "@/components/home/newsletter-bar";
 import { ElectroFooter } from "@/components/footer/electro-footer";
+import { generateOrganizationSchema, generateWebsiteSchema } from "@/lib/seo/schema";
+import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
 
 export const dynamic = "force-dynamic";
+export const metadata = { alternates: { canonical: "/" } };
 const card = (product: CatalogProduct): DynamicProductItem => ({ ...product, description: product.description ?? undefined, imageUrl: product.imageUrl ?? undefined, category: product.category.name });
 export default async function Home() {
   const [featured, sale, rated, best, campaigns, categories, brands] = await Promise.allSettled([
@@ -31,6 +34,8 @@ export default async function Home() {
   const bestSellerProducts = best.status === "fulfilled" ? best.value.products.filter((product) => product.unitsSold && product.unitsSold !== "0").map((product) => ({ ...card(product), unitsSold: product.unitsSold })) : [];
   const preview = campaigns.status === "fulfilled" ? campaigns.value.campaigns[0] : undefined;
   return <SEOGuard><div className="flex-1 flex flex-col bg-white text-slate-900"><main className="flex-1">
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(generateOrganizationSchema()) }} />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(generateWebsiteSchema()) }} />
     <HeroSection featuredProduct={featuredProducts[0] ?? onSaleProducts[0] ?? null} categories={categories.status === "fulfilled" ? categories.value : []} />
     <PromoBanners />
     <section aria-label="Current campaigns" className="max-w-7xl mx-auto p-4 py-8 space-y-4"><h2 className="text-xl font-bold">Current campaigns</h2><Link href="/deals" className="underline">Browse all campaigns</Link>

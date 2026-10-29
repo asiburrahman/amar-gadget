@@ -6,6 +6,9 @@ import { catalogQuerySchema, catalogHref } from "@/lib/validations/catalog-query
 import { withoutBrandFilter } from "@/lib/validations/catalog-brand";
 import { CatalogFilters } from "@/components/catalog/catalog-filters";
 import { ProductGrid } from "@/components/shared/product-grid";
+import { createMetadata } from "@/lib/seo/metadata";
+import { brandCollectionHref } from "@/lib/validations/catalog-brand";
+import { categoryPath, categorySelector } from "@/lib/seo/urls";
 
 type Params = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 export const dynamic = "force-dynamic";
@@ -15,7 +18,12 @@ export async function generateMetadata({ searchParams }: Params): Promise<Metada
     if (result.brandFilter.state === "missing" || result.categoryFilter.state === "missing") return { title: "Collection not found | Amar Gadget", robots: { index: false, follow: true } };
     const brand = result.brandFilter.state === "found" ? result.brandFilter.brand : null;
     const category = result.categoryFilter.state === "found" ? result.categoryFilter.category : null;
-    return { title: `${brand ? `${brand.name} Collection` : category ? `${category.name} Collection` : "All Products"} | Amar Gadget`, description: "Browse available marketplace products with price, category, brand and sorting controls." };
+    const query = { ...result.query };
+    if (brand) { const params = new URL(brandCollectionHref(brand), "http://localhost").searchParams; query.brand = params.get("brand") ?? undefined; query.brandId = params.get("brandId") ?? undefined; }
+    if (category) Object.assign(query, categorySelector(category));
+    const noIndex = result.outOfRange || Boolean(query.search || query.filter || query.minPrice !== undefined || query.maxPrice !== undefined || query.sort !== "latest" || query.limit !== 12 || (brand && category));
+    const metadata = createMetadata({ title: `${brand ? `${brand.name} Collection` : category ? `${category.name} Collection` : "All Products"}`, description: "Browse available marketplace products with price, category, brand and sorting controls.", canonicalUrl: category && !brand && !noIndex && query.page === 1 ? categoryPath(category) : catalogHref(query), noIndex });
+    return noIndex ? { ...metadata, robots: { index: false, follow: true } } : metadata;
   } catch { return { title: "Products unavailable | Amar Gadget", robots: { index: false, follow: true } }; }
 }
 export default async function ProductsPage({ searchParams }: Params) {
