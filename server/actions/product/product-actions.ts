@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { publicProductWhere } from "@/lib/catalog-visibility";
 import { createProductSchema, productQuerySchema } from "@/lib/validations/product";
@@ -10,102 +10,30 @@ import { productMediaStore, ProductMediaError } from "@/lib/cloudflare/r2";
 import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { AccountRequestError, limitAccountIp, limitAccountIdentity } from "@/lib/account-request";
-import { resolveCatalogBrand } from "@/lib/catalog-brand-filter";
+import { getCatalogListing, CatalogQueryError, CatalogAccessError, type CatalogScope } from "@/lib/catalog-listing";
 
 export async function getProducts(queryParams: Record<string, unknown> = {}) {
   try {
     const parsed = productQuerySchema.safeParse(queryParams);
-    if (!parsed.success) {
-      return { success: false, error: "Invalid query parameters", data: [], total: 0 };
+    if (!parsed.success) return { success: false, error: "Invalid query parameters", data: [], total: 0 };
+    let scope: CatalogScope = { kind: "public" };
+    const status = parsed.data.status;
+    if (status && status !== "APPROVED") {
+      const actor = await getCurrentUser();
+      if (!actor) return { success: false, error: "Unauthorized", data: [], total: 0 };
+      if (actor.role.toUpperCase() === "ADMIN") scope = { kind: "admin", status, actorId: actor.id, sessionVersion: actor.sessionVersion };
+      else if (actor.role.toUpperCase() === "MEMBER" && actor.sellerStatus === "APPROVED") scope = { kind: "seller", status, actorId: actor.id, sessionVersion: actor.sessionVersion };
+      else return { success: false, error: "Unauthorized", data: [], total: 0 };
     }
-
-    const { page, limit, search, categoryId, brandId, brand, minPrice, maxPrice, status, sort } = parsed.data;
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.ProductWhereInput = {};
-    if (!status || status === "APPROVED") {
-      Object.assign(where, publicProductWhere);
-    } else {
-      const viewer = await getCurrentUser();
-      if (!viewer) {
-        return { success: false, error: "Unauthorized", data: [], total: 0 };
-      }
-      if (viewer.role.toUpperCase() === "ADMIN") {
-        where.status = status;
-      } else if (
-        viewer.role.toUpperCase() === "MEMBER" &&
-        viewer.sellerStatus === "APPROVED"
-      ) {
-        where.status = status;
-        where.sellerId = viewer.id;
-      } else {
-        return { success: false, error: "Unauthorized", data: [], total: 0 };
-      }
-    }
-
-    const brandFilter = await resolveCatalogBrand(brand, brandId);
-    if (brandFilter.state === "invalid") return { success: false, error: brandFilter.message, data: [], total: 0, totalPages: 0, currentPage: page };
-    if (brandFilter.state === "missing") return { success: true, data: [], total: 0, totalPages: 0, currentPage: page, brandFilter };
-
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-      ];
-    }
-
-    if (categoryId) {
-      where.categoryId = categoryId;
-    }
-
-    if (brandFilter.state === "found") {
-      where.brandId = brandFilter.brand.id;
-    }
-
-    if (minPrice !== undefined || maxPrice !== undefined) {
-      where.price = {};
-      if (minPrice !== undefined) where.price.gte = minPrice;
-      if (maxPrice !== undefined) where.price.lte = maxPrice;
-    }
-
-    let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
-    if (sort === "price_low") orderBy = { price: "asc" };
-    if (sort === "price_high") orderBy = { price: "desc" };
-    if (sort === "rating") orderBy = { rating: "desc" };
-
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          category: { select: { id: true, name: true, slug: true } },
-          brand: { select: { id: true, name: true, slug: true, logo: true } },
-          seller: { select: { id: true, name: true } },
-        },
-      }),
-      prisma.product.count({ where }),
-    ]);
-
-    return {
-      success: true,
-      data: products.map((p) => ({
-        ...p,
-        price: Number(p.price),
-        discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
-      })),
-      total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      brandFilter,
-    };
-  } catch {
+    const listing = await getCatalogListing(parsed.data, scope);
+    return { success: true, data: listing.products, total: listing.total, totalPages: listing.totalPages, currentPage: listing.page, limit: listing.limit, brandFilter: listing.brandFilter, categoryFilter: listing.categoryFilter };
+  } catch (error) {
+    if (error instanceof CatalogAccessError) return { success: false, error: "Unauthorized", data: [], total: 0 };
+    if (error instanceof CatalogQueryError) return { success: false, error: error.message, data: [], total: 0 };
     console.error("Product query is temporarily unavailable.");
-    return { success: false, error: "Failed to fetch products", data: [], total: 0 };
+    return { success: false, error: "Products are temporarily unavailable. Try again later.", data: [], total: 0 };
   }
 }
-
 export async function getProductBySlug(slug: string) {
   try {
     const product = await prisma.product.findFirst({

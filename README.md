@@ -353,6 +353,8 @@ npm run lint
 
 [The implementation sequence](docs/IMPLEMENTATION_SCHEDULE.md) covers every remaining task with completion rules and the next checkpoint.
 
+[Catalog filtering and pagination contracts](docs/CATALOG_FILTERS_RUNBOOK.md) document the shared page/API/action queries, searchable brand/category choices and paid-delivered sales ranking implemented in AUD-019. Current implementation progress and remaining release checks are recorded in the implementation log.
+
 ### Codex-Assisted Development Record
 
 This change was made after reviewing authorization boundaries, checkout totals and payment state, catalog visibility, OTP handling, order tracking, and the checked-in Prisma migrations. The main engineering decision was to derive identities and prices on the server, then make payment confirmation depend on a verified Stripe webhook rather than client input.

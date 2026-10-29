@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { MAX_PRODUCT_IMAGES } from "@/lib/product-media-policy";
-import { brandQuerySchema, brandIdQuerySchema } from "@/lib/validations/catalog-brand";
+import { MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION, PRODUCT_STATUSES } from "@/lib/catalog-constants";
+import { catalogQuerySchema } from "@/lib/validations/catalog-query";
+export { MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION } from "@/lib/catalog-constants";
 
-export const MAX_PRODUCT_PRICE = 99_999_999.99; // PostgreSQL DECIMAL(10, 2)
-export const MAX_PRODUCT_STOCK = 2_147_483_647; // PostgreSQL INTEGER
-export const MAX_PRODUCT_DESCRIPTION = 20_000;
 export const catalogIdSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9-]+$/, "Invalid catalog identifier.");
 export const productPriceSchema = z.number().min(0.01, "Price must be at least 0.01 BDT.").max(MAX_PRODUCT_PRICE, "Price exceeds the database limit.").multipleOf(0.01, "Use at most two decimal places.");
-export const productStatusSchema = z.enum(["PENDING_APPROVAL", "APPROVED", "REJECTED"]);
+export const productStatusSchema = z.enum(PRODUCT_STATUSES);
 export const sellerStatusSchema = z.enum(["APPROVED", "BLOCKED", "PENDING", "REJECTED"]);
 export const productImageUrlSchema = z.string().min(1).max(2048).refine((value) => {
   if (/[\s\\\u0000-\u001f\u007f]/.test(value)) return false;
@@ -43,16 +42,7 @@ export const productStatusUpdateSchema = z.object({ productId: catalogIdSchema, 
 export const sellerStatusUpdateSchema = z.object({ sellerId: catalogIdSchema, sellerStatus: sellerStatusSchema }).strict();
 export const productApprovalSchema = z.object({ ...fields, imageUrl: productImageUrlSchema.nullable(), images: imageList }).strict().refine(discountValid, discountRule).refine((data) => Boolean(data.imageUrl) && (!data.images.length || data.images[0] === data.imageUrl), "A valid cover and matching ordered gallery are required before approval.");
 
-export const productQuerySchema = z.object({
-  page: z.coerce.number().int().positive().max(1_000_000).default(1),
-  limit: z.coerce.number().int().positive().max(100).default(12),
-  search: z.string().max(200).optional(),
-  categoryId: catalogIdSchema.optional(), brandId: brandIdQuerySchema, brand: brandQuerySchema,
-  minPrice: z.coerce.number().min(0).max(MAX_PRODUCT_PRICE).optional(),
-  maxPrice: z.coerce.number().min(0).max(MAX_PRODUCT_PRICE).optional(),
-  status: productStatusSchema.optional(),
-  sort: z.enum(["latest", "price_low", "price_high", "rating"]).optional().default("latest"),
-});
+export const productQuerySchema = catalogQuerySchema;
 
 export type CreateProductInput = z.input<typeof createProductSchema>;
 export type UpdateProductInput = z.input<typeof updateProductSchema>;

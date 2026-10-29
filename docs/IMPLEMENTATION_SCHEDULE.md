@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest fully completed step: AUD-018 — canonical brand filtering across real directory links, product page, action and API.** Current total: 21 original tasks plus AUD-050 implemented (22 of 51 tracked tasks); 28 original tasks plus AUD-051's external credential revocation open (29 total). **Next: AUD-019 — advanced product filters, advertised sorts and bounded pagination.** On 29 October 2026 the owner confirmed revocation has not yet occurred; source remediation does not perform that provider action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log and ingress/media/brand runbooks for evidence, required deployment configuration, residual low registry alerts and external verification.
+**Latest implemented step: AUD-019 — advanced product filters, actual sales ranking and bounded pagination shared by page/action/API.** Current total: 22 original tasks plus AUD-050 implemented (23 of 51 tracked tasks); 27 original tasks plus AUD-051's external credential revocation open (28 total). **Next: AUD-020 — search and product comparison wiring.** On 29 October 2026 the owner confirmed revocation has not yet occurred; source remediation does not perform that provider action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log and ingress/media/brand/catalog runbooks for evidence, required deployment configuration, residual low registry alerts and external verification.
 
 ## Owner-provided introduction
 

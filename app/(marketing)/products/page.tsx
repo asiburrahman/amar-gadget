@@ -1,227 +1,56 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { publicProductWhere } from "@/lib/catalog-visibility";
-import { Prisma } from "@prisma/client";
-import { ProductGrid } from "@/components/shared/product-grid";
-import { H1, P } from "@/components/ui/typography";
-import { resolveCatalogBrand, type BrandFilterResult } from "@/lib/catalog-brand-filter";
+import { getCatalogListing, CatalogQueryError } from "@/lib/catalog-listing";
+import { getCatalogOptions } from "@/lib/catalog-options";
+import { catalogQuerySchema, catalogHref } from "@/lib/validations/catalog-query";
 import { withoutBrandFilter } from "@/lib/validations/catalog-brand";
+import { CatalogFilters } from "@/components/catalog/catalog-filters";
+import { ProductGrid } from "@/components/shared/product-grid";
 
-type CatalogSearchParams = Record<string, string | string[] | undefined>;
-const single = (value: string | string[] | undefined) => typeof value === "string" ? value : undefined;
-
-export async function generateMetadata({
-  searchParams,
-}: {
-  searchParams?: Promise<CatalogSearchParams>;
-}): Promise<Metadata> {
-  const resolved = searchParams ? await searchParams : {};
-  try {
-    const brand = await resolveCatalogBrand(resolved.brand, resolved.brandId);
-    if (brand.state === "found") return { title: `${brand.brand.name} Collection | Amar Gadget`, description: `Browse available ${brand.brand.name} products in the marketplace.` };
-    if (brand.state === "missing" || brand.state === "invalid") return { title: "Brand not found | Amar Gadget", robots: { index: false, follow: true } };
-  } catch { return { title: "Products unavailable | Amar Gadget", robots: { index: false, follow: true } }; }
-  const category = single(resolved.category);
-  if (category) {
-    const formatted = category
-      .split("-")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-    return {
-      title: `${formatted} Products | Amar Gadget`,
-      description: `Browse authentic ${formatted} products with official warranty in Bangladesh.`,
-    };
-  }
-
-  return {
-    title: "All Products | Amar Gadget",
-    description:
-      "Browse flagship smartphones, laptops, audio, smart watches, and electronics in Bangladesh.",
-  };
-}
-
-interface ProductItem {
-  id: string;
-  slug?: string;
-  name: string;
-  description?: string;
-  price: number;
-  discountPrice?: number | null;
-  stock: number;
-  imageUrl?: string;
-  category?: string;
-  rating?: number;
-}
-
+type Params = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 export const dynamic = "force-dynamic";
-
-export default async function ProductsPage({
-  searchParams,
-}: {
-  searchParams?: Promise<CatalogSearchParams>;
-}) {
-  const resolvedParams = searchParams ? await searchParams : {};
-  const categoryParam = single(resolvedParams.category)?.toLowerCase() || single(resolvedParams.categoryId);
-  const searchParam = single(resolvedParams.search)?.trim();
-  const filterParam = single(resolvedParams.filter);
-  let brandFilter: BrandFilterResult = { state: "none" };
-  let unavailable = false;
-
-  let activeCategory: { id: string; name: string; slug: string } | null = null;
-  let productData: ProductItem[] = [];
-
+export async function generateMetadata({ searchParams }: Params): Promise<Metadata> {
   try {
-    brandFilter = await resolveCatalogBrand(resolvedParams.brand, resolvedParams.brandId);
-    // If a category param is passed, find the corresponding category record
-    if (categoryParam) {
-      activeCategory = await prisma.category.findFirst({
-        where: {
-          OR: [
-            { slug: { equals: categoryParam, mode: "insensitive" } },
-            { id: { equals: categoryParam } },
-            { name: { contains: categoryParam.replace(/-/g, " "), mode: "insensitive" } },
-            ...(categoryParam === "wearables" ? [{ slug: "smart-watches" }] : []),
-            ...(categoryParam === "computers" ? [{ slug: "laptops" }] : []),
-          ],
-        },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      });
-    }
-
-    const whereClause: Prisma.ProductWhereInput = {
-      ...publicProductWhere,
-    };
-    const filters: Prisma.ProductWhereInput[] = [];
-    if (brandFilter.state === "found") whereClause.brandId = brandFilter.brand.id;
-
-    if (activeCategory) {
-      whereClause.categoryId = activeCategory.id;
-    } else if (categoryParam) {
-      filters.push({ OR: [
-        { category: { slug: { equals: categoryParam, mode: "insensitive" } } },
-        { category: { name: { contains: categoryParam.replace(/-/g, " "), mode: "insensitive" } } },
-      ] });
-    }
-
-    if (searchParam) {
-      filters.push({
-        OR: [
-          { name: { contains: searchParam, mode: "insensitive" } },
-          { description: { contains: searchParam, mode: "insensitive" } },
-          { category: { name: { contains: searchParam, mode: "insensitive" } } },
-        ],
-      });
-    }
-    if (filters.length) whereClause.AND = filters;
-
-    if (filterParam === "sale") {
-      whereClause.discountPrice = { not: null, gt: 0 };
-    }
-
-    const products = brandFilter.state === "missing" || brandFilter.state === "invalid" ? [] : await prisma.product.findMany({
-      where: whereClause,
-      include: {
-        category: {
-          select: {
-            name: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    productData = products.map((product) => ({
-      id: product.id,
-      slug: product.slug,
-      name: product.name,
-      description: product.description ?? undefined,
-      price: Number(product.price),
-      discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
-      stock: product.stock,
-      imageUrl: product.imageUrl ?? undefined,
-      category: product.category?.name ?? undefined,
-      rating: product.rating ?? 5,
-    }));
-  } catch {
-    unavailable = true;
-    console.error("Product collection is temporarily unavailable.");
-  }
-  const activeBrand = brandFilter.state === "found" ? brandFilter.brand : null;
-
-  return (
-    <div className="min-h-screen bg-background pb-16">
-      {/* Header Banner */}
-      <section className="border-b bg-gradient-to-b from-muted/40 via-background to-background py-10 lg:py-14">
-        <div className="container mx-auto px-4 text-center max-w-3xl">
-          <span className="inline-block px-3 py-1 text-xs font-semibold text-primary bg-primary/10 rounded-full mb-3 border border-primary/20">
-            {activeBrand ? `Brand: ${activeBrand.name}` : activeCategory ? `Category: ${activeCategory.name}` : "Official Warranty & Fast Delivery"}
-          </span>
-          <H1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
-            {activeBrand ? `${activeBrand.name} Collection` : activeCategory ? `${activeCategory.name} Collection` : "Explore Tech Products"}
-          </H1>
-          <P className="mt-3 text-muted-foreground text-base max-w-xl mx-auto">
-            {activeBrand ? `Browse ${activeBrand.name} products${activeCategory ? ` in ${activeCategory.name}` : ""}.`
-              : activeCategory
-              ? `Browse authentic ${activeCategory.name} products with genuine manufacturer warranty and express shipping.`
-              : "Discover Bangladesh's widest collection of authentic smartphones, laptops, audio gear, and accessories."}
-          </P>
-          {(activeBrand || brandFilter.state === "missing" || brandFilter.state === "invalid") && <div className="mt-4"><Link href={withoutBrandFilter(resolvedParams)} className="text-sm font-semibold text-primary underline">Clear brand filter</Link></div>}
-
-          {/* Quick Category link if filtered */}
-          {activeCategory && (
-            <div className="mt-5 flex items-center justify-center gap-3 text-xs">
-              <Link
-                href={`/categories/${activeCategory.slug}`}
-                className="font-bold text-primary hover:underline bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20"
-              >
-                Go to {activeCategory.name} Category Page &rarr;
-              </Link>
-              <Link
-                href="/products"
-                className="text-muted-foreground hover:text-foreground font-semibold bg-muted px-3 py-1.5 rounded-lg border"
-              >
-                ✕ Clear Filter (Show All)
-              </Link>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Main Grid Section */}
-      <section className="container mx-auto px-4 py-10 max-w-7xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-4 border-b gap-3">
-          <div>
-            <h2 className="text-xl font-bold text-foreground">
-              {activeBrand ? `${activeBrand.name} Items` : activeCategory ? `${activeCategory.name} Items` : "All Gadgets"}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Showing {productData.length} {productData.length === 1 ? "product" : "products"}
-              {activeBrand ? ` from ${activeBrand.name}` : ""}{activeCategory ? ` in ${activeCategory.name}` : " across all categories"}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs font-semibold">
-            <Link
-              href="/categories"
-              className="text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/20"
-            >
-              Browse Categories Page &rarr;
-            </Link>
-          </div>
-        </div>
-
-        {unavailable ? <div role="alert" className="p-8 border rounded-xl"><h3 className="font-bold">Products are temporarily unavailable</h3><p>Please try this collection again shortly.</p></div>
-          : brandFilter.state === "missing" ? <div role="status" className="p-8 border rounded-xl"><h3 className="font-bold">Brand not found</h3><p>No products are shown for this brand. Clear the brand filter or choose a brand from the directory.</p><Link href="/brands" className="text-primary underline">Browse brands</Link></div>
-          : brandFilter.state === "invalid" ? <div role="alert" className="p-8 border rounded-xl"><h3 className="font-bold">Invalid brand filter</h3><p>{brandFilter.message}</p></div>
-          : <ProductGrid products={productData} />}
-      </section>
-    </div>
-  );
+    const result = await getCatalogListing(searchParams ? await searchParams : {});
+    if (result.brandFilter.state === "missing" || result.categoryFilter.state === "missing") return { title: "Collection not found | Amar Gadget", robots: { index: false, follow: true } };
+    const brand = result.brandFilter.state === "found" ? result.brandFilter.brand : null;
+    const category = result.categoryFilter.state === "found" ? result.categoryFilter.category : null;
+    return { title: `${brand ? `${brand.name} Collection` : category ? `${category.name} Collection` : "All Products"} | Amar Gadget`, description: "Browse available marketplace products with price, category, brand and sorting controls." };
+  } catch { return { title: "Products unavailable | Amar Gadget", robots: { index: false, follow: true } }; }
+}
+export default async function ProductsPage({ searchParams }: Params) {
+  const input = searchParams ? await searchParams : {};
+  let result: Awaited<ReturnType<typeof getCatalogListing>> | undefined;
+  let error = "", code = "";
+  try { result = await getCatalogListing(input); }
+  catch (failure) { if (failure instanceof CatalogQueryError) { error = failure.message; code = failure.code; } else { error = "Products are temporarily unavailable. Please try again shortly."; console.error("Product collection is temporarily unavailable."); } }
+  const brand = result?.brandFilter.state === "found" ? result.brandFilter.brand : undefined;
+  const category = result?.categoryFilter.state === "found" ? result.categoryFilter.category : undefined;
+  let options: { brands: Awaited<ReturnType<typeof getCatalogOptions>>; categories: Awaited<ReturnType<typeof getCatalogOptions>> } | undefined;
+  try { const [brands, categories] = await Promise.all([getCatalogOptions("brand"), getCatalogOptions("category")]); options = { brands, categories }; }
+  catch { console.error("Product filter options are temporarily unavailable."); }
+  const query = result?.query ?? catalogQuerySchema.parse({});
+  return <div className="min-h-screen bg-background pb-16">
+    <section className="border-b py-10"><div className="container mx-auto px-4 max-w-7xl">
+      <h1 className="text-3xl font-extrabold">{brand ? `${brand.name} Collection` : category ? `${category.name} Collection` : "Explore Tech Products"}</h1>
+      <p className="mt-2 text-muted-foreground">{brand ? `Browse ${brand.name} products${category ? ` in ${category.name}` : ""}.` : "Find products by category, brand and current price."}</p>
+      {(brand || result?.brandFilter.state === "missing" || code === "INVALID_BRAND") && <Link href={withoutBrandFilter(input)} className="inline-block mt-3 text-primary underline">Clear brand filter</Link>}
+    </div></section>
+    <main className="container mx-auto px-4 py-8 max-w-7xl space-y-6">
+      {options ? <CatalogFilters key={catalogHref(query)} query={query} brands={options.brands} categories={options.categories} brand={brand} category={category} /> : <p role="alert">Filter choices are temporarily unavailable. <Link href="/products" className="underline">Retry filters</Link></p>}
+      {error ? <div role="alert" className="p-6 border rounded-xl"><h2>{code === "INVALID_BRAND" ? "Invalid brand filter" : code ? "Invalid product filters" : "Products are temporarily unavailable"}</h2><p>{error}</p><Link href="/products" className="underline">Reset filters</Link></div>
+        : result && <>
+          <p role="status">{result.total === 0 ? "Showing 0 of 0 products" : result.outOfRange ? `No products on page ${result.page}; ${result.total} products match.` : `Showing ${(result.page - 1) * result.limit + 1}–${Math.min(result.page * result.limit, result.total)} of ${result.total} products`}</p>
+          {result.brandFilter.state === "missing" ? <div role="status"><h2>Brand not found</h2><p>No products are shown for this brand.</p><Link href="/brands">Browse brands</Link></div>
+            : result.categoryFilter.state === "missing" ? <div role="status"><h2>Category not found</h2><p>No products are shown for this category.</p></div>
+            : result.outOfRange ? <p><Link href={catalogHref(query, { page: 1 })} className="underline">Return to the first results page</Link></p>
+            : <ProductGrid products={result.products.map((product) => ({ ...product, description: product.description ?? undefined, imageUrl: product.imageUrl ?? undefined, category: product.category.name }))} />}
+          {result.totalPages > 1 && !result.outOfRange && <nav aria-label="Product result pages" className="flex flex-wrap gap-4 justify-center items-center">
+            {result.page > 1 && <Link rel="prev" href={catalogHref(query, { page: result.page - 1 })}>Previous page</Link>}
+            <span aria-current="page">Page {result.page} of {result.totalPages}</span>
+            {result.page < result.totalPages && <Link rel="next" href={catalogHref(query, { page: result.page + 1 })}>Next page</Link>}
+          </nav>}
+        </>}
+    </main>
+  </div>;
 }

@@ -22,6 +22,7 @@ interface ProductCardProps {
   imageUrl?: string;
   category?: string;
   rating?: number;
+  unitsSold?: string;
   onAddToCart?: (productId: string) => void;
   onAddToWishlist?: (productId: string) => void;
   className?: string;
@@ -37,6 +38,7 @@ export const ProductCard = ({
   imageUrl,
   category,
   rating = 5,
+  unitsSold,
   className = "",
 }: ProductCardProps) => {
   const [addedNotice, setAddedNotice] = useState(false);
@@ -173,6 +175,7 @@ export const ProductCard = ({
 
       {/* Footer Pricing & Sleek Add to Cart Button */}
       <div className="p-3 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800/80 mt-auto flex flex-col gap-2.5">
+        {unitsSold !== undefined && <p className="text-[10px] text-muted-foreground">{unitsSold} units in paid, delivered orders</p>}
         <div className="flex items-center justify-between min-w-0">
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">

@@ -15,19 +15,21 @@ export interface BestSellerProductItem {
   imageUrl?: string;
   category?: string;
   rating?: number;
+  unitsSold?: string;
 }
 
 interface BestSellersSectionProps {
   products?: BestSellerProductItem[];
+  unavailable?: boolean;
 }
 
-export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products = [] }) => {
+export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products = [], unavailable = false }) => {
   const [showAll, setShowAll] = useState(false);
   const ROW_LIMIT = 4;
   const visibleProducts = showAll ? products : products.slice(0, ROW_LIMIT);
 
   return (
-    <section className="py-10 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
+    <section aria-label="Best sellers" className="py-10 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         
         {/* Section Header */}
@@ -37,7 +39,7 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products
               Best Sellers
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Top requested & approved flagship electronics in Bangladesh
+              Ranked by units in paid, delivered orders
             </p>
           </div>
 
@@ -50,7 +52,7 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products
         </div>
 
         {/* Spacious Products Grid with Dynamic Database Products */}
-        {visibleProducts.length > 0 ? (
+        {unavailable ? <p role="alert">Best seller data is temporarily unavailable. <Link href="/products?sort=bestsellers">Try the product listing</Link></p> : visibleProducts.length > 0 ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {visibleProducts.map((item) => (
@@ -66,6 +68,7 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products
                   imageUrl={item.imageUrl}
                   category={item.category}
                   rating={item.rating ?? 5}
+                  unitsSold={item.unitsSold}
                 />
               ))}
             </div>
@@ -102,7 +105,7 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products
           </>
         ) : (
           <div className="text-center py-10 text-slate-400 text-sm">
-            No products available yet.
+            No paid, delivered sales yet.
           </div>
         )}
 

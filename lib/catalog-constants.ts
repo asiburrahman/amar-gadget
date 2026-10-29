@@ -1,0 +1,6 @@
+export const MAX_PRODUCT_PRICE = 99_999_999.99;
+export const MAX_PRODUCT_STOCK = 2_147_483_647;
+export const MAX_PRODUCT_DESCRIPTION = 20_000;
+export const PRODUCT_STATUSES = ["PENDING_APPROVAL", "APPROVED", "REJECTED"] as const;
+export const CATALOG_PAGE_SIZE = 12;
+export const CATALOG_MAX_PAGE_SIZE = 48;

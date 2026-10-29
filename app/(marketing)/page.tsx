@@ -5,7 +5,8 @@ import { SEOGuard } from "@/components/shared/seo-guard";
 import { HeroSection } from "@/components/home/hero-section";
 import { PromoBanners } from "@/components/home/promo-banners";
 import { SpecialDealSection, DynamicProductItem } from "@/components/home/special-deal-section";
-import { BestSellersSection } from "@/components/home/best-sellers-section";
+import { BestSellersSection, type BestSellerProductItem } from "@/components/home/best-sellers-section";
+import { getCatalogListing } from "@/lib/catalog-listing";
 import { BannerAd } from "@/components/home/banner-ad";
 import { RecentlyViewed } from "@/components/home/recently-viewed";
 import { BrandLogos } from "@/components/home/brand-logos";
@@ -17,6 +18,8 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   let approvedProducts: DynamicProductItem[] = [];
+  let bestSellerProducts: BestSellerProductItem[] = [];
+  const bestSellersPromise = getCatalogListing({ sort: "bestsellers", limit: 8 }).catch(() => { console.error("Best seller ranking is temporarily unavailable."); return null; });
   let dbCategories: Array<{ id: string; name: string; slug?: string }> = [];
 
   try {
@@ -62,6 +65,8 @@ export default async function Home() {
   } catch (error) {
     console.error("Error loading homepage dynamic products from database:", error);
   }
+  const bestSellers = await bestSellersPromise;
+  if (bestSellers) bestSellerProducts = bestSellers.products.filter((item) => item.unitsSold && item.unitsSold !== "0").map((item) => ({ ...item, description: item.description ?? undefined, imageUrl: item.imageUrl ?? undefined, category: item.category.name }));
 
   // Derive filtered dynamic lists from approved database products
   const featuredProducts = approvedProducts.length > 0 ? approvedProducts : [];
@@ -98,7 +103,7 @@ export default async function Home() {
           />
 
           {/* 4. Best Sellers Row - Dynamic Approved Products */}
-          <BestSellersSection products={approvedProducts} />
+          <BestSellersSection products={bestSellerProducts} unavailable={!bestSellers} />
 
           {/* 5. Wide Shop & Save Big Banner */}
           <BannerAd />

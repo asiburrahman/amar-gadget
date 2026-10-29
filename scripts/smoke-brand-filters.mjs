@@ -14,13 +14,16 @@ async function main() {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString(), max: 2 }) });
   const prefix = `audit-brand-http-${randomUUID()}`, secret = randomBytes(32).toString("hex");
   let child, redis, seller, blocked;
-  const brands = [], categories = [], products = [];
+  const brands = [], categories = [], products = [], orders = [];
   try {
     seller = await db.user.create({ data: { email: `${prefix}@example.invalid`, role: "MEMBER", sellerStatus: "APPROVED", isVerified: true } });
     blocked = await db.user.create({ data: { email: `${prefix}-blocked@example.invalid`, role: "MEMBER", sellerStatus: "BLOCKED", isVerified: true } });
     for (const name of ["Apple", "Pineapple"]) brands.push(await db.brand.create({ data: { name: `000-${prefix} ${name}`, slug: `${prefix}-${name.toLowerCase()}` } }));
     for (const name of ["phones", "audio"]) categories.push(await db.category.create({ data: { name: `${prefix}-${name}`, slug: `${prefix}-${name}` } }));
     for (const [suffix, extra] of [["apple-phone", { discountPrice: 90 }], ["apple-audio", { categoryId: categories[1].id }], ["pineapple-phone", { brandId: brands[1].id }], ["unbranded", { brandId: null }], ["pending", { status: "PENDING_APPROVAL" }], ["blocked", { sellerId: blocked.id }]]) products.push(await db.product.create({ data: { name: `${prefix}-${suffix}`, slug: `${prefix}-${suffix}`, price: 100, stock: 1, sellerId: seller.id, categoryId: categories[0].id, brandId: brands[0].id, status: "APPROVED", ...extra } }));
+    for (const [product, quantity, status, paymentStatus] of [[products[1], 3, "DELIVERED", "PAID"], [products[0], 99, "CANCELLED", "PAID"], [products[2], 99, "DELIVERED", "UNPAID"]]) {
+      orders.push(await db.order.create({ data: { userId: seller.id, total: 100, status, paymentStatus, items: { create: { productId: product.id, quantity, price: 1 } } } }));
+    }
     redis = await startRedisRestFixture(randomBytes(32).toString("hex"));
     phase = "prepared server startup";
     child = await startStandaloneFixture(url.toString(), redis, { TRUSTED_PROXY_SECRET: secret });
@@ -49,9 +52,26 @@ async function main() {
     const emptyHtml = await emptyPage.text(); assert.ok(emptyHtml.includes("Brand not found")); assert.ok(!emptyHtml.includes(products[0].name));
     assert.equal((await get(`/api/products?brand=${brands[0].slug}&brandId=${brands[1].id}`)).status, 400);
     assert.equal((await get(`/api/products?brand=${brands[0].slug}&brand=${brands[1].slug}`)).status, 400);
-    return { actualBrandDirectoryLinks: "PASS", slugIdAndCaseAliases: "PASS", approvedSellerVisibility: "PASS", combinedBrandCategorySearchSale: "PASS", namedCollectionServerRender: "PASS", missingBrandEmptyState: "PASS", conflictingAndRepeatedFiltersRejected: "PASS" };
+    phase = "bounded pages, prices and real sales ranking";
+    const query = new URLSearchParams({ search: prefix, brand: brands[0].slug, limit: "1", sort: "price_low" });
+    const first = await (await get(`/api/products?${query}`)).json();
+    assert.equal(first.total, 2); assert.equal(first.totalPages, 2); assert.equal(first.products.length, 1); assert.equal(first.products[0].id, products[0].id); assert.equal(first.products[0].effectivePrice, 90);
+    query.set("page", "2"); const second = await (await get(`/api/products?${query}`)).json(); assert.equal(second.products[0].id, products[1].id);
+    const filteredPage = await (await get(`/products?${query}`)).text();
+    assert.ok(filteredPage.includes('aria-label="Product filters"')); assert.ok(filteredPage.includes("Previous page")); assert.ok(filteredPage.includes("of 2 products")); assert.ok(!filteredPage.includes('name="page"'));
+    for (const name of ["minPrice", "maxPrice", "brandId", "categoryId", "sort", "limit"]) assert.ok(filteredPage.includes(`name="${name}"`));
+    const ranked = await (await get(`/api/products?search=${prefix}&sort=bestsellers`)).json(); assert.equal(ranked.products[0].id, products[1].id); assert.equal(ranked.products[0].unitsSold, "3"); assert.equal(ranked.products.find((p) => p.id === products[0].id).unitsSold, "0");
+    const priced = await (await get(`/api/products?search=${prefix}&maxPrice=95`)).json(); assert.deepEqual(priced.products.map((p) => p.id), [products[0].id]);
+    assert.equal((await get("/api/products?minPrice=10&maxPrice=1")).status, 400); assert.equal((await get("/api/products?limit=49")).status, 400);
+    const far = await (await get(`/api/products?search=${prefix}&page=1000000`)).json(); assert.equal(far.outOfRange, true); assert.deepEqual(far.products, []);
+    const choices = await get(`/api/catalog/options?kind=brand&search=${prefix}`); assert.equal(choices.status, 200); assert.equal((await choices.json()).total, 2);
+    phase = "home page actual best-seller wiring";
+    const home = await (await get("/")).text(); const section = home.split('aria-label="Best sellers"')[1]?.split("</section>")[0]; assert.ok(section); assert.ok(section.includes(products[1].name)); assert.ok(!section.includes(products[0].name));
+    return { actualBrandDirectoryLinks: "PASS", slugIdAndCaseAliases: "PASS", approvedSellerVisibility: "PASS", combinedBrandCategorySearchSale: "PASS", namedCollectionServerRender: "PASS", missingBrandEmptyState: "PASS", conflictingAndRepeatedFiltersRejected: "PASS", boundedPagesAndExactCount: "PASS", effectivePriceRangeAndSort: "PASS", renderedFilterControls: "PASS", paidDeliveredSalesRanking: "PASS", liveOptionEndpoint: "PASS", homepageBestSellers: "PASS" };
   } finally {
     await child?.stop(); await redis?.close();
+    await db.orderItem.deleteMany({ where: { orderId: { in: orders.map((item) => item.id) } } });
+    await db.order.deleteMany({ where: { id: { in: orders.map((item) => item.id) } } });
     try { await db.product.deleteMany({ where: { id: { in: products.map((item) => item.id) } } }); await db.brand.deleteMany({ where: { id: { in: brands.map((item) => item.id) } } }); await db.category.deleteMany({ where: { id: { in: categories.map((item) => item.id) } } }); if (seller) await db.user.delete({ where: { id: seller.id } }); if (blocked) await db.user.delete({ where: { id: blocked.id } }); } finally { await db.$disconnect(); }
   }
 }
