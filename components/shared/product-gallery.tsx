@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
+import { productImageNeedsDirectDelivery, isPublicProductImageUrl } from "@/lib/product-media-policy";
 
 export function ProductGallery({ name, imageUrl, images, offer }: { name: string; imageUrl?: string | null; images: string[]; offer?: boolean }) {
-  const gallery = [...new Set([imageUrl, ...images].filter((value): value is string => Boolean(value)))];
+  const gallery = [...new Set([imageUrl, ...images].filter((value): value is string => Boolean(value && isPublicProductImageUrl(value))))];
   const [selected, setSelected] = useState(0);
   const active = gallery[selected] ?? gallery[0];
   return <div className="space-y-3">

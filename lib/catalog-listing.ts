@@ -2,6 +2,7 @@ import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publicProductWhere } from "@/lib/catalog-visibility";
+import { publicProductMedia } from "@/lib/product-media-policy";
 import { resolveCatalogBrand } from "@/lib/catalog-brand-filter";
 import { resolveCatalogCategory } from "@/lib/catalog-category-filter";
 import { catalogQuerySchema, type CatalogQuery } from "@/lib/validations/catalog-query";
@@ -70,7 +71,7 @@ const runListing = cache(async (serialized: string, serializedScope: string) => 
       bestsellers: Prisma.sql`${units} DESC, p."createdAt" DESC, p.id ASC`,
     }[query.sort];
     const rows = await tx.$queryRaw<CatalogRow[]>`SELECT p.*, ${effectivePrice} AS "effectivePrice", ${units} AS "unitsSold", json_build_object('id', c.id, 'name', c.name, 'slug', c.slug) AS category, CASE WHEN b.id IS NULL THEN NULL ELSE json_build_object('id', b.id, 'name', b.name, 'slug', b.slug, 'logo', b.logo) END AS brand, json_build_object('id', u.id, 'name', u.name) AS seller ${from} ${sales} ${where} ORDER BY ${ordering} LIMIT ${query.limit} OFFSET ${(query.page - 1) * query.limit}`;
-    return { ...empty, total, totalPages, products: rows.map((row) => ({ ...row, price: Number(row.price), discountPrice: row.discountPrice === null ? null : Number(row.discountPrice), effectivePrice: Number(row.effectivePrice), unitsSold: query.sort === "bestsellers" ? row.unitsSold.toString() : undefined, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() })) };
+    return { ...empty, total, totalPages, products: rows.map((row) => ({ ...row, ...publicProductMedia(row), price: Number(row.price), discountPrice: row.discountPrice === null ? null : Number(row.discountPrice), effectivePrice: Number(row.effectivePrice), unitsSold: query.sort === "bestsellers" ? row.unitsSold.toString() : undefined, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() })) };
   }, { isolationLevel: "RepeatableRead", timeout: 10_000, maxWait: 5000 });
 });
 

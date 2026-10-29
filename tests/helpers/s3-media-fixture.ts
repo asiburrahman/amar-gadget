@@ -35,6 +35,15 @@ export async function startS3MediaFixture() {
     const url = new URL(req.url!, "http://fixture.invalid");
     const reject = (status: number, code: string) => { res.writeHead(status, { "Content-Type": "application/xml" }); res.end(`<Error><Code>${code}</Code></Error>`); };
     if (!available) { reject(503, "ServiceUnavailable"); return; }
+    // Test-only CDN contract over loopback with an exact Host. Public DNS,
+    // TLS and the operator's Cloudflare bucket are separate release checks.
+    if (req.headers.host === "cdn.media.example.invalid") {
+      if (!["GET", "HEAD"].includes(req.method ?? "") || url.search || !/^\/products\/[A-Za-z0-9-]+\/[a-f0-9-]+\.(png|jpg|webp)$/.test(url.pathname)) { reject(403, "InvalidPublicRequest"); return; }
+      const object = objects.get(`/fixture-media${url.pathname}`);
+      if (!object) { reject(404, "NoSuchKey"); return; }
+      res.writeHead(200, { "Content-Type": object.type, "Content-Length": object.body.length, "Cache-Control": "public, max-age=31536000, immutable" });
+      res.end(req.method === "HEAD" ? undefined : object.body); return;
+    }
     if (!signed(req, url)) { reject(403, "SignatureDoesNotMatch"); return; }
     if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
       const contents = [...objects].filter(([key]) => key.startsWith("/fixture-media/products/")).map(([key]) => `<Contents><Key>${key.slice("/fixture-media/".length)}</Key></Contents>`).join("");

@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/formatter";
 import { ShoppingCart } from "@/components/icons/ShoppingCart";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
-import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
+import { productImageNeedsDirectDelivery, isPublicProductImageUrl } from "@/lib/product-media-policy";
 import { CompareButton } from "@/components/catalog/compare-button";
 
 interface ProductCardProps {
@@ -48,6 +48,7 @@ export const ProductCard = ({
 
   const isWishlisted = isInWishlist(id);
   const effectivePrice = discountPrice ?? price;
+  const publicImage = imageUrl && isPublicProductImageUrl(imageUrl) ? imageUrl : undefined;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -59,7 +60,7 @@ export const ProductCard = ({
       name,
       price,
       discountPrice,
-      imageUrl,
+      imageUrl: publicImage,
       stock,
       category,
       quantity: 1,
@@ -81,7 +82,7 @@ export const ProductCard = ({
         name,
         price,
         discountPrice,
-        imageUrl,
+        imageUrl: publicImage,
         category,
       });
     }
@@ -102,10 +103,10 @@ export const ProductCard = ({
         {/* Product Image Stage - Fixed Uniform 1:1 Aspect Ratio Box across ALL cards */}
         <div className="relative w-full aspect-square overflow-hidden bg-white dark:bg-slate-900 p-2 flex items-center justify-center border-b border-slate-100 dark:border-slate-800/60">
           <Link href={`/products/${slug || id}`} className="block relative w-full h-full">
-            {imageUrl ? (
+            {publicImage ? (
               <Image
-                unoptimized={productImageNeedsDirectDelivery(imageUrl)}
-                src={imageUrl}
+                unoptimized={productImageNeedsDirectDelivery(publicImage)}
+                src={publicImage}
                 alt={name}
                 fill
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"

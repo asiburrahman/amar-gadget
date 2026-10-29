@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { campaignPageSchema } from "@/lib/validations/campaign";
+import { isPublicProductImageUrl } from "@/lib/product-media-policy";
 
 type Row = { id: string; title: string; slug: string; description: string; startsAt: string; endsAt: string; products: { id: string; slug: string; name: string; price: number; discountPrice: number; stock: number; imageUrl: string | null; rating: number; category: string }[] };
 // Campaigns curate existing catalog offers; they never override checkout prices.
@@ -17,7 +18,7 @@ export async function getActiveCampaigns(pageInput: unknown = 1) {
     const total = Number(count), totalPages = Math.ceil(total / limit);
     if (page > Math.max(1, totalPages)) return { campaigns: [], page, total, totalPages, now };
     const rows = await tx.$queryRaw<Row[]>`SELECT c.id, c.title, c.slug, c.description, to_char(c."startsAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt", to_char(c."endsAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt", COALESCE((SELECT json_agg(items ORDER BY items.position) FROM (SELECT p.id, p.slug, p.name, p.price::double precision, p."discountPrice"::double precision, p.stock, p."imageUrl", p.rating, cat.name AS category, cp.position ${eligible} ORDER BY cp.position LIMIT 50) items), '[]') AS products FROM "Campaign" c ${where} ORDER BY c."endsAt", c.id LIMIT ${limit} OFFSET ${(page - 1) * limit}`;
-    return { campaigns: rows, page, total, totalPages, now };
+    return { campaigns: rows.map((campaign) => ({ ...campaign, products: campaign.products.map((product) => ({ ...product, imageUrl: product.imageUrl && isPublicProductImageUrl(product.imageUrl) ? product.imageUrl : null })) })), page, total, totalPages, now };
   }, { isolationLevel: "RepeatableRead", timeout: 10_000, maxWait: 5000 });
 }
 export type ActiveCampaign = Awaited<ReturnType<typeof getActiveCampaigns>>["campaigns"][number];

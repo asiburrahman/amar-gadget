@@ -61,6 +61,7 @@ model Product {
   stock         Int
   imageUrl      String?
   images        String[]    @default([])
+  mediaVersion  Int         @default(1)
   isFeatured    Boolean     @default(false)
   status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED
   rating        Float       @default(0)
@@ -82,6 +83,16 @@ model Product {
   reviews       Review[]
   wishlists     Wishlist[]
   campaigns     CampaignProduct[]
+}
+
+model ProductImageCleanup {
+  key String @id @db.VarChar(160)
+  ownerId String @db.VarChar(64)
+  availableAt DateTime
+  attempts Int @default(0)
+  lastError String? @db.VarChar(100)
+  createdAt DateTime @default(now())
+  @@index([availableAt, key])
 }
 
 model Campaign {

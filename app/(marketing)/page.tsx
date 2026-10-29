@@ -17,6 +17,7 @@ import { NewsletterBar } from "@/components/home/newsletter-bar";
 import { ElectroFooter } from "@/components/footer/electro-footer";
 import { generateOrganizationSchema, generateWebsiteSchema } from "@/lib/seo/schema";
 import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
+import { publicProductMedia } from "@/lib/product-media-policy";
 
 export const dynamic = "force-dynamic";
 export const metadata = { alternates: { canonical: "/" } };
@@ -28,7 +29,7 @@ export default async function Home() {
     getActiveCampaigns(), prisma.category.findMany({ select: { id: true, name: true, slug: true }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 10 }),
     prisma.brand.findMany({ select: { id: true, name: true, slug: true, _count: { select: { products: { where: publicProductWhere } } } }, take: 12, orderBy: [{ name: "asc" }, { id: "asc" }] }),
   ]);
-  const featuredProducts: DynamicProductItem[] = featured.status === "fulfilled" ? featured.value.map((product) => ({ ...product, description: product.description ?? undefined, price: Number(product.price), discountPrice: product.discountPrice === null ? null : Number(product.discountPrice), imageUrl: product.imageUrl ?? undefined, category: product.category.name })) : [];
+  const featuredProducts: DynamicProductItem[] = featured.status === "fulfilled" ? featured.value.map((product) => ({ ...product, ...publicProductMedia(product), description: product.description ?? undefined, price: Number(product.price), discountPrice: product.discountPrice === null ? null : Number(product.discountPrice), imageUrl: publicProductMedia(product).imageUrl ?? undefined, category: product.category.name })) : [];
   const onSaleProducts = sale.status === "fulfilled" ? sale.value.products.map(card) : [];
   const topRatedProducts = rated.status === "fulfilled" ? rated.value.products.filter((product) => product.reviewCount > 0 && product.rating > 0).map(card) : [];
   const bestSellerProducts = best.status === "fulfilled" ? best.value.products.filter((product) => product.unitsSold && product.unitsSold !== "0").map((product) => ({ ...card(product), unitsSold: product.unitsSold })) : [];

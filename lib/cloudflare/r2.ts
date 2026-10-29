@@ -2,7 +2,8 @@ import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, ListOb
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "node:crypto";
 import { readStorageConfig } from "@/config/runtime";
-import { IMAGE_EXTENSIONS, MAX_PRODUCT_IMAGES, MAX_PRODUCT_IMAGE_BYTES, validateProductImage, type ProductImageType } from "@/lib/product-media-policy";
+import { IMAGE_EXTENSIONS, MAX_PRODUCT_IMAGES, MAX_PRODUCT_IMAGE_BYTES, validateProductImage, isPublicStorageOrigin, type ProductImageType } from "@/lib/product-media-policy";
+import { imageKeyOwner } from "@/lib/product-image-keys";
 import { decodeProductImage } from "@/lib/validate-product-image";
 
 export class ProductMediaError extends Error {}
@@ -12,6 +13,7 @@ let activeVerifications = 0;
 /** Dependency injection is for isolated SDK/HTTP tests; production always uses
  * the configured account's R2 endpoint, never a caller-selected host. */
 export function createProductMediaStore(client: S3Client, bucket: string, publicBase: string) {
+  if (!isPublicStorageOrigin(publicBase)) throw new ProductMediaError("Configure a public HTTPS media origin, not the S3 API endpoint.");
   const publicUrl = (key: string) => `${publicBase.replace(/\/$/, "")}/${key}`;
   const ownedType = (key: string, ownerId: string): ProductImageType => {
     const prefix = `products/${ownerId}/`;
@@ -33,6 +35,9 @@ export function createProductMediaStore(client: S3Client, bucket: string, public
       return { ownerId: match[1], url: publicUrl(key) };
     },
     async removeUnused(key: string) {
+      if (!imageKeyOwner(key)) throw new ProductMediaError("Invalid managed image key.");
+      const candidate = await this.unusedCandidate(key);
+      if (!candidate) throw new ProductMediaError("Only old unused managed images may be removed.");
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: AbortSignal.timeout(5000) });
     },
     async prepare({ ownerId, contentType, size }: { ownerId: string; contentType: ProductImageType; size: number }) {

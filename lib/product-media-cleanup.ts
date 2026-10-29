@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { createProductMediaStore } from "@/lib/cloudflare/r2";
+import { imageKeyReferenced } from "@/lib/product-image-lifecycle";
 
 export async function cleanupProductImages(db: PrismaClient, store: ReturnType<typeof createProductMediaStore>, { apply = false, cursor }: { apply?: boolean; cursor?: string } = {}) {
   const page = await store.list(cursor);
@@ -11,11 +12,11 @@ export async function cleanupProductImages(db: PrismaClient, store: ReturnType<t
       if (!candidate) { result.retained++; continue; }
       const outcome = await db.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${candidate.ownerId} FOR UPDATE`;
+        const pending = await tx.productImageCleanup.findUnique({ where: { key }, select: { availableAt: true } });
+        if (pending && pending.availableAt.getTime() > Date.now()) return "retained";
         // Match the immutable key across old/new CDN domains. Changing the
         // public origin must never turn an existing image into garbage.
-        const suffix = `%/${key}`;
-        const referenced = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Product" WHERE "imageUrl" LIKE ${suffix} OR EXISTS (SELECT 1 FROM unnest(images) AS image WHERE image LIKE ${suffix}) LIMIT 1`;
-        if (referenced.length) return "retained";
+        if (await imageKeyReferenced(tx, key)) return "retained";
         if (apply) await store.removeUnused(key);
         return apply ? "removed" : "unused";
       }, { timeout: 10_000, maxWait: 5000 });

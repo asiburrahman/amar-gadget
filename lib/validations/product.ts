@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_PRODUCT_IMAGES } from "@/lib/product-media-policy";
+import { MAX_PRODUCT_IMAGES, isPublicProductImageUrl } from "@/lib/product-media-policy";
 import { MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION, PRODUCT_STATUSES } from "@/lib/catalog-constants";
 import { catalogQuerySchema } from "@/lib/validations/catalog-query";
 import { specificationsSchema } from "@/lib/validations/specifications";
@@ -9,11 +9,7 @@ export const catalogIdSchema = z.string().trim().min(1).max(64).regex(/^[A-Za-z0
 export const productPriceSchema = z.number().min(0.01, "Price must be at least 0.01 BDT.").max(MAX_PRODUCT_PRICE, "Price exceeds the database limit.").multipleOf(0.01, "Use at most two decimal places.");
 export const productStatusSchema = z.enum(PRODUCT_STATUSES);
 export const sellerStatusSchema = z.enum(["APPROVED", "BLOCKED", "PENDING", "REJECTED"]);
-export const productImageUrlSchema = z.string().min(1).max(2048).refine((value) => {
-  if (/[\s\\\u0000-\u001f\u007f]/.test(value)) return false;
-  if (value.startsWith("/")) return /^\/(?:images\/|assets\/)?[A-Za-z0-9_./-]+\.(?:png|jpe?g|webp|svg)$/.test(value) && !/(?:^|\/)\.\.(?:\/|$)/.test(value) && !value.startsWith("//");
-  try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.hash; } catch { return false; }
-}, "Use a bounded HTTPS image URL or a local public asset path.");
+export const productImageUrlSchema = z.string().min(1).max(2048).refine(isPublicProductImageUrl, "Use a public HTTPS image URL or a local asset; S3 API/signed upload URLs are not public media.");
 export const productUploadKeySchema = z.string().max(160).regex(/^products\/[A-Za-z0-9-]{1,64}\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(jpg|png|webp)$/, "Select a valid uploaded product image.");
 const fields = {
   name: z.string().trim().min(3, "Product name must be at least 3 characters.").max(120),

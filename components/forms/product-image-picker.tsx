@@ -8,7 +8,7 @@ import { MAX_PRODUCT_IMAGES, PRODUCT_IMAGE_TYPES, validateProductImage } from "@
 type ImageItem = { id: string; file: File; preview: string; progress: number; status: "uploading" | "ready" | "error"; error?: string; fileKey?: string };
 export type ProductImageSelection = { keys: string[]; ready: boolean };
 
-export function ProductImagePicker({ disabled, onChange }: { disabled: boolean; onChange: (selection: ProductImageSelection) => void }) {
+export function ProductImagePicker({ disabled, onChange, maxImages = MAX_PRODUCT_IMAGES, onCountChange, label = "Product images (required)" }: { disabled: boolean; onChange: (selection: ProductImageSelection) => void; maxImages?: number; onCountChange?: (count: number) => void; label?: string }) {
   const [items, setItems] = useState<ImageItem[]>([]);
   const [error, setError] = useState("");
   const current = useRef<ImageItem[]>([]);
@@ -23,6 +23,7 @@ export function ProductImagePicker({ disabled, onChange }: { disabled: boolean; 
   const update = (next: ImageItem[]) => {
     if (!mounted.current) return;
     current.current = next; setItems(next);
+    onCountChange?.(next.length);
     onChange({ keys: next.flatMap((item) => item.fileKey ? [item.fileKey] : []), ready: next.length > 0 && next.every((item) => item.status === "ready") });
   };
   const start = async (item: ImageItem) => {
@@ -38,11 +39,11 @@ export function ProductImagePicker({ disabled, onChange }: { disabled: boolean; 
   const remove = (item: ImageItem) => { controllers.current.get(item.id)?.abort(); controllers.current.delete(item.id); URL.revokeObjectURL(item.preview); update(current.current.filter((entry) => entry.id !== item.id)); };
 
   return <fieldset disabled={disabled} className="space-y-3 border-t border-border pt-3">
-    <legend className="font-bold">Product images (required)</legend>
+    <legend className="font-bold">{label}</legend>
     <p id="product-image-help">Single-frame JPEG, PNG or WebP, up to 5 MiB and 16 megapixels each, with no side above 8192 pixels. Add up to eight images; the first is the cover. Uploads finish before submission.</p>
-    <input aria-label="Add product images" aria-describedby="product-image-help" type="file" multiple accept={PRODUCT_IMAGE_TYPES.join(",")} disabled={disabled || items.length >= MAX_PRODUCT_IMAGES} onChange={(event) => {
+    <input aria-label="Add product images" aria-describedby="product-image-help" type="file" multiple accept={PRODUCT_IMAGE_TYPES.join(",")} disabled={disabled || items.length >= maxImages} onChange={(event) => {
       const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = "";
-      if (current.current.length + files.length > MAX_PRODUCT_IMAGES) { setError("Choose no more than eight images in total."); return; }
+      if (current.current.length + files.length > Math.min(MAX_PRODUCT_IMAGES, Math.max(0, maxImages))) { setError("Choose no more than eight images in total, including saved images."); return; }
       const invalid = files.map(validateProductImage).find(Boolean);
       if (invalid) { setError(invalid); return; }
       setError("");

@@ -7,6 +7,7 @@ import { catalogIdSchema, productStatusUpdateSchema, productPriceUpdateSchema, p
 import { CatalogMutationError, withCurrentAdmin } from "@/lib/catalog-mutations";
 import { Prisma } from "@prisma/client";
 import { isPublicAsset } from "@/lib/public-assets";
+import { enqueueDetachedImages } from "@/lib/product-image-lifecycle";
 
 function mutationError(error: unknown) {
   if (error instanceof CatalogMutationError) return error.message;
@@ -146,14 +147,21 @@ export async function adminDeleteProduct(productId: unknown) {
   const parsed = catalogIdSchema.safeParse(productId);
   if (!parsed.success) return { success: false, error: "Invalid product identifier." };
   try {
+    const snapshot = await prisma.product.findUnique({ where: { id: parsed.data }, select: { sellerId: true } });
+    if (!snapshot) return { success: false, error: "Product not found." };
     const product = await withCurrentAdmin(actor, async (tx) => {
-      const existing = await tx.product.findUnique({ where: { id: parsed.data }, select: { id: true, slug: true } });
+      const existing = await tx.product.findUnique({ where: { id: parsed.data }, select: { id: true, slug: true, sellerId: true, imageUrl: true, images: true } });
       if (!existing) throw new CatalogMutationError("Product not found.");
+      if (existing.sellerId !== snapshot.sellerId) throw new CatalogMutationError("Product changed. Reload before deleting.");
+      await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${existing.id} FOR UPDATE`;
+      const current = await tx.product.findUnique({ where: { id: existing.id }, select: { sellerId: true, imageUrl: true, images: true } });
+      if (!current || current.sellerId !== existing.sellerId) throw new CatalogMutationError("Product changed. Reload before deleting.");
+      await enqueueDetachedImages(tx, current.sellerId, [...(current.imageUrl ? [current.imageUrl] : []), ...current.images], []);
       await tx.product.delete({ where: { id: existing.id } });
       return existing;
-    });
+    }, [snapshot.sellerId]);
 
-    refreshCatalog(product.slug);
+    try { refreshCatalog(product.slug); } catch { console.error("Committed product deletion cache refresh unavailable."); }
     return { success: true };
   } catch (error) {
     return { success: false, error: mutationError(error) };

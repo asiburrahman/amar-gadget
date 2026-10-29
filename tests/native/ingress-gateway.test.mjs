@@ -68,17 +68,17 @@ test("invalid trust configuration and unavailable backend fail closed", async ()
   try { assert.equal((await fetch(url, { headers: { Host: "store.example.invalid" } })).status, 502); }
   finally { await close(gateway); }
 });
-test("the supervised worker sends both a real scoped ingress signature and independent sweep authentication", { timeout: 10_000 }, async () => {
+for (const [worker, path] of [["checkout-reservations-worker", "/api/internal/checkout/expire"], ["media-cleanup-worker", "/api/internal/media/cleanup"]]) test(`${worker} sends both a real scoped ingress signature and independent maintenance authentication`, { timeout: 10_000 }, async () => {
   const sweepKey = "independent-private-sweep-fixture-".repeat(2);
   let observed;
   const arrived = new Promise((resolve) => { observed = resolve; });
   const backend = createServer((req, res) => {
-    const valid = req.method === "POST" && req.url === "/api/internal/checkout/expire" && req.headers.authorization === `Bearer ${sweepKey}` && verifyIngress({ headers: req.headers, secret, origin: appOrigin, method: req.method, target: req.url }) === "127.0.0.1";
+    const valid = req.method === "POST" && req.url === path && req.headers.authorization === `Bearer ${sweepKey}` && verifyIngress({ headers: req.headers, secret, origin: appOrigin, method: req.method, target: req.url }) === "127.0.0.1";
     res.writeHead(valid ? 200 : 403, { "Content-Type": "application/json" }); res.end(JSON.stringify({ checked: 0, released: 0, review: 0, errors: 0 }));
     observed(valid);
   });
   const url = await listen(backend);
-  const child = spawn(process.execPath, [fileURLToPath(new URL("../../scripts/checkout-reservations-worker.mjs", import.meta.url))], { stdio: "ignore", env: { SystemRoot: process.env.SystemRoot, CHECKOUT_SWEEP_ORIGIN: url, APP_URL: appOrigin, CHECKOUT_SWEEP_SECRET: sweepKey, TRUSTED_PROXY_SECRET: secret } });
+  const child = spawn(process.execPath, [fileURLToPath(new URL(`../../scripts/${worker}.mjs`, import.meta.url))], { stdio: "ignore", env: { SystemRoot: process.env.SystemRoot, CHECKOUT_SWEEP_ORIGIN: url, MEDIA_CLEANUP_ORIGIN: url, APP_URL: appOrigin, CHECKOUT_SWEEP_SECRET: sweepKey, TRUSTED_PROXY_SECRET: secret } });
   let timer;
   try {
     const failed = new Promise((_, reject) => { child.once("error", reject); child.once("exit", () => reject(new Error("Worker exited before the request"))); timer = setTimeout(() => reject(new Error("Worker request deadline exceeded")), 5000); });

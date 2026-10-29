@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isPublicStorageOrigin } from "@/lib/product-media-policy";
 
 type Environment = Record<string, string | undefined>;
 const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
@@ -36,7 +37,7 @@ export const runtimeFields = {
   R2_ACCOUNT_ID: optional(z.string().regex(/^[a-fA-F0-9]{32}$/)),
   R2_ACCESS_KEY_ID: optional(nonempty), R2_SECRET_ACCESS_KEY: optional(nonempty),
   R2_BUCKET_NAME: optional(z.string().min(1).max(63).regex(/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/)),
-  R2_PUBLIC_URL: optional(networkUrl.refine((value) => { try { const url = new URL(value); return url.pathname === "/" && !url.search; } catch { return false; } })),
+  R2_PUBLIC_URL: optional(networkUrl.refine(isPublicStorageOrigin)),
   CHECKOUT_SWEEP_SECRET: optional(privateSecretSchema),
   CHECKOUT_SWEEP_DATABASE: optional(z.string().min(1).max(63)),
 };
@@ -81,6 +82,9 @@ export function readStripeWebhookSecret(values: Environment = process.env) {
 }
 export function readSweepConfig(values: Environment = process.env) {
   return parse(z.object({ CHECKOUT_SWEEP_SECRET: privateSecretSchema, CHECKOUT_SWEEP_DATABASE: z.string().min(1).max(63) }), values);
+}
+export function readMediaCleanupConfig(values: Environment = process.env) {
+  return parse(z.object({ CHECKOUT_SWEEP_SECRET: privateSecretSchema, MEDIA_CLEANUP_DATABASE: z.string().min(1).max(63) }), values);
 }
 export function readStorageConfig(values: Environment = process.env) {
   const result = parse(z.object({ R2_ACCOUNT_ID: runtimeFields.R2_ACCOUNT_ID, R2_ACCESS_KEY_ID: runtimeFields.R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY: runtimeFields.R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME: runtimeFields.R2_BUCKET_NAME, R2_PUBLIC_URL: runtimeFields.R2_PUBLIC_URL }), values);

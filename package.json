@@ -27,8 +27,10 @@
     "smoke:catalog-actions": "node scripts/smoke-catalog-actions.mjs",
     "smoke:brands": "node scripts/smoke-brand-filters.mjs",
     "smoke:seo": "node scripts/smoke-seo.mjs",
+    "smoke:media-lifecycle": "node scripts/smoke-media-lifecycle.mjs",
     "test:gateway": "node --test tests/native/ingress-gateway.test.mjs",
     "cleanup:product-images": "tsx scripts/cleanup-product-images.ts",
+    "worker:media-cleanup": "node scripts/media-cleanup-worker.mjs",
     "config:r2-cors": "tsx scripts/print-product-image-cors.ts"
   },
   "dependencies": {

@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { AccountRequestError, limitAccountIp, limitAccountIdentity } from "@/lib/account-request";
 import { getCatalogListing, CatalogQueryError, CatalogAccessError, type CatalogScope } from "@/lib/catalog-listing";
+import { publicProductMedia } from "@/lib/product-media-policy";
 
 export async function getProducts(queryParams: Record<string, unknown> = {}) {
   try {
@@ -55,6 +56,7 @@ export async function getProductBySlug(slug: string) {
       success: true,
       data: {
         ...product,
+        ...publicProductMedia(product),
         price: Number(product.price),
         discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
       },
