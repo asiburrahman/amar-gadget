@@ -269,6 +269,8 @@ Production requires complete Redis, SMTP, Stripe/reservation-worker and R2 setti
 
 Product images upload directly to R2 with progress/retry and a saved cover/gallery; file bytes are not posted through Server Actions or stored as base64. Configure the bucket's exact-origin CORS and public domain using the [product-image runbook](docs/PRODUCT_IMAGES_RUNBOOK.md), which also documents dry-run unused-upload cleanup and the live bucket/browser release checks.
 
+Brand collections use real database slugs/counts and consistent `brand`/`brandId` filters across page, action and API. Unknown brands show an explicit empty state. See the [brand-filter contract and verification](docs/BRAND_FILTERS_RUNBOOK.md).
+
 ---
 
 ### Database Migration & Seeding

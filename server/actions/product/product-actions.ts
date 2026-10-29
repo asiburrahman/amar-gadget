@@ -10,6 +10,7 @@ import { productMediaStore, ProductMediaError } from "@/lib/cloudflare/r2";
 import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { AccountRequestError, limitAccountIp, limitAccountIdentity } from "@/lib/account-request";
+import { resolveCatalogBrand } from "@/lib/catalog-brand-filter";
 
 export async function getProducts(queryParams: Record<string, unknown> = {}) {
   try {
@@ -18,7 +19,7 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
       return { success: false, error: "Invalid query parameters", data: [], total: 0 };
     }
 
-    const { page, limit, search, categoryId, brandId, minPrice, maxPrice, status, sort } = parsed.data;
+    const { page, limit, search, categoryId, brandId, brand, minPrice, maxPrice, status, sort } = parsed.data;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ProductWhereInput = {};
@@ -42,6 +43,10 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
       }
     }
 
+    const brandFilter = await resolveCatalogBrand(brand, brandId);
+    if (brandFilter.state === "invalid") return { success: false, error: brandFilter.message, data: [], total: 0, totalPages: 0, currentPage: page };
+    if (brandFilter.state === "missing") return { success: true, data: [], total: 0, totalPages: 0, currentPage: page, brandFilter };
+
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
@@ -53,8 +58,8 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
       where.categoryId = categoryId;
     }
 
-    if (brandId) {
-      where.brandId = brandId;
+    if (brandFilter.state === "found") {
+      where.brandId = brandFilter.brand.id;
     }
 
     if (minPrice !== undefined || maxPrice !== undefined) {
@@ -93,9 +98,10 @@ export async function getProducts(queryParams: Record<string, unknown> = {}) {
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
+      brandFilter,
     };
-  } catch (error: unknown) {
-    console.error("Error fetching products:", error);
+  } catch {
+    console.error("Product query is temporarily unavailable.");
     return { success: false, error: "Failed to fetch products", data: [], total: 0 };
   }
 }

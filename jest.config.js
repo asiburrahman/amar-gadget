@@ -1,6 +1,7 @@
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
+  setupFiles: ["<rootDir>/tests/setup-env.ts"],
   modulePathIgnorePatterns: ["<rootDir>/.next/"],
   testPathIgnorePatterns: ["/node_modules/", "<rootDir>/tests/native/"],
   moduleNameMapper: {

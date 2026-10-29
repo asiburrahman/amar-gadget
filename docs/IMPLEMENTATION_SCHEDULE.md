@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest fully completed step: AUD-017 — bounded catalog/media/price validation and current administrator mutation guards.** Current total: 20 original tasks plus AUD-050 implemented (21 of 51 tracked tasks); 29 original tasks plus AUD-051's external credential revocation open (30 total). **Next: AUD-018 — consistent brand slug/ID filtering across links, product page and API.** On 29 October 2026 the owner confirmed revocation has not yet occurred; source remediation does not perform that provider action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log and ingress/media runbooks for evidence, required private gateway/CORS/maintenance deployment, residual low registry alerts and external verification.
+**Latest fully completed step: AUD-018 — canonical brand filtering across real directory links, product page, action and API.** Current total: 21 original tasks plus AUD-050 implemented (22 of 51 tracked tasks); 28 original tasks plus AUD-051's external credential revocation open (29 total). **Next: AUD-019 — advanced product filters, advertised sorts and bounded pagination.** On 29 October 2026 the owner confirmed revocation has not yet occurred; source remediation does not perform that provider action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log and ingress/media/brand runbooks for evidence, required deployment configuration, residual low registry alerts and external verification.
 
 ## Owner-provided introduction
 

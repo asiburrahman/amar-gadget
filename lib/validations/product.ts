@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_PRODUCT_IMAGES } from "@/lib/product-media-policy";
+import { brandQuerySchema, brandIdQuerySchema } from "@/lib/validations/catalog-brand";
 
 export const MAX_PRODUCT_PRICE = 99_999_999.99; // PostgreSQL DECIMAL(10, 2)
 export const MAX_PRODUCT_STOCK = 2_147_483_647; // PostgreSQL INTEGER
@@ -46,7 +47,7 @@ export const productQuerySchema = z.object({
   page: z.coerce.number().int().positive().max(1_000_000).default(1),
   limit: z.coerce.number().int().positive().max(100).default(12),
   search: z.string().max(200).optional(),
-  categoryId: catalogIdSchema.optional(), brandId: catalogIdSchema.optional(),
+  categoryId: catalogIdSchema.optional(), brandId: brandIdQuerySchema, brand: brandQuerySchema,
   minPrice: z.coerce.number().min(0).max(MAX_PRODUCT_PRICE).optional(),
   maxPrice: z.coerce.number().min(0).max(MAX_PRODUCT_PRICE).optional(),
   status: productStatusSchema.optional(),

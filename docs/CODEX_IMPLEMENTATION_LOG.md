@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 20 original tasks plus AUD-050 implemented (21 of 51 tracked tasks); 29 original tasks and external credential revocation for AUD-051 remain open (30 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 21 original tasks plus AUD-050 implemented (22 of 51 tracked tasks); 28 original tasks and external credential revocation for AUD-051 remain open (29 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -301,6 +301,20 @@ TypeScript, all affected-file ESLint, production build and diff checks pass. Pro
 This smoke initially exposed a real Windows packaging failure: Sharp's binding was traced but its dependent DLLs were absent, causing create-action loading to return 500/ERR_DLOPEN_FAILED. Narrow output-file tracing includes now package the installed platform's native library files; both DLL presence and the same actual action request pass after rebuilding. Private child output is reduced to safe diagnostic flags/codes. Linux/Docker execution, live bucket/browser/provider verification and deployment remain AUD-044 release checks. No production data, migration, provider or credential state was changed; AUD-051 remains open.
 
 See [current product/image/mutation contracts and release boundaries](PRODUCT_IMAGES_RUNBOOK.md). Next original task: **AUD-018 — consistent brand slug/ID filters across collection links, page and API**. The complete remaining-task objective stays active.
+
+## Batch 18 — AUD-018: canonical brand collections across links, page and API
+
+Date: 29 October 2026 (Asia/Dhaka). Previous validation step: [`f9bfeae`](https://github.com/asiburrahman/amar-gadget/commit/f9bfeae).
+
+The brand directory now renders stored brands, encoded canonical slug links (with an ID fallback for unusable legacy slugs), validated logos and actual public-visible product counts, with stable twenty-four-row pagination and explicit unavailable/empty states. Hard-coded partner/retailer claims and invented inventory counts are removed. One request-scoped resolver supports exact slugs/IDs and unambiguous case aliases across products-page metadata/rendering, the public API and product-read action. Brand predicates intersect existing category/search/sale constraints and retain product/seller approval. Private-status action authorization still executes before a missing-brand short circuit.
+
+Unknown brands produce an explicit empty collection, not the full catalog. Conflicting, repeated, malformed and overlong values are rejected; a real brand with zero visible products remains a named valid collection. Clear-brand links preserve other filters and reset page. Page metadata uses the resolved name and noindexes missing/invalid brand collections. Lookup failures return unavailable states/503 rather than pretending the brand is missing. A real regression exposed wildcard expansion in ILIKE-backed case-insensitive equality; parameterized lower-case equality now treats percent, underscore and backslash characters literally and bounds alias ambiguity checks to two rows.
+
+Validation: **345 tests across 33 Jest suites pass**, including nine new actual PostgreSQL/API/action/rendered-page cases and six database-isolation cases. Coverage proves exact/case/ID resolution, literal wildcards, ambiguous aliases, approved visibility, combined predicates, missing versus existing-empty brands, conflict/duplicate denial, named metadata/noindex, real directory counts/links, legacy ID fallback, filter preservation and safe lookup failure. The built standalone HTTP brand smoke proves actual directory links, API filtered IDs/counts, collection HTML, combined category/search/sale, unknown empty states and invalid query responses. Existing standalone catalog/gallery/login/readiness/revocation and compiled Next Action HTTP regressions pass. TypeScript, affected-file ESLint, diff checks and production build pass.
+
+Test setup now selects a validated local audit database before any static application import can initialize Prisma, preventing an ambient production URL from winning over a later suite-level override. Without TEST_DATABASE_URL, integration suites skip and unit-only imports use a closed-loopback target. A unit-only run deliberately supplied an ambient production-shaped URL: the nine database cases skipped and six isolation checks passed. Remote/non-audit/query-override test URLs are rejected without echoing values. All earlier recorded implementation runs explicitly selected the local database; no production database was used by this change.
+
+See [brand contracts and verification](BRAND_FILTERS_RUNBOOK.md). No migration, production data/provider operation or deployment was performed. Broader catalog pagination/sort/filter UI remains AUD-019; wider performance/data/browser/CI tasks remain open. SMTP revocation remains open under AUD-051. Next original task: **AUD-019 — wire advanced product filters, advertised sorts and bounded pagination**. The full remaining-task objective stays active.
 
 ## Public contribution evidence
 
