@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { shippingAddressSchema, addressRevisionSchema } from "@/lib/validations/address";
 
 export const accountEmailSchema = z.string().trim().email("Invalid email address").max(254).toLowerCase();
 export const otpCodeSchema = z.string().trim().regex(/^\d{6}$/, "OTP must be 6 digits");
@@ -49,13 +50,9 @@ export const changePasswordSchema = z.object({ currentPassword: passwordInputSch
 export const emailChangeRequestSchema = z.object({ newEmail: accountEmailSchema, currentPassword: passwordInputSchema });
 export const emailChangeVerifySchema = z.object({ newEmail: accountEmailSchema, otp: otpCodeSchema });
 
-const addressSchema = z.object({
-  fullName: databaseText(120).min(2), phone: databaseText(32).min(5),
-  street: databaseText(500).min(1), city: databaseText(100).min(1),
-  district: databaseText(100).min(1), zipCode: databaseText(20).nullable().optional(),
-}).strict();
-export const profileUpdateSchema = z.object({ name: databaseText(120).min(2).optional(), phone: databaseText(32).optional(), avatar: accountAvatarSchema.optional(), address: addressSchema.optional() })
-  .strict().refine((input) => Object.keys(input).length > 0, "Provide profile fields to update");
+export const profileUpdateSchema = z.object({ name: databaseText(120).min(2).optional(), phone: databaseText(32).optional(), avatar: accountAvatarSchema.optional(), address: shippingAddressSchema.optional(), addressRevision: addressRevisionSchema.nullable().optional() })
+  .strict().refine((input) => Object.keys(input).length > 0, "Provide profile fields to update")
+  .refine((input) => input.addressRevision === undefined || input.address !== undefined, "An address revision requires address fields.");
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;

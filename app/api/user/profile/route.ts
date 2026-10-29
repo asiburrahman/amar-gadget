@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { validateSessionToken } from "@/lib/session-validation";
 import { prisma } from "@/lib/prisma";
 import { profileUpdateSchema } from "@/lib/validations/auth";
-import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse, AccountRequestError } from "@/lib/account-request";
+import { MAX_SAVED_ADDRESSES } from "@/lib/validations/address";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,7 +91,7 @@ export async function PUT(req: Request) {
     await limitAccountIdentity(payload.sub, "profile-update", 30, 60);
     const parsed = profileUpdateSchema.safeParse(await readAccountJson(req, 7 * 1024 * 1024 + 16 * 1024));
     if (!parsed.success) return NextResponse.json({ success: false, message: "Check the profile/address fields and their length limits.", errors: parsed.error.flatten().fieldErrors }, { status: 400 });
-    const { name, phone, avatar, address } = parsed.data;
+    const { name, phone, avatar, address, addressRevision } = parsed.data;
 
     const userId = payload.sub as string;
 
@@ -107,10 +108,14 @@ export async function PUT(req: Request) {
       };
       if (Object.keys(changes).length) await tx.user.update({ where: { id: userId }, data: changes });
       if (address) {
-        const existing = await tx.address.findFirst({ where: { userId, isDefault: true }, select: { id: true } });
+        const existing = await tx.address.findFirst({ where: { userId, isDefault: true }, select: { id: true, version: true } });
+        if (addressRevision !== undefined && (addressRevision === null ? Boolean(existing) : !existing || existing.id !== addressRevision.id || existing.version !== addressRevision.version)) throw new AccountRequestError("Your default address changed. Reload your profile before saving.", 409);
         const data = { ...address, zipCode: address.zipCode || null };
-        if (existing) await tx.address.update({ where: { id: existing.id }, data });
-        else await tx.address.create({ data: { ...data, userId, isDefault: true } });
+        if (existing) await tx.address.update({ where: { id: existing.id }, data: { ...data, version: { increment: 1 } } });
+        else {
+          if (await tx.address.count({ where: { userId } }) >= MAX_SAVED_ADDRESSES) throw new AccountRequestError("You already have 20 saved addresses. Choose an existing default on the addresses page.", 409);
+          await tx.address.create({ data: { ...data, userId, isDefault: true } });
+        }
       }
       return tx.user.findUniqueOrThrow({ where: { id: userId }, select: {
         id: true, name: true, email: true, phone: true, avatar: true, role: true,

@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createOrder } from "@/server/actions/order/order-actions";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, type AuthUser } from "@/hooks/use-auth";
+import Link from "next/link";
+import { useSavedAddresses } from "@/hooks/use-saved-addresses";
+import { shippingAddressSchema } from "@/lib/validations/address";
 import { getCheckoutAttempt, clearCheckoutAttempt, bindCheckoutAttempt, type CheckoutAttempt } from "@/lib/checkout-attempt";
 import type { CheckoutDetails } from "@/lib/validations/order";
 import { PaymentRecovery } from "@/components/checkout/payment-recovery";
@@ -16,9 +19,16 @@ import { useCheckoutQuote } from "@/hooks/use-checkout-quote";
 const subscribeHydration = () => () => undefined;
 
 export default function CheckoutForm() {
+  const { user, loading } = useAuth();
+  // Account transitions must not carry another customer's shipping draft.
+  return <CheckoutContent key={loading ? "loading" : user?.id ?? "guest"} user={loading ? null : user} authLoading={loading} />;
+}
+function CheckoutContent({ user, authLoading }: { user: AuthUser | null; authLoading: boolean }) {
   const { items, couponCode, removeCoupon, rememberCheckout, completeCheckout, pendingCheckouts } = useCartStore();
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
-  const { user, loading: authLoading } = useAuth();
+  const [addressPage, setAddressPage] = useState(1);
+  const addresses = useSavedAddresses(user?.id ?? null, addressPage);
+  const [addressChoice, setAddressChoice] = useState<string | null>(null);
   const router = useRouter();
   const attemptRef = useRef<CheckoutAttempt | undefined>(undefined);
   const submittingRef = useRef(false);
@@ -26,16 +36,26 @@ export default function CheckoutForm() {
   const [formData, setFormData] = useState({
     fullName: null as string | null,
     phone: null as string | null,
-    street: "",
-    city: "",
-    district: "",
-    zipCode: "",
+    street: null as string | null,
+    city: null as string | null,
+    district: null as string | null,
+    zipCode: null as string | null,
     paymentMethod: "COD" as "COD" | "STRIPE",
   });
 
-  // Prefill untouched fields without an effect overwriting customer edits.
-  const fullName = formData.fullName ?? user?.name ?? "";
-  const phone = formData.phone ?? user?.phone ?? "";
+  // A default can prefill only untouched inputs. The first manual edit
+  // snapshots every displayed field, isolating it from late fetches/defaults.
+  const defaultAddress = addressChoice === null ? addresses.data?.defaultAddress : null;
+  const shipping = {
+    fullName: formData.fullName ?? defaultAddress?.fullName ?? user?.name ?? "",
+    phone: formData.phone ?? defaultAddress?.phone ?? user?.phone ?? "",
+    street: formData.street ?? defaultAddress?.street ?? "",
+    city: formData.city ?? defaultAddress?.city ?? "",
+    district: formData.district ?? defaultAddress?.district ?? "",
+    zipCode: formData.zipCode ?? defaultAddress?.zipCode ?? "",
+  };
+  const selectedId = addressChoice ?? defaultAddress?.id ?? (addresses.loading ? "loading" : "manual");
+  const addressLoading = addresses.loading && addressChoice === null;
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -47,12 +67,15 @@ export default function CheckoutForm() {
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (e.target.name === "paymentMethod") setFormData({ ...formData, paymentMethod: e.target.value as "COD" | "STRIPE" });
+    else { setAddressChoice("manual"); setFormData({ ...formData, ...shipping, [e.target.name]: e.target.value }); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (items.length === 0 || !quote || authLoading || submittingRef.current) return;
+    if (items.length === 0 || !quote || authLoading || addressLoading || submittingRef.current) return;
+    const parsedShipping = shippingAddressSchema.safeParse(shipping);
+    if (!parsedShipping.success) { setErrorMsg(parsedShipping.error.issues[0]?.message ?? "Enter your shipping details."); return; }
 
     submittingRef.current = true;
     setLoading(true);
@@ -63,12 +86,7 @@ export default function CheckoutForm() {
       const cartSnapshot = items.map((item) => ({ productId: item.id, quantity: item.quantity, lineId: item.lineId }));
       const details: CheckoutDetails = {
         items: items.map((item) => ({ productId: item.id, quantity: item.quantity })),
-        fullName,
-        phone,
-        street: formData.street,
-        city: formData.city,
-        district: formData.district,
-        zipCode: formData.zipCode,
+        ...shipping,
         paymentMethod: formData.paymentMethod,
         couponCode: couponCode || undefined,
       };
@@ -115,13 +133,32 @@ export default function CheckoutForm() {
         ) : (
           <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left 2 cols: Address & Payment Details */}
-            <div className="lg:col-span-2 space-y-6">
+            <fieldset disabled={loading} aria-label="Shipping and payment details" className="lg:col-span-2 space-y-6">
               {/* Shipping Address Form */}
               <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4">
                 <h2 className="text-lg font-bold text-foreground border-b border-border pb-3">1. Shipping Address</h2>
+                {user && <div className="space-y-2">
+                  <label htmlFor="checkout-saved-address" className="block font-semibold">Saved shipping address</label>
+                  <select id="checkout-saved-address" disabled={loading} value={selectedId} onChange={(event) => {
+                    const id = event.target.value;
+                    if (id === "manual") { setAddressChoice("manual"); setFormData({ ...formData, fullName: user.name ?? "", phone: user.phone ?? "", street: "", city: "", district: "", zipCode: "" }); return; }
+                    const selected = addresses.data?.addresses.find((item) => item.id === id) ?? (addresses.data?.defaultAddress?.id === id ? addresses.data.defaultAddress : null);
+                    if (selected) { setAddressChoice(id); setFormData({ ...formData, fullName: selected.fullName, phone: selected.phone, street: selected.street, city: selected.city, district: selected.district, zipCode: selected.zipCode ?? "" }); }
+                  }} className="border rounded p-2 w-full">
+                    {selectedId === "loading" && <option value="loading" disabled>Loading saved addresses...</option>}
+                    <option value="manual">Enter another shipping address</option>
+                    {!["manual", "loading"].includes(selectedId) && !addresses.data?.addresses.some((item) => item.id === selectedId) && <option value={selectedId}>Selected saved address</option>}
+                    {addresses.data?.addresses.map((address) => <option key={address.id} value={address.id}>{address.fullName}: {address.street}, {address.city}{address.isDefault ? " (Default)" : ""}</option>)}
+                  </select>
+                  {addresses.loading && <p role="status">Loading saved addresses...</p>}
+                  {addresses.error && <p role="alert">{addresses.error} You can enter shipping details manually.</p>}
+                  {addresses.data?.total === 0 && <p>No saved addresses. Enter your shipping details below.</p>}
+                  <div className="flex flex-wrap gap-4"><button type="button" disabled={loading || addresses.loading || addressPage <= 1} onClick={() => setAddressPage(addressPage - 1)}>Previous saved addresses</button><button type="button" disabled={loading || addresses.loading || addressPage >= (addresses.data?.totalPages ?? 0)} onClick={() => setAddressPage(addressPage + 1)}>Next saved addresses</button><button type="button" disabled={loading || addresses.loading} onClick={addresses.refresh}>Reload saved addresses</button><Link href="/user/addresses" className="underline">Manage saved addresses</Link></div>
+                  <p>Review these shipping details before placing your order. Editing here does not change your saved address.</p>
+                </div>}
 
                 {errorMsg && (
-                  <div className="p-3 text-xs font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <div role="alert" className="p-3 text-xs font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
                     <p>{errorMsg}</p>
                     {canRestart && (
                       <button type="button" disabled={loading} className="mt-2 underline" onClick={() => {
@@ -136,57 +173,68 @@ export default function CheckoutForm() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                   <div>
-                    <label className="font-semibold block mb-1">Full Name *</label>
+                    <label htmlFor="checkout-fullName" className="font-semibold block mb-1">Full Name *</label>
                     <Input
                       required
                       name="fullName"
+                      id="checkout-fullName"
+                      maxLength={120}
                       placeholder="e.g. Asibur Rahman"
-                      value={fullName}
+                      value={shipping.fullName}
                       onChange={handleChange}
                     />
                   </div>
 
                   <div>
-                    <label className="font-semibold block mb-1">Phone Number *</label>
+                    <label htmlFor="checkout-phone" className="font-semibold block mb-1">Phone Number *</label>
                     <Input
                       required
                       name="phone"
+                      id="checkout-phone"
+                      maxLength={30}
                       placeholder="e.g. 01700000000"
-                      value={phone}
+                      value={shipping.phone}
                       onChange={handleChange}
                     />
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="font-semibold block mb-1">Street Address *</label>
+                    <label htmlFor="checkout-street" className="font-semibold block mb-1">Street Address *</label>
                     <Input
                       required
                       name="street"
+                      id="checkout-street"
+                      maxLength={500}
                       placeholder="House, Road, Area details"
-                      value={formData.street}
+                      value={shipping.street}
                       onChange={handleChange}
                     />
                   </div>
 
                   <div>
-                    <label className="font-semibold block mb-1">City *</label>
+                    <label htmlFor="checkout-city" className="font-semibold block mb-1">City *</label>
                     <Input
                       required
                       name="city"
-                      value={formData.city}
+                      id="checkout-city"
+                      maxLength={100}
+                      value={shipping.city}
                       onChange={handleChange}
                     />
                   </div>
 
                   <div>
-                    <label className="font-semibold block mb-1">District / Division *</label>
+                    <label htmlFor="checkout-district" className="font-semibold block mb-1">District / Division *</label>
                     <Input
                       required
                       name="district"
-                      value={formData.district}
+                      id="checkout-district"
+                      maxLength={100}
+                      value={shipping.district}
                       onChange={handleChange}
                     />
                   </div>
+                  <div><label htmlFor="checkout-zipCode" className="font-semibold block mb-1">Postal code (optional)</label><Input id="checkout-zipCode" name="zipCode" maxLength={20} value={shipping.zipCode} onChange={handleChange} /></div>
                 </div>
               </div>
 
@@ -236,7 +284,7 @@ export default function CheckoutForm() {
                   </label>
                 </div>
               </div>
-            </div>
+            </fieldset>
 
             {/* Right Col: Order Breakdown */}
             <div className="space-y-4">
@@ -286,7 +334,7 @@ export default function CheckoutForm() {
 
                 <Button
                   type="submit"
-                  disabled={loading || authLoading || !quote}
+                  disabled={loading || authLoading || addressLoading || !quote}
                   variant="default"
                   className="w-full h-12 font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
                 >

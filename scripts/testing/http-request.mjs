@@ -4,7 +4,12 @@ import { request } from "node:http";
 // loopback gateway. Node fetch can replace Host with the connection URL.
 export function requestHttp(url, { method = "GET", headers = {}, body, timeout = 30_000 } = {}) {
   return new Promise((resolve, reject) => {
-    const req = request(url, { method, headers, timeout }, (res) => {
+    const requestHeaders = { ...headers };
+    // Node does not implicitly frame a DELETE body as it does a POST body.
+    // Preserve intentional test lengths/stream framing; otherwise send the
+    // exact byte count for every method so JSON bodies reach real handlers.
+    if (body !== undefined && body !== null && !Object.keys(requestHeaders).some((name) => ["content-length", "transfer-encoding"].includes(name.toLowerCase()))) requestHeaders["Content-Length"] = String(Buffer.byteLength(body));
+    const req = request(url, { method, headers: requestHeaders, timeout }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
       res.on("error", reject);

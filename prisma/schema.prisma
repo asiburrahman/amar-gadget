@@ -210,6 +210,7 @@ model Wishlist {
 
 model Address {
   id         String   @id @default(uuid())
+  version    Int      @default(1)
   userId     String
   user       User     @relation(fields: [userId], references: [id])
   fullName   String

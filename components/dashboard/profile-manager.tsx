@@ -9,6 +9,7 @@ import { newPasswordSchema, PASSWORD_POLICY_MESSAGE } from "@/lib/validations/au
 
 interface AddressData {
   id?: string;
+  version?: number;
   fullName?: string;
   phone?: string;
   street?: string;
@@ -467,6 +468,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
             district,
             zipCode,
           },
+          addressRevision: profile?.addresses?.[0]?.id && profile.addresses[0].version ? { id: profile.addresses[0].id, version: profile.addresses[0].version } : null,
         }),
       });
 

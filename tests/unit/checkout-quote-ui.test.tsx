@@ -88,6 +88,7 @@ it("sends the displayed quote fingerprint and refreshes a changed-price rejectio
   const view = render(<CheckoutForm />);
   const button = await screen.findByRole("button", { name: "Confirm & Place Order" });
   await waitFor(() => expect(button).toHaveProperty("disabled", false));
+  for (const [label, value] of [["Full Name *", "Test buyer"], ["Phone Number *", "01700000000"], ["Street Address *", "House 7, Test road"], ["City *", "Dhaka"], ["District / Division *", "Dhaka"]]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
   (fetch as jest.Mock).mockResolvedValue(response({ quote: { ...quote, total: 1100, fingerprint: "2".repeat(64) } }));
   fireEvent.submit(view.container.querySelector("form")!);
   await screen.findByText("Prices changed. Review the refreshed total.");
