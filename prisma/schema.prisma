@@ -81,6 +81,33 @@ model Product {
   orderItems    OrderItem[]
   reviews       Review[]
   wishlists     Wishlist[]
+  campaigns     CampaignProduct[]
+}
+
+model Campaign {
+  id String @id @default(uuid())
+  title String @db.VarChar(120)
+  slug String @unique @db.VarChar(120)
+  description String @default("") @db.VarChar(1000)
+  startsAt DateTime
+  endsAt DateTime
+  isActive Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  products CampaignProduct[]
+  @@index([isActive, startsAt, endsAt])
+}
+
+model CampaignProduct {
+  campaignId String
+  productId String
+  position Int
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@id([campaignId, productId])
+  @@unique([campaignId, position])
+  @@index([productId])
 }
 
 model Order {

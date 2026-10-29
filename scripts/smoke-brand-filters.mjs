@@ -93,6 +93,12 @@ async function main() {
     const detail = await (await get(`/products/${products[0].slug}`)).text(); assert.ok(detail.includes("Technical specifications")); assert.ok(detail.includes("OLED")); assert.ok(detail.includes("to comparison"));
     assert.ok(home.includes('action="/search"')); assert.ok(home.includes('name="q"')); assert.ok(home.includes('name="category"'));
     const duplicate = await (await get(`/compare?product=${products[0].id}&product=${products[0].id}`)).text(); assert.ok(duplicate.includes("four distinct product IDs"));
+    phase = "browser history hydration and fixed currency policy";
+    const recent = await get(`/api/products/recently-viewed?product=${products[1].id}&product=${products[0].id}&product=${products[5].id}`); assert.equal(recent.status, 200); assert.equal(recent.headers.get("cache-control"), "private, no-store");
+    assert.deepEqual((await recent.json()).products.map((p) => p.id), [products[1].id, products[0].id]);
+    assert.equal((await get(`/api/products/recently-viewed?product=${products[0].id}&product=${products[0].id}`)).status, 400);
+    assert.ok(home.includes("Prices and checkout:")); assert.ok(home.includes("BDT")); assert.ok(!home.includes("Dollar (US)")); assert.ok(!home.includes("other shoppers recently explored"));
+    const brandSection = home.split('aria-label="Catalog brands"')[1]?.split("</section>")[0]?.replace(/<!--[\s\S]*?-->/g, ""); assert.ok(brandSection?.includes(brands[0].name)); assert.ok(brandSection.includes("2 public products"));
     return { actualBrandDirectoryLinks: "PASS", slugIdAndCaseAliases: "PASS", approvedSellerVisibility: "PASS", combinedBrandCategorySearchSale: "PASS", namedCollectionServerRender: "PASS", missingBrandEmptyState: "PASS", conflictingAndRepeatedFiltersRejected: "PASS", boundedPagesAndExactCount: "PASS", effectivePriceRangeAndSort: "PASS", renderedFilterControls: "PASS", paidDeliveredSalesRanking: "PASS", liveOptionEndpoint: "PASS", homepageBestSellers: "PASS", unifiedSearchRedirect: "PASS", realComparisonSpecifications: "PASS", hiddenComparisonProductsDenied: "PASS", productDetailSpecifications: "PASS", actualHeaderSearchForms: "PASS" };
   } finally {
     await child?.stop(); await redis?.close();

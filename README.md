@@ -357,6 +357,8 @@ npm run lint
 
 [Search and comparison contracts](docs/SEARCH_COMPARISON_RUNBOOK.md) cover the working header/search destination, four-product shareable selection and seller-supplied specifications persisted by AUD-020. This revision requires migration `20261029100000_product_specifications` before deployment; no technical data is invented for existing products.
 
+[Campaigns, browser history and BDT pricing](docs/CAMPAIGNS_HISTORY_CURRENCY_RUNBOOK.md) document AUD-037's database-backed campaign management, real recently viewed products, current catalog offer policy and fixed checkout currency. Apply migration `20261029110000_catalog_campaigns` before deploying this revision. Campaign listing expiry does not change an independently configured product discount.
+
 ### Codex-Assisted Development Record
 
 This change was made after reviewing authorization boundaries, checkout totals and payment state, catalog visibility, OTP handling, order tracking, and the checked-in Prisma migrations. The main engineering decision was to derive identities and prices on the server, then make payment confirmation depend on a verified Stripe webhook rather than client input.

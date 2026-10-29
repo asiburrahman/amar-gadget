@@ -47,7 +47,7 @@ export const ProductCard = ({
   const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist } = useWishlistStore();
 
   const isWishlisted = isInWishlist(id);
-  const effectivePrice = discountPrice || price;
+  const effectivePrice = discountPrice ?? price;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();

@@ -52,12 +52,12 @@ export const BottomWidgets: React.FC<BottomWidgetsProps> = ({
                 </Link>
                 <div className="flex items-center space-x-0.5 text-amber-400 mb-1">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className={`w-2.5 h-2.5 ${i < Math.round(item.rating || 5) ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />
+                    <Star key={i} className={`w-2.5 h-2.5 ${i < Math.round(item.rating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />
                   ))}
                 </div>
                 <div className="flex items-baseline space-x-1.5">
                   <span className="text-xs font-black text-slate-900">
-                    {formatCurrency(item.discountPrice || item.price)}
+                    {formatCurrency(item.discountPrice ?? item.price)}
                   </span>
                   {item.discountPrice && (
                     <span className="text-[10px] text-slate-400 line-through">

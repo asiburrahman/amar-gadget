@@ -17,6 +17,7 @@ async function main() {
   const secret = randomBytes(32).toString("hex"), password = randomBytes(32).toString("hex");
   const prefix = `audit-action-${randomUUID()}`;
   let redis, child, admin, seller, category, product;
+  const campaigns = [];
   try {
     const { hashPassword } = await tsImport("../lib/password.ts", import.meta.url);
     admin = await db.user.create({ data: { email: `${prefix}-admin@example.invalid`, password: await hashPassword(password), role: "ADMIN", isVerified: true } });
@@ -68,14 +69,29 @@ async function main() {
     phase = "valid product approval";
     assert.equal((await call("updateProductStatus", [product.id, "APPROVED"])).success, true);
     assert.equal((await db.product.findUniqueOrThrow({ where: { id: product.id } })).status, "APPROVED");
+    phase = "compiled campaign CRUD and public window enforcement";
+    const campaignCall = (name, args) => call(name, args, "/admin/campaigns", "app/(dashboard)/admin/campaigns/page");
+    const fields = { title: `${prefix} actual campaign`, slug: `${prefix}-campaign`, description: "Current catalog prices", startsAt: new Date(Date.now() - 3600_000).toISOString(), endsAt: new Date(Date.now() + 3600_000).toISOString(), isActive: true, productIds: [product.id] };
+    const created = await campaignCall("saveCampaign", [{ fields }]); assert.equal(created.success, true); campaigns.push(created.data.id);
+    const get = (target) => requestHttp(child.origin + target, { headers: signIngress({ secret, origin: child.origin, ip: "127.0.0.1", method: "GET", target }) });
+    assert.ok((await (await get("/deals")).text()).includes(fields.title)); assert.ok((await (await get("/")).text()).includes(fields.title));
+    assert.equal((await campaignCall("saveCampaign", [{ id: created.data.id, version: 1, fields: { ...fields, isActive: false } }])).success, true);
+    assert.ok(!(await (await get("/deals")).text()).includes(fields.title)); assert.ok(!(await (await get("/")).text()).includes(fields.title));
+    assert.equal((await campaignCall("saveCampaign", [{ id: created.data.id, version: 1, fields }])).success, false);
+    assert.equal((await campaignCall("saveCampaign", [{ id: created.data.id, version: 2, fields: { ...fields, endsAt: new Date(Date.now() - 1).toISOString() } }])).success, true);
+    assert.ok(!(await (await get("/deals")).text()).includes(fields.title));
+    const draft = await campaignCall("saveCampaign", [{ fields: { ...fields, slug: `${prefix}-draft`, isActive: false, productIds: [] } }]); assert.equal(draft.success, true); campaigns.push(draft.data.id);
+    assert.equal((await campaignCall("deleteCampaign", [{ id: draft.data.id, version: 1 }])).success, true); assert.equal(await db.campaign.count({ where: { id: draft.data.id } }), 0);
     phase = "copied administrator cookie revocation";
     await db.user.update({ where: { id: admin.id }, data: { sessionVersion: { increment: 1 } } });
     const revoked = await call("adminUpdateProductPrice", [product.id, 1, null]);
     assert.equal((await call("adminUpdateSpecifications", [{ productId: product.id, specifications: [] }])).success, false);
+    assert.equal((await campaignCall("deleteCampaign", [{ id: created.data.id, version: 3 }])).success, false); assert.equal(await db.campaign.count({ where: { id: created.data.id } }), 1);
     assert.equal(revoked.success, false); assert.equal((await db.product.findUniqueOrThrow({ where: { id: product.id } })).price.toString(), "123.45");
-    return { compiledNextActionTransport: "PASS", malformedRequestsLeaveProductUnchanged: "PASS", directCreateValidation: "PASS", serializablePriceResult: "PASS", exactPriceSqlWrite: "PASS", specificationSqlMutation: "PASS", invalidAndRevokedSpecMutationDenied: "PASS", validApproval: "PASS", copiedAdminCookieRevoked: "PASS" };
+    return { compiledNextActionTransport: "PASS", malformedRequestsLeaveProductUnchanged: "PASS", directCreateValidation: "PASS", serializablePriceResult: "PASS", exactPriceSqlWrite: "PASS", specificationSqlMutation: "PASS", invalidAndRevokedSpecMutationDenied: "PASS", validApproval: "PASS", campaignCrudSqlAndPublicRender: "PASS", disabledExpiredAndStaleCampaignDenied: "PASS", copiedAdminCookieRevoked: "PASS" };
   } finally {
     await child?.stop(); await redis?.close();
+    await db.campaign.deleteMany({ where: { id: { in: campaigns } } });
     try { if (product) await db.product.deleteMany({ where: { id: product.id } }); if (category) await db.category.delete({ where: { id: category.id } }); if (admin) await db.user.delete({ where: { id: admin.id } }); if (seller) await db.user.delete({ where: { id: seller.id } }); } finally { await db.$disconnect(); }
   }
 }

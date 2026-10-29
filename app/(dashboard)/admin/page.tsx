@@ -48,6 +48,7 @@ export default async function AdminDashboardPage() {
           <Link href="/admin/products" className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition">
             📦 Manage Products ({stats.totalProducts})
           </Link>
+          <Link href="/admin/campaigns" className="px-4 py-2 border rounded-lg text-xs font-bold">Manage campaigns</Link>
           <Link href="/" className="px-4 py-2 border border-border text-foreground text-xs font-bold rounded-lg hover:bg-muted transition">
             View Live Store
           </Link>

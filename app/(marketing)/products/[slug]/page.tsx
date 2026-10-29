@@ -11,6 +11,7 @@ import { generateProductSchema } from "@/lib/seo/schema";
 import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
 import { CompareButton } from "@/components/catalog/compare-button";
 import { specificationsSchema } from "@/lib/validations/specifications";
+import { RecordProductView } from "@/components/catalog/record-product-view";
 
 export const dynamic = "force-dynamic";
 
@@ -115,8 +116,8 @@ export default async function ProductDetailPage({
   }
 
   const numericPrice = Number(product.price);
-  const numericDiscountPrice = product.discountPrice ? Number(product.discountPrice) : null;
-  const effectivePrice = numericDiscountPrice || numericPrice;
+  const numericDiscountPrice = product.discountPrice === null ? null : Number(product.discountPrice);
+  const effectivePrice = numericDiscountPrice ?? numericPrice;
   const specifications = specificationsSchema.parse(product.specifications);
 
   const jsonLd = generateProductSchema({
@@ -132,6 +133,7 @@ export default async function ProductDetailPage({
 
   return (
     <>
+      <RecordProductView productId={product.id} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}

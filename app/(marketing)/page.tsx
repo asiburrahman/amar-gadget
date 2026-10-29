@@ -1,12 +1,14 @@
-import React from "react";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { publicProductWhere } from "@/lib/catalog-visibility";
+import { getCatalogListing, type CatalogProduct } from "@/lib/catalog-listing";
+import { getActiveCampaigns } from "@/lib/campaigns";
 import { SEOGuard } from "@/components/shared/seo-guard";
 import { HeroSection } from "@/components/home/hero-section";
 import { PromoBanners } from "@/components/home/promo-banners";
-import { SpecialDealSection, DynamicProductItem } from "@/components/home/special-deal-section";
-import { BestSellersSection, type BestSellerProductItem } from "@/components/home/best-sellers-section";
-import { getCatalogListing } from "@/lib/catalog-listing";
+import { SpecialDealSection, type DynamicProductItem } from "@/components/home/special-deal-section";
+import { BestSellersSection } from "@/components/home/best-sellers-section";
+import { CampaignCard } from "@/components/catalog/campaign-card";
 import { BannerAd } from "@/components/home/banner-ad";
 import { RecentlyViewed } from "@/components/home/recently-viewed";
 import { BrandLogos } from "@/components/home/brand-logos";
@@ -15,119 +17,30 @@ import { NewsletterBar } from "@/components/home/newsletter-bar";
 import { ElectroFooter } from "@/components/footer/electro-footer";
 
 export const dynamic = "force-dynamic";
-
+const card = (product: CatalogProduct): DynamicProductItem => ({ ...product, description: product.description ?? undefined, imageUrl: product.imageUrl ?? undefined, category: product.category.name });
 export default async function Home() {
-  let approvedProducts: DynamicProductItem[] = [];
-  let bestSellerProducts: BestSellerProductItem[] = [];
-  const bestSellersPromise = getCatalogListing({ sort: "bestsellers", limit: 8 }).catch(() => { console.error("Best seller ranking is temporarily unavailable."); return null; });
-  let dbCategories: Array<{ id: string; name: string; slug?: string }> = [];
-
-  try {
-    const [products, categories] = await Promise.all([
-      prisma.product.findMany({
-        where: publicProductWhere,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      }),
-      prisma.category.findMany({
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-        take: 10,
-      }),
-    ]);
-
-    dbCategories = categories;
-
-    approvedProducts = products.map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      name: p.name,
-      description: p.description ?? undefined,
-      price: Number(p.price),
-      discountPrice: p.discountPrice ? Number(p.discountPrice) : null,
-      stock: p.stock,
-      imageUrl: p.imageUrl ?? undefined,
-      category: p.category?.name ?? undefined,
-      rating: p.rating ?? 5,
-    }));
-  } catch (error) {
-    console.error("Error loading homepage dynamic products from database:", error);
-  }
-  const bestSellers = await bestSellersPromise;
-  if (bestSellers) bestSellerProducts = bestSellers.products.filter((item) => item.unitsSold && item.unitsSold !== "0").map((item) => ({ ...item, description: item.description ?? undefined, imageUrl: item.imageUrl ?? undefined, category: item.category.name }));
-
-  // Derive filtered dynamic lists from approved database products
-  const featuredProducts = approvedProducts.length > 0 ? approvedProducts : [];
-  const onSaleProducts = approvedProducts.filter((p) => p.discountPrice && p.discountPrice < p.price);
-  const topRatedProducts = [...approvedProducts].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  
-  // Pick the best product for the special deal countdown card
-  const specialProduct =
-    onSaleProducts.length > 0
-      ? onSaleProducts[0]
-      : approvedProducts.length > 0
-      ? approvedProducts[0]
-      : null;
-
-  return (
-    <SEOGuard>
-      <div className="flex-1 flex flex-col bg-white text-slate-900">
-        <main className="flex-1">
-          {/* 1. Hero Section with dynamic categories and featured product */}
-          <HeroSection
-            featuredProduct={specialProduct}
-            categories={dbCategories}
-          />
-
-          {/* 2. Four Feature Promo Banners */}
-          <PromoBanners />
-
-          {/* 3. Special Offer Deal & Tabbed Products - 100% database driven */}
-          <SpecialDealSection
-            specialProduct={specialProduct}
-            featuredProducts={featuredProducts}
-            onSaleProducts={onSaleProducts}
-            topRatedProducts={topRatedProducts}
-          />
-
-          {/* 4. Best Sellers Row - Dynamic Approved Products */}
-          <BestSellersSection products={bestSellerProducts} unavailable={!bestSellers} />
-
-          {/* 5. Wide Shop & Save Big Banner */}
-          <BannerAd />
-
-          {/* 6. Recently Viewed Products - Dynamic Approved Products */}
-          <RecentlyViewed products={approvedProducts} />
-
-          {/* 7. Brand / Partner Logos Bar */}
-          <BrandLogos />
-
-          {/* 8. 3-Column Bottom Product Widgets - Dynamic Approved Products */}
-          <BottomWidgets
-            featuredProducts={featuredProducts}
-            onSaleProducts={onSaleProducts}
-            topRatedProducts={topRatedProducts}
-          />
-
-          {/* 9. Electro Signature Yellow Newsletter Bar */}
-          <NewsletterBar />
-        </main>
-
-        {/* 10. Electro Footer */}
-        <ElectroFooter />
-      </div>
-    </SEOGuard>
-  );
+  const [featured, sale, rated, best, campaigns, categories, brands] = await Promise.allSettled([
+    prisma.product.findMany({ where: { ...publicProductWhere, isFeatured: true }, take: 12, orderBy: [{ createdAt: "desc" }, { id: "asc" }], include: { category: { select: { name: true } } } }),
+    getCatalogListing({ filter: "sale", limit: 12 }), getCatalogListing({ sort: "rating", limit: 12 }), getCatalogListing({ sort: "bestsellers", limit: 8 }),
+    getActiveCampaigns(), prisma.category.findMany({ select: { id: true, name: true, slug: true }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 10 }),
+    prisma.brand.findMany({ select: { id: true, name: true, slug: true, _count: { select: { products: { where: publicProductWhere } } } }, take: 12, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+  ]);
+  const featuredProducts: DynamicProductItem[] = featured.status === "fulfilled" ? featured.value.map((product) => ({ ...product, description: product.description ?? undefined, price: Number(product.price), discountPrice: product.discountPrice === null ? null : Number(product.discountPrice), imageUrl: product.imageUrl ?? undefined, category: product.category.name })) : [];
+  const onSaleProducts = sale.status === "fulfilled" ? sale.value.products.map(card) : [];
+  const topRatedProducts = rated.status === "fulfilled" ? rated.value.products.filter((product) => product.reviewCount > 0 && product.rating > 0).map(card) : [];
+  const bestSellerProducts = best.status === "fulfilled" ? best.value.products.filter((product) => product.unitsSold && product.unitsSold !== "0").map((product) => ({ ...card(product), unitsSold: product.unitsSold })) : [];
+  const preview = campaigns.status === "fulfilled" ? campaigns.value.campaigns[0] : undefined;
+  return <SEOGuard><div className="flex-1 flex flex-col bg-white text-slate-900"><main className="flex-1">
+    <HeroSection featuredProduct={featuredProducts[0] ?? onSaleProducts[0] ?? null} categories={categories.status === "fulfilled" ? categories.value : []} />
+    <PromoBanners />
+    <section aria-label="Current campaigns" className="max-w-7xl mx-auto p-4 py-8 space-y-4"><h2 className="text-xl font-bold">Current campaigns</h2><Link href="/deals" className="underline">Browse all campaigns</Link>
+      {campaigns.status === "rejected" ? <p role="alert">Campaigns are temporarily unavailable.</p> : preview ? <CampaignCard campaign={{ ...preview, products: preview.products.slice(0, 4) }} serverNow={campaigns.value.now} /> : <p>No active campaigns with eligible products right now.</p>}
+    </section>
+    <SpecialDealSection featuredProducts={featuredProducts} onSaleProducts={onSaleProducts} topRatedProducts={topRatedProducts} unavailable={[...(featured.status === "rejected" ? ["featured" as const] : []), ...(sale.status === "rejected" ? ["onsale" as const] : []), ...(rated.status === "rejected" ? ["toprated" as const] : [])]} />
+    <BestSellersSection products={bestSellerProducts} unavailable={best.status === "rejected"} />
+    <BannerAd /><RecentlyViewed />
+    <BrandLogos brands={brands.status === "fulfilled" ? brands.value.map((brand) => ({ id: brand.id, slug: brand.slug, name: brand.name, count: brand._count.products })) : []} unavailable={brands.status === "rejected"} />
+    <BottomWidgets featuredProducts={featuredProducts} onSaleProducts={onSaleProducts} topRatedProducts={topRatedProducts} />
+    <NewsletterBar />
+  </main><ElectroFooter /></div></SEOGuard>;
 }

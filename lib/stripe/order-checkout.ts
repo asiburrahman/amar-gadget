@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe/stripe";
+import { STORE_CURRENCY } from "@/lib/currency";
 import { applyStripeSession, lockOrder, STRIPE_RESERVATION_MS } from "@/lib/checkout-reservations";
 
 export class CheckoutUnavailable extends Error {
@@ -29,7 +30,7 @@ export async function startStripeCheckout(orderId: string, origin: string) {
     ? await stripe.checkout.sessions.retrieve(order.stripeCheckoutSessionId)
     : await stripe.checkout.sessions.create({
       payment_method_types: ["card"], mode: "payment",
-      line_items: [{ price_data: { currency: "bdt", product_data: { name: `Amar Gadget order ${order.id}` }, unit_amount: Math.round(Number(order.total) * 100) }, quantity: 1 }],
+      line_items: [{ price_data: { currency: STORE_CURRENCY.toLowerCase(), product_data: { name: `Amar Gadget order ${order.id}` }, unit_amount: Math.round(Number(order.total) * 100) }, quantity: 1 }],
       success_url: `${order.stripeCheckoutOrigin}/order-success/${order.id}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${order.stripeCheckoutOrigin}/checkout${order.stripeCheckoutVersion >= 2 ? `?resume=${order.id}` : ""}`,
       expires_at: Math.floor(order.reservationExpiresAt!.getTime() / 1000),

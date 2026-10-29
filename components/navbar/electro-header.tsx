@@ -8,6 +8,8 @@ import { useWishlistStore } from "@/stores/wishlist-store";
 import { useAuth } from "@/hooks/use-auth";
 import { HeaderSearch } from "@/components/catalog/header-search";
 import { ComparisonLink } from "@/components/catalog/compare-button";
+import { formatCurrency } from "@/lib/formatter";
+import { STORE_CURRENCY } from "@/lib/currency";
 import { User } from "@/components/icons/User";
 import { Menu } from "@/components/icons/Menu";
 import { ChevronDown } from "@/components/icons/ChevronDown";
@@ -23,15 +25,13 @@ function HeaderContent({ pathname }: { pathname: string }) {
   const displayUser = user;
   const [isDepartmentOpen, setIsDepartmentOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [activeLang, setActiveLang] = useState("Dollar (US)");
-  const [isLangOpen, setIsLangOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const cartItems = useCartStore((state) => state.items);
   const wishlistItems = useWishlistStore((state) => state.items);
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-  const totalCartPrice = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const totalCartPrice = cartItems.reduce((acc, item) => acc + (item.discountPrice ?? item.price) * item.quantity, 0);
   const wishlistCount = wishlistItems.length;
 
   const categories = [
@@ -75,24 +75,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
 
             <span className="text-gray-300">|</span>
 
-            {/* Language / Currency Selector */}
-            <div className="relative">
-              <button
-                onClick={() => setIsLangOpen(!isLangOpen)}
-                className="flex items-center space-x-1.5 hover:text-black focus:outline-hidden cursor-pointer"
-              >
-                <span>{activeLang}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-
-              {isLangOpen && (
-                <div className="absolute right-0 mt-2 w-36 bg-white border border-gray-200 text-gray-700 rounded-lg shadow-xl py-1 z-50 text-xs">
-                  <button onClick={() => { setActiveLang("Dollar (US)"); setIsLangOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 font-medium">Dollar (US)</button>
-                  <button onClick={() => { setActiveLang("BDT (৳)"); setIsLangOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 font-medium">BDT (৳)</button>
-                  <button onClick={() => { setActiveLang("Euro (€)"); setIsLangOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 font-medium">Euro (€)</button>
-                </div>
-              )}
-            </div>
+            <span aria-label="Store currency">Prices and checkout: {STORE_CURRENCY}</span>
 
             <span className="text-gray-300">|</span>
 
@@ -230,7 +213,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
                 </span>
               </div>
               <span className="hidden sm:inline-block text-xs sm:text-sm font-black text-[#333e48] ml-1">
-                ${totalCartPrice.toFixed(2)}
+                {formatCurrency(totalCartPrice)}
               </span>
             </Link>
           </div>

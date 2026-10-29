@@ -1,4 +1,5 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { STORE_CURRENCY_SYMBOL } from "@/lib/currency";
 
 /**
  * Formats a monetary amount into a currency string.
@@ -6,7 +7,7 @@ import { Prisma } from "@prisma/client";
  */
 export function formatCurrency(
   amount: number | Prisma.Decimal | string | null | undefined,
-  currencySymbol = "৳"
+  currencySymbol = STORE_CURRENCY_SYMBOL
 ): string {
   if (amount === null || amount === undefined) return `${currencySymbol}0.00`;
 
