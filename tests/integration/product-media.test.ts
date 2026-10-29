@@ -1,5 +1,6 @@
 jest.mock("@/lib/session", () => ({ getCurrentUserWithRole: jest.fn(), getCurrentUser: jest.fn() }));
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
+jest.mock("next/headers", () => ({ headers: jest.fn().mockResolvedValue(new Headers()) }));
 jest.mock("@/lib/rate-limit", () => ({ getClientIp: jest.fn(() => "192.0.2.1"), rateLimit: jest.fn().mockResolvedValue({ success: true }) }));
 
 import { randomUUID } from "node:crypto";
@@ -12,6 +13,10 @@ import { POST } from "@/app/api/upload/route";
 import { startS3MediaFixture, validLargePng } from "../helpers/s3-media-fixture";
 import { cleanupProductImages } from "@/lib/product-media-cleanup";
 import { setTimeout as delay } from "node:timers/promises";
+import sharp from "sharp";
+import { createProductAction } from "@/app/(marketing)/products/_actions/create-product";
+import { rateLimit } from "@/lib/rate-limit";
+import * as decoder from "@/lib/validate-product-image";
 
 const databaseSuite = process.env.TEST_DATABASE_URL ? describe : describe.skip;
 databaseSuite("direct product media: actual SigV4 HTTP, SQL and application handlers", () => {
@@ -40,8 +45,8 @@ databaseSuite("direct product media: actual SigV4 HTTP, SQL and application hand
   });
   const request = (body: unknown) => new Request("http://localhost/api/upload", { method: "POST", body: JSON.stringify(body) });
   const input = (uploadKeys: string[]) => ({ name: prefix, price: 100, stock: 1, categoryId: category.id, images: [], uploadKeys, isFeatured: false });
-  const upload = async (body = png) => {
-    const response = await POST(request({ contentType: "image/png", size: body.length }));
+  const upload = async (body = png, contentType = "image/png") => {
+    const response = await POST(request({ contentType, size: body.length }));
     expect(response.status).toBe(200);
     const prepared = await response.json();
     expect((await fetch(prepared.uploadUrl, { method: "PUT", headers: prepared.headers, body: new Uint8Array(body) })).status).toBe(200);
@@ -88,6 +93,58 @@ databaseSuite("direct product media: actual SigV4 HTTP, SQL and application hand
     fixture.setAvailable(false);
     expect((await createProduct(input([`products/${seller.id}/${randomUUID()}.png`]))).success).toBe(false);
   });
+  it("decodes real JPEG and WebP pixels and refuses truncated, disguised or over-limit rasters", async () => {
+    for (const [format, type] of [["jpeg", "image/jpeg"], ["webp", "image/webp"]] as const) {
+      const prepared = await upload(await sharp(png).toFormat(format).toBuffer(), type);
+      expect((await createProduct(input([prepared.fileKey]))).success).toBe(true);
+    }
+    const oversized = await sharp({ create: { width: 4001, height: 4001, channels: 3, background: "white" } }).png().toBuffer();
+    expect((await sharp(oversized).metadata()).width).toBe(4001);
+    for (const body of [png.subarray(0, 32), png.subarray(0, png.length / 2), Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"), oversized]) {
+      const prepared = await upload(body);
+      expect((await createProduct(input([prepared.fileKey]))).success).toBe(false);
+    }
+  });
+  it("shares validation and pending approval through the former alternate create action", async () => {
+    const prepared = await upload();
+    expect((await createProductAction({ name: prefix, price: 1, stock: 1, categoryId: category.id })).success).toBe(false);
+    expect((await createProductAction(input([prepared.fileKey]))).success).toBe(true);
+    const saved = await db.product.findFirstOrThrow({ where: { imageUrl: prepared.publicUrl } });
+    expect(saved.status).toBe("PENDING_APPROVAL"); expect(saved.images).toEqual([prepared.publicUrl]);
+  });
+  it("rejects direct mass assignment, invalid references and account-budget denial before image processing", async () => {
+    const prepared = await upload();
+    const spy = jest.spyOn(store, "verify");
+    try {
+      for (const changes of [{ sellerId: randomUUID() }, { status: "APPROVED" }, { isFeatured: true }, { price: "100" }, { discountPrice: 150 }, { stock: 1.3 }, { name: "x".repeat(121) }, { description: "x".repeat(20_001) }, { categoryId: randomUUID() }, { brandId: randomUUID() }]) expect((await createProduct({ ...input([prepared.fileKey]), ...changes })).success).toBe(false);
+      (rateLimit as jest.Mock).mockResolvedValueOnce({ success: false });
+      const denied = await createProduct(input([prepared.fileKey]));
+      expect(denied).toMatchObject({ success: false, retryAfter: 60 });
+      expect(spy).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
+  it("rechecks the verified object's ETag under the publication lock", async () => {
+    const prepared = await upload();
+    const verify = store.verify.bind(store);
+    const spy = jest.spyOn(store, "verify").mockImplementationOnce(async (keys, owner) => {
+      const images = await verify(keys, owner);
+      fixture.objects.get(`/fixture-media/${prepared.fileKey}`)!.etag = '"changed-after-validation"';
+      return images;
+    });
+    try { expect((await createProduct(input([prepared.fileKey]))).success).toBe(false); expect(await db.product.count({ where: { imageUrl: prepared.publicUrl } })).toBe(0); }
+    finally { spy.mockRestore(); }
+  });
+  it("bounds real decode workload to two batches without accumulating a waiting queue", async () => {
+    const prepared = await upload();
+    let arrived!: () => void, release!: () => void, count = 0;
+    const entered = new Promise<void>((resolve) => { arrived = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const realDecode = decoder.decodeProductImage;
+    const spy = jest.spyOn(decoder, "decodeProductImage").mockImplementation(async (bytes, type) => { await realDecode(bytes, type); if (++count === 2) arrived(); await gate; });
+    const first = store.verify([prepared.fileKey], seller.id), second = store.verify([prepared.fileKey], seller.id);
+    try { await entered; await expect(store.verify([prepared.fileKey], seller.id)).rejects.toThrow(/busy/); }
+    finally { release(); await Promise.all([first, second]); spy.mockRestore(); }
+  });
   it("rechecks current seller authority before publishing already uploaded images", async () => {
     const prepared = await upload();
     const before = await db.product.count({ where: { sellerId: seller.id } });
@@ -123,8 +180,8 @@ databaseSuite("direct product media: actual SigV4 HTTP, SQL and application hand
     let arrived!: () => void, release!: () => void;
     const entered = new Promise<void>((resolve) => { arrived = resolve; });
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const verify = store.verify.bind(store);
-    const spy = jest.spyOn(store, "verify").mockImplementationOnce(async (keys, owner) => { const urls = await verify(keys, owner); arrived(); await gate; return urls; });
+    const verify = store.assertPresent.bind(store);
+    const spy = jest.spyOn(store, "assertPresent").mockImplementationOnce(async (images, owner) => { const urls = await verify(images, owner); arrived(); await gate; return urls; });
     const creation = createProduct(input([prepared.fileKey]));
     let cleanup: ReturnType<typeof cleanupProductImages> | undefined;
     try {

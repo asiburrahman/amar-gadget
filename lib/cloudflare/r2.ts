@@ -3,8 +3,11 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "node:crypto";
 import { readStorageConfig } from "@/config/runtime";
 import { IMAGE_EXTENSIONS, MAX_PRODUCT_IMAGES, MAX_PRODUCT_IMAGE_BYTES, validateProductImage, type ProductImageType } from "@/lib/product-media-policy";
+import { decodeProductImage } from "@/lib/validate-product-image";
 
 export class ProductMediaError extends Error {}
+type VerifiedImage = { key: string; url: string; type: ProductImageType; length: number; etag: string };
+let activeVerifications = 0;
 
 /** Dependency injection is for isolated SDK/HTTP tests; production always uses
  * the configured account's R2 endpoint, never a caller-selected host. */
@@ -43,26 +46,55 @@ export function createProductMediaStore(client: S3Client, bucket: string, public
       if (!keys.length || keys.length > MAX_PRODUCT_IMAGES || new Set(keys).size !== keys.length) throw new ProductMediaError("Select between one and eight distinct uploaded images.");
       // Validate every ownership reference before any provider access.
       const types = keys.map((key) => ownedType(key, ownerId));
-      return Promise.all(keys.map(async (key, index) => {
-        const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: AbortSignal.timeout(5000) });
-        if (head.ContentType !== types[index] || !Number.isSafeInteger(head.ContentLength) || !head.ContentLength || head.ContentLength < 1 || head.ContentLength > MAX_PRODUCT_IMAGE_BYTES || !head.ETag) throw new ProductMediaError("An uploaded image has an invalid type or size. Upload it again.");
-        const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key, Range: "bytes=0-31", IfMatch: head.ETag }), { abortSignal: AbortSignal.timeout(5000) });
-        if (object.ContentLength === undefined || object.ContentLength > 32 || !object.Body) { await object.Body?.transformToWebStream().cancel().catch(() => undefined); throw new ProductMediaError("Unable to validate the uploaded image."); }
-        const bytes = Buffer.from(await object.Body.transformToByteArray());
-        const valid = types[index] === "image/png" ? bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
-          : types[index] === "image/jpeg" ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
-          : bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
-        if (!valid) throw new ProductMediaError("An uploaded file does not match its image format.");
-        return publicUrl(key);
+      if (activeVerifications >= 2) throw new ProductMediaError("Image verification is busy. Try submitting again shortly.");
+      activeVerifications++;
+      const budget = AbortSignal.timeout(20_000);
+      const result: VerifiedImage[] = [];
+      try {
+        // One image per request is buffered/decoded at a time, with two batches
+        // maximum per process and no unbounded waiting queue.
+        for (const [index, key] of keys.entries()) {
+          const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: AbortSignal.any([budget, AbortSignal.timeout(5000)]) });
+          if (head.ContentType !== types[index] || !Number.isSafeInteger(head.ContentLength) || !head.ContentLength || head.ContentLength < 1 || head.ContentLength > MAX_PRODUCT_IMAGE_BYTES || !head.ETag) throw new ProductMediaError("An uploaded image has an invalid type or size. Upload it again.");
+          const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key, IfMatch: head.ETag }), { abortSignal: AbortSignal.any([budget, AbortSignal.timeout(5000)]) });
+          if (object.ContentLength !== head.ContentLength || !object.Body) { await object.Body?.transformToWebStream().cancel().catch(() => undefined); throw new ProductMediaError("Unable to validate the uploaded image."); }
+          const reader = object.Body.transformToWebStream().getReader();
+          const chunks: Uint8Array[] = []; let length = 0;
+          try {
+            while (true) {
+              const item = await reader.read(); if (item.done) break;
+              length += item.value.byteLength;
+              if (length > MAX_PRODUCT_IMAGE_BYTES || length > head.ContentLength) { await reader.cancel(); throw new ProductMediaError("Uploaded image exceeds the size limit."); }
+              chunks.push(item.value);
+            }
+          } finally { reader.releaseLock(); }
+          if (length !== head.ContentLength) throw new ProductMediaError("The image upload is incomplete. Upload it again.");
+          try { await decodeProductImage(Buffer.concat(chunks, length), types[index]); }
+          catch { throw new ProductMediaError("Use a complete, single-frame JPEG, PNG or WebP image up to 16 megapixels and 8192 pixels per side."); }
+          budget.throwIfAborted();
+          result.push({ key, url: publicUrl(key), type: types[index], length, etag: head.ETag });
+        }
+        return result;
+      } finally { activeVerifications--; }
+    },
+    async assertPresent(images: VerifiedImage[], ownerId: string) {
+      await Promise.all(images.map(async (image) => {
+        ownedType(image.key, ownerId);
+        const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: image.key, IfMatch: image.etag }), { abortSignal: AbortSignal.timeout(5000) });
+        if (head.ETag !== image.etag || head.ContentLength !== image.length || head.ContentType !== image.type) throw new ProductMediaError("An uploaded image changed. Upload it again.");
       }));
+      return images.map((image) => image.url);
     },
   };
 }
 
+let cachedStore: ReturnType<typeof createProductMediaStore> | undefined;
 export function productMediaStore() {
+  if (cachedStore) return cachedStore;
   const config = readStorageConfig();
   const client = new S3Client({ region: "auto", endpoint: `https://${config.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`, maxAttempts: 2, requestChecksumCalculation: "WHEN_REQUIRED", credentials: { accessKeyId: config.R2_ACCESS_KEY_ID, secretAccessKey: config.R2_SECRET_ACCESS_KEY } });
-  return createProductMediaStore(client, config.R2_BUCKET_NAME, config.R2_PUBLIC_URL);
+  cachedStore = createProductMediaStore(client, config.R2_BUCKET_NAME, config.R2_PUBLIC_URL);
+  return cachedStore;
 }
 
 export async function generatePresignedUploadUrl(input: { ownerId: string; contentType: ProductImageType; size: number }) {

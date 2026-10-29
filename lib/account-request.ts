@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 import { otpErrorResponse } from "@/lib/otp-response";
 
-class AccountRequestError extends Error {
+export class AccountRequestError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfter?: number) { super(message); }
 }
 
@@ -31,7 +31,7 @@ export async function readAccountJson(request: Request, maximumBytes = 16 * 1024
   } finally { reader.releaseLock(); }
 }
 
-export async function limitAccountIp(request: Request, operation: string, limit = 10, windowSeconds = 60) {
+export async function limitAccountIp(request: Pick<Request, "headers">, operation: string, limit = 10, windowSeconds = 60) {
   if (!(await rateLimit(getClientIp(request.headers), limit, windowSeconds, `${operation}:ip`)).success) throw new AccountRequestError("Too many requests. Try again shortly.", 429, windowSeconds);
 }
 export async function limitAccountIdentity(identity: string, operation: string, limit = 5, windowSeconds = 600) {

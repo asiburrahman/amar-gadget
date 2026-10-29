@@ -39,7 +39,7 @@ export function ProductImagePicker({ disabled, onChange }: { disabled: boolean; 
 
   return <fieldset disabled={disabled} className="space-y-3 border-t border-border pt-3">
     <legend className="font-bold">Product images (required)</legend>
-    <p id="product-image-help">JPEG, PNG or WebP, up to 5 MiB each. Add up to eight images; the first is the cover. Uploads finish before submission.</p>
+    <p id="product-image-help">Single-frame JPEG, PNG or WebP, up to 5 MiB and 16 megapixels each, with no side above 8192 pixels. Add up to eight images; the first is the cover. Uploads finish before submission.</p>
     <input aria-label="Add product images" aria-describedby="product-image-help" type="file" multiple accept={PRODUCT_IMAGE_TYPES.join(",")} disabled={disabled || items.length >= MAX_PRODUCT_IMAGES} onChange={(event) => {
       const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = "";
       if (current.current.length + files.length > MAX_PRODUCT_IMAGES) { setError("Choose no more than eight images in total."); return; }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { ProductImagePicker, type ProductImageSelection } from "@/components/forms/product-image-picker";
+import { createProductSchema, MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION } from "@/lib/validations/product";
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -51,20 +52,20 @@ export default function AddProductPage() {
     setSuccessMsg("");
 
     try {
-      const result = await createProduct(
-        {
-          name: formData.name,
-          description: formData.description,
-          price: parseFloat(formData.price),
-          discountPrice: formData.discountPrice ? parseFloat(formData.discountPrice) : undefined,
-          stock: parseInt(formData.stock, 10),
-          uploadKeys: media.keys,
-          images: [],
-          categoryId: formData.categoryId,
-          brandId: formData.brandId || undefined,
-          isFeatured: false,
-        }
-      );
+      const candidate = createProductSchema.safeParse({
+        name: formData.name,
+        description: formData.description,
+        price: Number(formData.price),
+        discountPrice: formData.discountPrice ? Number(formData.discountPrice) : undefined,
+        stock: Number(formData.stock),
+        uploadKeys: media.keys,
+        images: [],
+        categoryId: formData.categoryId,
+        brandId: formData.brandId || undefined,
+        isFeatured: false,
+      });
+      if (!candidate.success) { setErrorMsg(candidate.error.issues[0]?.message ?? "Check the product fields."); return; }
+      const result = await createProduct(candidate.data);
 
       if (result.success) {
         setSuccessMsg("✓ Product successfully submitted! Sent to Admin for approval.");
@@ -115,8 +116,8 @@ export default function AddProductPage() {
         <p className="text-xs text-muted-foreground">List a new smartphone, laptop, audio gadget or accessory in the Amar Gadget marketplace.</p>
       </div>
 
-      {errorMsg && <div className="p-3 text-xs font-bold text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">{errorMsg}</div>}
-      {successMsg && <div className="p-3 text-xs font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">{successMsg}</div>}
+      {errorMsg && <div role="alert" className="p-3 text-xs font-bold text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">{errorMsg}</div>}
+      {successMsg && <div role="status" className="p-3 text-xs font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">{successMsg}</div>}
 
       <form onSubmit={handleSubmit} className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-4 text-xs">
         <div>
@@ -125,6 +126,7 @@ export default function AddProductPage() {
             required
             name="name"
             id="product-name"
+            maxLength={120}
             placeholder="e.g. Apple iPhone 16 Pro Max 256GB"
             value={formData.name}
             onChange={handleChange}
@@ -140,6 +142,8 @@ export default function AddProductPage() {
               step="0.01"
               name="price"
               id="product-price"
+              min={0.01}
+              max={MAX_PRODUCT_PRICE}
               placeholder="e.g. 165000"
               value={formData.price}
               onChange={handleChange}
@@ -153,6 +157,8 @@ export default function AddProductPage() {
               step="0.01"
               name="discountPrice"
               id="product-discount"
+              min={0.01}
+              max={MAX_PRODUCT_PRICE}
               placeholder="e.g. 159000 (Optional)"
               value={formData.discountPrice}
               onChange={handleChange}
@@ -168,6 +174,9 @@ export default function AddProductPage() {
               type="number"
               name="stock"
               id="product-stock"
+              min={0}
+              max={MAX_PRODUCT_STOCK}
+              step={1}
               value={formData.stock}
               onChange={handleChange}
             />
@@ -214,6 +223,7 @@ export default function AddProductPage() {
           <textarea
             name="description"
             id="product-description"
+            maxLength={MAX_PRODUCT_DESCRIPTION}
             rows={4}
             placeholder="Provide official specifications, key features, and warranty details..."
             value={formData.description}

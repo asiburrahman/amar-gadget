@@ -24,11 +24,12 @@ class UploadXhr {
 }
 const originalXhr = global.XMLHttpRequest;
 const originalFetch = global.fetch;
+const key = (id: number) => `products/seller/00000000-0000-4000-8000-${String(id).padStart(12, "0")}.png`;
 beforeEach(() => {
   jest.clearAllMocks(); UploadXhr.instances = [];
   global.XMLHttpRequest = UploadXhr as unknown as typeof XMLHttpRequest;
   let sequence = 0;
-  global.fetch = jest.fn().mockImplementation(async () => { const id = ++sequence; return { ok: true, json: async () => ({ success: true, uploadUrl: `https://r2.example.invalid/upload-${id}`, fileKey: `products/seller/upload-${id}.png`, publicUrl: `https://media.example.invalid/${id}.png`, headers: { "Content-Type": "image/png", "If-None-Match": "*" } }) }; });
+  global.fetch = jest.fn().mockImplementation(async () => { const id = ++sequence; return { ok: true, json: async () => ({ success: true, uploadUrl: `https://r2.example.invalid/upload-${id}`, fileKey: key(id), publicUrl: `https://media.example.invalid/${id}.png`, headers: { "Content-Type": "image/png", "If-None-Match": "*" } }) }; });
   URL.createObjectURL = jest.fn((file: Blob) => `blob:local/${file.size}/${Math.random()}`);
   URL.revokeObjectURL = jest.fn();
   (createProduct as jest.Mock).mockResolvedValue({ success: false, error: "Submission fixture stopped after inspecting the payload." });
@@ -48,7 +49,7 @@ it("sends a 3 MiB File directly through PUT and keeps the application request me
   expect(xhr.headers["If-None-Match"]).toBe("*"); expect(xhr.withCredentials).toBe(false);
   expect((fetch as jest.Mock).mock.calls[0][1].body.length).toBeLessThan(100);
   xhr.upload.onprogress?.(new ProgressEvent("progress", { lengthComputable: true, loaded: 50, total: 100 })); expect(progress).toHaveBeenLastCalledWith(50);
-  xhr.finish(); await expect(promise).resolves.toMatchObject({ fileKey: "products/seller/upload-1.png" }); expect(progress).toHaveBeenLastCalledWith(100);
+  xhr.finish(); await expect(promise).resolves.toMatchObject({ fileKey: key(1) }); expect(progress).toHaveBeenLastCalledWith(100);
 });
 it("blocks form submission until the gallery uploads finish, persists cover order and never sends inline bytes", async () => {
   render(<AddProductPage />);
@@ -67,7 +68,7 @@ it("blocks form submission until the gallery uploads finish, persists cover orde
   fireEvent.click(submit);
   await waitFor(() => expect(createProduct).toHaveBeenCalledTimes(1));
   const payload = (createProduct as jest.Mock).mock.calls[0][0];
-  expect(payload.uploadKeys).toEqual(["products/seller/upload-2.png", "products/seller/upload-1.png"]);
+  expect(payload.uploadKeys).toEqual([key(2), key(1)]);
   expect(payload.images).toEqual([]); expect(payload.imageUrl).toBeUndefined(); expect(JSON.stringify(payload)).not.toContain("base64");
 });
 it("shows provider rejection and retries with a fresh upload before enabling submission", async () => {
@@ -77,7 +78,22 @@ it("shows provider rejection and retries with a fresh upload before enabling sub
   expect(changed).toHaveBeenLastCalledWith({ keys: [], ready: false });
   fireEvent.click(screen.getByRole("button", { name: "Retry phone.png" }));
   await waitFor(() => expect(UploadXhr.instances).toHaveLength(2)); await finish(1);
-  await waitFor(() => expect(changed).toHaveBeenLastCalledWith({ keys: ["products/seller/upload-2.png"], ready: true }));
+  await waitFor(() => expect(changed).toHaveBeenLastCalledWith({ keys: [key(2)], ready: true }));
+});
+it("rejects fractional stock and excessive discounts in the actual seller form instead of truncating them", async () => {
+  render(<AddProductPage />); await screen.findByRole("option", { name: "Phones" });
+  fireEvent.change(screen.getByLabelText("Product Title / Name *"), { target: { value: "Real phone" } });
+  fireEvent.change(screen.getByLabelText("Price (BDT) *"), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText("Category *"), { target: { value: "category" } });
+  choose([file()]); await waitFor(() => expect(UploadXhr.instances).toHaveLength(1)); await finish(0);
+  const form = screen.getByRole("button", { name: "Submit Product For Admin Approval" }).closest("form")!;
+  fireEvent.change(screen.getByLabelText("Stock Quantity *"), { target: { value: "1.5" } });
+  fireEvent.submit(form);
+  await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy()); expect(createProduct).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Stock Quantity *"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Discount Offer Price (BDT)"), { target: { value: "150" } });
+  fireEvent.submit(form);
+  await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/lower/)); expect(createProduct).not.toHaveBeenCalled();
 });
 it("cancels removed and unmounted uploads, releases local previews and permits reselection", async () => {
   const changed = jest.fn(); const view = render(<ProductImagePicker disabled={false} onChange={changed} />);

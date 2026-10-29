@@ -80,7 +80,7 @@ describe("server action authorization", () => {
     expect(prisma.order.findMany).not.toHaveBeenCalled();
   });
 
-  it("allows a verified admin role from the server session to update a product", async () => {
+  it("does not trust a TypeScript-looking status at the administrator boundary", async () => {
     (getCurrentUserWithRole as jest.Mock).mockResolvedValue({
       id: "admin-1",
       email: "admin@example.test",
@@ -89,12 +89,9 @@ describe("server action authorization", () => {
     });
     (prisma.product.update as jest.Mock).mockResolvedValue({ id: "product-1" });
 
-    const result = await updateProductStatus("product-1", "APPROVED");
+    const result = await updateProductStatus("product-1", "PAID");
 
-    expect(result.success).toBe(true);
-    expect(prisma.product.update).toHaveBeenCalledWith({
-      where: { id: "product-1" },
-      data: { status: "APPROVED" },
-    });
+    expect(result.success).toBe(false);
+    expect(prisma.product.update).not.toHaveBeenCalled();
   });
 });

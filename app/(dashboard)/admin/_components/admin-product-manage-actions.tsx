@@ -1,155 +1,69 @@
 "use client";
 
-import React, { useState } from "react";
+import { useId, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { updateProductStatus, adminUpdateProductPrice, adminDeleteProduct } from "@/server/actions/admin/admin-actions";
+import { productPriceUpdateSchema, MAX_PRODUCT_PRICE } from "@/lib/validations/product";
 
-interface AdminProductManageActionsProps {
-  productId: string;
-  currentPrice: number;
-  currentDiscountPrice?: number | null;
-  currentStatus: string;
-}
-
-export function AdminProductManageActions({
-  productId,
-  currentPrice,
-  currentDiscountPrice,
-  currentStatus,
-}: AdminProductManageActionsProps) {
+type Props = { productId: string; currentPrice: number; currentDiscountPrice?: number | null; currentStatus: string };
+export function AdminProductManageActions({ productId, currentPrice, currentDiscountPrice, currentStatus }: Props) {
+  const router = useRouter();
+  const priceId = useId(), discountId = useId();
   const [loading, setLoading] = useState(false);
   const [showEditPrice, setShowEditPrice] = useState(false);
-  const [priceInput, setPriceInput] = useState(currentPrice.toString());
-  const [discountPriceInput, setDiscountPriceInput] = useState(
-    currentDiscountPrice ? currentDiscountPrice.toString() : ""
-  );
-
-  const handleUpdateStatus = async (newStatus: "APPROVED" | "REJECTED") => {
-    setLoading(true);
+  const [priceInput, setPriceInput] = useState(String(currentPrice));
+  const [discountInput, setDiscountInput] = useState(currentDiscountPrice == null ? "" : String(currentDiscountPrice));
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const begin = () => { setLoading(true); setError(""); setMessage(""); };
+  const changeStatus = async (status: "APPROVED" | "REJECTED") => {
+    if (loading) return; begin();
     try {
-      await updateProductStatus(productId, newStatus);
-    } catch (error) {
-      console.error("Failed to update status:", error);
-    } finally {
-      setLoading(false);
-    }
+      const result = await updateProductStatus(productId, status);
+      if (!result.success) { setError(result.error ?? "Unable to change product status."); return; }
+      setMessage(`Product ${status.toLowerCase()}.`); router.refresh();
+    } catch { setError("Unable to change product status. Try again."); }
+    finally { setLoading(false); }
   };
-
-  const handleSavePrice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const newPrice = parseFloat(priceInput);
-    if (isNaN(newPrice) || newPrice <= 0) return;
-
-    const newDiscount = discountPriceInput.trim() !== "" ? parseFloat(discountPriceInput) : null;
-
-    setLoading(true);
+  const savePrice = async (event: FormEvent) => {
+    event.preventDefault(); if (loading) return;
+    setError(""); setMessage("");
+    const parsed = productPriceUpdateSchema.safeParse({ productId, price: Number(priceInput), discountPrice: discountInput.trim() ? Number(discountInput) : null });
+    if (!parsed.success) { setError(parsed.error.issues[0]?.message ?? "Check the prices."); return; }
+    begin();
     try {
-      const res = await adminUpdateProductPrice(productId, newPrice, newDiscount);
-      if (res.success) {
-        setShowEditPrice(false);
-      }
-    } catch (error) {
-      console.error("Failed to update price:", error);
-    } finally {
-      setLoading(false);
-    }
+      const result = await adminUpdateProductPrice(productId, parsed.data.price, parsed.data.discountPrice);
+      if (!result.success || !result.data) { setError(result.error ?? "Unable to save product price."); return; }
+      setPriceInput(String(result.data.price)); setDiscountInput(result.data.discountPrice == null ? "" : String(result.data.discountPrice));
+      setShowEditPrice(false); setMessage("Price saved."); router.refresh();
+    } catch { setError("Unable to save product price. Try again."); }
+    finally { setLoading(false); }
   };
-
-  const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete/remove this product permanently?")) return;
-    setLoading(true);
+  const remove = async () => {
+    if (loading || !window.confirm("Permanently delete this product? Products referenced by other records cannot be deleted.")) return;
+    begin();
     try {
-      await adminDeleteProduct(productId);
-    } catch (error) {
-      console.error("Failed to delete product:", error);
-    } finally {
-      setLoading(false);
-    }
+      const result = await adminDeleteProduct(productId);
+      if (!result.success) { setError(result.error ?? "Unable to delete product."); return; }
+      setMessage("Product deleted."); router.refresh();
+    } catch { setError("Unable to delete product. Try again."); }
+    finally { setLoading(false); }
   };
-
-  return (
-    <div className="flex flex-col gap-2 shrink-0">
-      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-        {currentStatus === "PENDING_APPROVAL" && (
-          <button
-            onClick={() => handleUpdateStatus("APPROVED")}
-            disabled={loading}
-            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-md transition cursor-pointer"
-          >
-            ✓ Approve
-          </button>
-        )}
-
-        {currentStatus === "APPROVED" && (
-          <button
-            onClick={() => handleUpdateStatus("REJECTED")}
-            disabled={loading}
-            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-md transition cursor-pointer"
-          >
-            ✕ Reject
-          </button>
-        )}
-
-        <button
-          onClick={() => setShowEditPrice(!showEditPrice)}
-          disabled={loading}
-          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-md transition cursor-pointer"
-        >
-          ✏️ Edit Price
-        </button>
-
-        <button
-          onClick={handleDelete}
-          disabled={loading}
-          className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-md transition cursor-pointer"
-        >
-          🗑️ Delete
-        </button>
-      </div>
-
-      {showEditPrice && (
-        <form onSubmit={handleSavePrice} className="p-3 bg-muted/40 border border-border rounded-lg space-y-2 text-xs animate-in fade-in">
-          <div className="flex gap-2">
-            <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase">Price (৳)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={priceInput}
-                onChange={(e) => setPriceInput(e.target.value)}
-                className="w-24 p-1.5 border border-border rounded bg-background text-xs font-bold"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-muted-foreground uppercase">Discount Price</label>
-              <input
-                type="number"
-                step="0.01"
-                value={discountPriceInput}
-                placeholder="Optional"
-                onChange={(e) => setDiscountPriceInput(e.target.value)}
-                className="w-24 p-1.5 border border-border rounded bg-background text-xs font-bold"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-1.5 pt-1">
-            <button
-              type="button"
-              onClick={() => setShowEditPrice(false)}
-              className="px-2 py-1 text-slate-500 hover:text-foreground text-[11px] font-bold"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-3 py-1 bg-primary text-primary-foreground text-[11px] font-bold rounded"
-            >
-              Save Price
-            </button>
-          </div>
-        </form>
-      )}
+  return <div className="flex flex-col gap-2 shrink-0">
+    <div className="flex flex-wrap gap-2">
+      {currentStatus !== "APPROVED" && <button type="button" disabled={loading} onClick={() => void changeStatus("APPROVED")} className="px-3 py-1 rounded-md bg-emerald-600 text-white text-xs font-bold">Approve</button>}
+      {currentStatus !== "REJECTED" && <button type="button" disabled={loading} onClick={() => void changeStatus("REJECTED")} className="px-3 py-1 rounded-md bg-amber-600 text-white text-xs font-bold">Reject</button>}
+      <button type="button" disabled={loading} onClick={() => setShowEditPrice(!showEditPrice)} className="px-3 py-1 rounded-md bg-slate-800 text-white text-xs font-bold">Edit Price</button>
+      <button type="button" disabled={loading} onClick={() => void remove()} className="px-3 py-1 rounded-md bg-red-600 text-white text-xs font-bold">Delete</button>
     </div>
-  );
+    {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    {message && <p role="status" className="text-xs">{message}</p>}
+    {showEditPrice && <form onSubmit={savePrice} aria-label="Edit product price" className="p-3 bg-muted/40 border border-border rounded-lg space-y-2 text-xs">
+      <fieldset disabled={loading} className="flex flex-wrap gap-2">
+        <div><label htmlFor={priceId} className="block font-bold">Price (BDT)</label><input id={priceId} type="number" required min={0.01} max={MAX_PRODUCT_PRICE} step="0.01" value={priceInput} onChange={(event) => setPriceInput(event.target.value)} className="w-28 p-2 border rounded" /></div>
+        <div><label htmlFor={discountId} className="block font-bold">Discount Price</label><input id={discountId} type="number" min={0.01} max={MAX_PRODUCT_PRICE} step="0.01" value={discountInput} onChange={(event) => setDiscountInput(event.target.value)} className="w-28 p-2 border rounded" /></div>
+        <button type="button" onClick={() => setShowEditPrice(false)}>Cancel</button><button type="submit">{loading ? "Saving..." : "Save Price"}</button>
+      </fieldset>
+    </form>}
+  </div>;
 }

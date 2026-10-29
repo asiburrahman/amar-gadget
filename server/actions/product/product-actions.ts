@@ -3,11 +3,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publicProductWhere } from "@/lib/catalog-visibility";
-import { createProductSchema, productQuerySchema, type CreateProductInput } from "@/lib/validations/product";
+import { createProductSchema, productQuerySchema } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
 import { productMediaStore, ProductMediaError } from "@/lib/cloudflare/r2";
 import { randomUUID } from "node:crypto";
+import { headers } from "next/headers";
+import { AccountRequestError, limitAccountIp, limitAccountIdentity } from "@/lib/account-request";
 
 export async function getProducts(queryParams: Record<string, unknown> = {}) {
   try {
@@ -128,7 +130,7 @@ export async function getProductBySlug(slug: string) {
   }
 }
 
-export async function createProduct(input: CreateProductInput) {
+export async function createProduct(input: unknown) {
   try {
     const targetSeller = await getCurrentUserWithRole(["MEMBER", "ADMIN"]);
     if (!targetSeller) {
@@ -142,10 +144,22 @@ export async function createProduct(input: CreateProductInput) {
       };
     }
 
-    const validated = createProductSchema.parse(input);
+    const parsed = createProductSchema.safeParse(input);
+    if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message || "Invalid product fields.", errors: parsed.error.flatten().fieldErrors };
+    const validated = parsed.data;
+    if (validated.isFeatured && targetSeller.role.toUpperCase() !== "ADMIN") return { success: false, error: "Only an administrator can feature products." };
     // Persist only canonical verified object URLs, never caller-selected URLs
     // or inline image bytes. The first selected image is the cover.
     if (validated.imageUrl || validated.images.length) return { success: false, error: "Upload product images using the image picker." };
+    await limitAccountIp({ headers: await headers() }, "product-create", 10);
+    await limitAccountIdentity(targetSeller.id, "product-create", 10, 60);
+    const [category, brand] = await Promise.all([
+      prisma.category.findUnique({ where: { id: validated.categoryId }, select: { id: true } }),
+      validated.brandId ? prisma.brand.findUnique({ where: { id: validated.brandId }, select: { id: true } }) : null,
+    ]);
+    if (!category || (validated.brandId && !brand)) return { success: false, error: "Select an existing category and brand." };
+    const media = productMediaStore();
+    const verified = await media.verify(validated.uploadKeys, targetSeller.id);
     const slug = (validated.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "product") + "-" + randomUUID();
 
     const product = await prisma.$transaction(async (tx) => {
@@ -154,7 +168,7 @@ export async function createProduct(input: CreateProductInput) {
       if (!current?.isVerified || current.sessionVersion !== targetSeller.sessionVersion || !["MEMBER", "ADMIN"].includes(current.role.toUpperCase()) || (current.role.toUpperCase() === "MEMBER" && current.sellerStatus !== "APPROVED")) throw new ProductMediaError("Your seller access changed. Sign in again before submitting.");
       // The cleanup operator takes the same owner lock: a selected old upload
       // either gets referenced here, or is removed before verification fails.
-      const images = await productMediaStore().verify(validated.uploadKeys ?? [], targetSeller.id);
+      const images = await media.assertPresent(verified, targetSeller.id);
       return tx.product.create({
         data: {
           name: validated.name,
@@ -182,6 +196,7 @@ export async function createProduct(input: CreateProductInput) {
     return { success: true, data: { id: product.id, slug: product.slug } };
   } catch (error: unknown) {
     if (error instanceof ProductMediaError) return { success: false, error: error.message };
+    if (error instanceof AccountRequestError) return { success: false, error: error.message, retryAfter: error.retryAfter };
     console.error("Product creation failed.");
     return { success: false, error: "Unable to submit the product. Check the fields and uploaded images, then try again." };
   }

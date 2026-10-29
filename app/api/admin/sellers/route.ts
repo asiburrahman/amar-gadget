@@ -1,45 +1,20 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
 import { getCurrentUserWithRole } from "@/lib/session";
-import { z } from "zod";
-
-const updateSellerSchema = z.object({
-  sellerId: z.string().min(1),
-  sellerStatus: z.enum(["APPROVED", "BLOCKED", "PENDING", "REJECTED"]),
-});
+import { sellerStatusUpdateSchema } from "@/lib/validations/product";
+import { updateSellerStatus } from "@/server/actions/admin/admin-actions";
+import { readAccountJson, AccountRequestError } from "@/lib/account-request";
 
 export async function POST(req: Request) {
   try {
-    if (!(await getCurrentUserWithRole(["ADMIN"]))) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-    }
-
-    const parsed = updateSellerSchema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ success: false, message: "Invalid seller status update." }, { status: 400 });
-    }
-    const { sellerId, sellerStatus } = parsed.data;
-
-    const seller = await prisma.user.findUnique({ where: { id: sellerId }, select: { role: true } });
-    if (!seller || seller.role !== "MEMBER") {
-      return NextResponse.json({ success: false, message: "Seller not found" }, { status: 404 });
-    }
-
-    const user = await prisma.user.update({
-      where: { id: sellerId },
-      data: { sellerStatus },
-      select: { id: true, email: true, name: true, role: true, sellerStatus: true },
-    });
-
-    revalidatePath("/admin");
-    revalidatePath("/admin/sellers");
-    revalidatePath("/member/dashboard");
-    revalidatePath("/products");
-
-    return NextResponse.json({ success: true, user });
-  } catch (error: any) {
-    console.error("API update seller status error:", error);
-    return NextResponse.json({ success: false, message: error.message || "Failed to update seller status" }, { status: 500 });
+    if (!(await getCurrentUserWithRole(["ADMIN"]))) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const parsed = sellerStatusUpdateSchema.safeParse(await readAccountJson(req, 2048));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Invalid seller status update." }, { status: 400 });
+    const result = await updateSellerStatus(parsed.data.sellerId, parsed.data.sellerStatus);
+    if (!result.success) return NextResponse.json({ success: false, message: result.error }, { status: result.error === "Unauthorized" ? 401 : result.error === "Seller not found." ? 404 : 409 });
+    return NextResponse.json({ success: true, user: result.data }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    if (error instanceof AccountRequestError) return NextResponse.json({ success: false, message: error.message }, { status: error.status });
+    console.error("Seller management is temporarily unavailable.");
+    return NextResponse.json({ success: false, message: "Seller management is temporarily unavailable. Try again later." }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

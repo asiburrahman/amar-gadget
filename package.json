@@ -24,6 +24,7 @@
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
     "smoke:runtime": "node scripts/smoke-runtime-config.mjs",
     "smoke:ingress": "node scripts/smoke-ingress.mjs",
+    "smoke:catalog-actions": "node scripts/smoke-catalog-actions.mjs",
     "test:gateway": "node --test tests/native/ingress-gateway.test.mjs",
     "cleanup:product-images": "tsx scripts/cleanup-product-images.ts",
     "config:r2-cors": "tsx scripts/print-product-image-cors.ts"
@@ -44,6 +45,7 @@
     "nodemailer": "10.2.1",
     "react": "19.2.9",
     "react-dom": "19.2.9",
+    "sharp": "0.35.5",
     "stripe": "^22.3.0",
     "tailwind-merge": "^3.6.0",
     "ws": "^8.22.0",
