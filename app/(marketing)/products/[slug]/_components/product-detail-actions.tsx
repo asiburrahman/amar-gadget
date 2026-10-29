@@ -25,7 +25,7 @@ export function ProductDetailActions({ product }: ProductDetailActionsProps) {
   const router = useRouter();
 
   const addItem = useCartStore((state) => state.addItem);
-  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist } = useWishlistStore();
+  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
   const isWishlisted = isInWishlist(product.id);
 
@@ -121,6 +121,8 @@ export function ProductDetailActions({ product }: ProductDetailActionsProps) {
 
         <Button
           onClick={toggleWishlist}
+          disabled={wishlistBusy || wishlistStatus !== "ready"}
+          aria-pressed={isWishlisted}
           variant="outline"
           size="lg"
           className={`h-12 px-4 ${isWishlisted ? "text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20" : ""}`}

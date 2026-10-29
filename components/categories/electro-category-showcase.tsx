@@ -64,7 +64,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
   const [addedNoticeId, setAddedNoticeId] = useState<string | null>(null);
   const [selectedHeroImage, setSelectedHeroImage] = useState<string | null>(null);
   const addItem = useCartStore((state) => state.addItem);
-  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist } = useWishlistStore();
+  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
   const handleAddToCart = (product: ShowcaseProduct, e?: React.MouseEvent) => {
     if (e) {
@@ -322,6 +322,8 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                   <button
                     type="button"
                     onClick={(e) => handleToggleWishlist(heroProduct, e)}
+                    disabled={wishlistBusy || wishlistStatus !== "ready"}
+                    aria-pressed={isInWishlist(heroProduct.id)}
                     className="inline-flex items-center gap-1.5 hover:text-red-500 transition-colors cursor-pointer"
                   >
                     <HeartIcon
@@ -434,6 +436,7 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
   isAdded,
   isWishlisted,
 }) => {
+  const wishlistDisabled = useWishlistStore((state) => state.busy || state.status !== "ready");
   if (!product) {
     return (
       <div className="flex-1 p-5 flex flex-col items-center justify-center text-center bg-gray-50/30 min-h-[220px]">
@@ -521,6 +524,8 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
         <button
           type="button"
           onClick={(e) => onToggleWishlist(product, e)}
+          disabled={wishlistDisabled}
+          aria-pressed={isWishlisted}
           className="inline-flex items-center gap-1 hover:text-red-500 transition-colors cursor-pointer"
         >
           <HeartIcon

@@ -44,7 +44,7 @@ export const ProductCard = ({
 }: ProductCardProps) => {
   const [addedNotice, setAddedNotice] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
-  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist } = useWishlistStore();
+  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
   const isWishlisted = isInWishlist(id);
   const effectivePrice = discountPrice ?? price;
@@ -140,6 +140,8 @@ export const ProductCard = ({
           <button
             type="button"
             onClick={handleToggleWishlist}
+            disabled={wishlistBusy || wishlistStatus !== "ready"}
+            aria-pressed={isWishlisted}
             className={`absolute top-2.5 right-2.5 h-7 w-7 rounded-full flex items-center justify-center transition-all z-20 shadow-2xs cursor-pointer ${
               isWishlisted
                 ? "bg-red-500 text-white shadow-red-500/20 scale-105"

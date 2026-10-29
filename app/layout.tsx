@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "@/styles/globals.css";
 import { connection } from "next/server";
 import { readApplicationOrigin } from "@/config/runtime";
+import { WishlistSync } from "@/components/account/wishlist-sync";
 
 const fontSans = Geist({
   subsets: ["latin"],
@@ -40,6 +41,7 @@ export default function RootLayout({
       className={`${fontSans.variable} ${fontInter.variable} ${fontMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-200">
+        <WishlistSync />
         {children}
       </body>
     </html>

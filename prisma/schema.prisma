@@ -18,6 +18,7 @@ model User {
   sellerStatus String      @default("APPROVED") // APPROVED, PENDING, BLOCKED, REJECTED
   isVerified   Boolean     @default(false)
   sessionVersion Int       @default(0)
+  wishlistVersion Int      @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -206,6 +207,7 @@ model Wishlist {
   createdAt DateTime @default(now())
 
   @@unique([userId, productId])
+  @@index([userId, createdAt, id])
 }
 
 model Address {

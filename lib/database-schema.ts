@@ -1,2 +1,2 @@
 // Advance with each reviewed schema migration. Readiness rejects an older DB.
-export const REQUIRED_SCHEMA_MIGRATION = "20261029130000_address_revisions";
+export const REQUIRED_SCHEMA_MIGRATION = "20261029140000_wishlist_sync";
