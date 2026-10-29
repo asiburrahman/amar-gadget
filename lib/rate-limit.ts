@@ -1,27 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { getRedisClient } from "@/lib/redis";
+import { verifiedIngressIp } from "@/lib/ingress";
 
 /**
- * Extracts the real client IP address securely, prioritizing proxy headers 
- * from Vercel, Cloudflare, and standard load balancers.
+ * Only the authenticated gateway assertion supplies an IP. Raw forwarding
+ * headers and client-selected platform headers are never authority here.
  */
 export function getClientIp(headers: Headers): string {
-  const cfConnectingIp = headers.get("cf-connecting-ip");
-  if (cfConnectingIp) return cfConnectingIp;
-
-  const vercelIp = headers.get("x-vercel-forwarded-for");
-  if (vercelIp) return vercelIp;
-
-  const xForwardedFor = headers.get("x-forwarded-for");
-  if (xForwardedFor) {
-    const ips = xForwardedFor.split(",").map((ip) => ip.trim());
-    if (ips[0]) return ips[0];
-  }
-
-  const xRealIp = headers.get("x-real-ip");
-  if (xRealIp) return xRealIp;
-
-  return "127.0.0.1";
+  const ip = verifiedIngressIp(headers);
+  if (ip) return ip;
+  if (process.env.NODE_ENV === "production") throw new Error("Untrusted request ingress");
+  return "untrusted-development";
 }
 
 export async function rateLimit(

@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest fully completed step: AUD-040 — unified runtime configuration, pre-listen production validation and readiness/liveness.** Current total: 17 original tasks plus AUD-050 implemented (18 of 51 tracked tasks); 32 original tasks plus AUD-051's external credential revocation open (33 total). **Next: AUD-041 — trusted proxy/header ingress and exact production action origins.** On 29 October 2026 the owner confirmed revocation has not yet occurred; source remediation does not perform that provider action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log for evidence, residual low registry alerts and external verification.
+**Latest fully completed step: AUD-041 — authenticated private ingress, trusted limiter identities and exact browser/action origins.** Current total: 18 original tasks plus AUD-050 implemented (19 of 51 tracked tasks); 31 original tasks plus AUD-051's external credential revocation open (32 total). **Next: AUD-016 — product-image R2 upload wiring and storage policy.** On 29 October 2026 the owner confirmed revocation has not yet occurred; source remediation does not perform that provider action. The full remaining-task objective stays active across checkpoints. Each task remains a separate implementation and commit. See the implementation log and ingress runbook for evidence, required private gateway deployment, residual low registry alerts and external verification.
 
 ## Owner-provided introduction
 

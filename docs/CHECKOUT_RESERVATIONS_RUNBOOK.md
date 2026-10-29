@@ -5,14 +5,14 @@ New unpaid card orders reserve stock for 15 minutes before a Stripe session is r
 ## Deployment
 
 1. Review and apply `20261028170000_checkout_reservations` through the normal migration rollout before deploying this revision. Earlier pending Stripe orders are marked `LEGACY_SESSION_UNKNOWN`; missing session IDs on these records do not prove it is safe to restock them.
-2. Set `NEXT_PUBLIC_APP_URL` to the application's HTTPS origin, the Stripe key/webhook secret, a randomly generated `CHECKOUT_SWEEP_SECRET` of at least 32 characters, and `CHECKOUT_SWEEP_DATABASE` to the intended database name on the web service. The endpoint verifies `current_database()` before changing orders, preventing a mismatched deployment from sweeping another database.
-3. Start a separately supervised worker with `CHECKOUT_SWEEP_ORIGIN` set to that web origin and the same secret:
+2. Set `APP_URL` to the application's canonical HTTPS origin, the Stripe key/webhook secret, a randomly generated `CHECKOUT_SWEEP_SECRET` of at least 32 bytes, and `CHECKOUT_SWEEP_DATABASE` to the intended database name on the web service. Configure the distinct `TRUSTED_PROXY_SECRET` according to the [ingress runbook](TRUSTED_INGRESS_RUNBOOK.md). The endpoint verifies `current_database()` before changing orders, preventing a mismatched deployment from sweeping another database.
+3. Start a separately supervised worker with the same `APP_URL`, `TRUSTED_PROXY_SECRET` and sweep secret. Set `CHECKOUT_SWEEP_ORIGIN` to the private app loopback origin (or canonical public HTTPS origin):
 
 ```sh
 node scripts/checkout-reservations-worker.mjs
 ```
 
-The Docker image includes this script. Run it as a separate service/command using the same image; the web container's default command remains the web server. Supply environment through the deployment's secret manager. The worker does not read or publish local `.env` files. Alternatively, a scheduler may POST `/api/internal/checkout/expire` each minute with the bearer secret. GET and unauthenticated calls cannot trigger cleanup.
+The Docker image includes this script and its native ingress signer. Run it as a separate service/command using the same image; the web container's default command remains the web server. Supply environment through the deployment's secret manager. The worker does not read or publish local `.env` files. Custom schedulers must implement the same short-lived ingress assertion in addition to the Bearer authentication; the supplied worker does both. GET and unauthenticated calls cannot trigger cleanup.
 
 Each request selects at most 50 due orders, processes within a 20-second soft budget with bounded provider-call timeouts, and reports counts. Deferred errors/reviews get a five-minute next-check time so they do not starve newer work. Monitor worker error output, summary `errors`/`review` counts and supervisor health. A stopped/unconfigured worker is not a completed deployment.
 

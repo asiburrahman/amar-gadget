@@ -231,6 +231,7 @@ DIRECT_URL="postgresql://user:password@ep-sample.neon.tech/neondb?sslmode=requir
 # Generate distinct private keys (at least 32 random bytes each).
 JWT_SECRET=""
 OTP_SECRET=""
+TRUSTED_PROXY_SECRET=""
 APP_URL="http://localhost:3000"
 
 # Nodemailer / SMTP (For OTP and password reset emails)
@@ -262,7 +263,7 @@ NEXT_PUBLIC_GA_ID="G-XXXXXXXXXX"
 NEXT_PUBLIC_GTM_ID="GTM-XXXXXXX"
 ```
 
-Runtime settings are validated before the supported production launcher starts listening. `APP_URL` is the server's canonical checkout origin; public HTTPS is required, with HTTP allowed only for loopback testing. JWT, OTP and reservation-worker keys must be distinct private values of at least 32 bytes. NextAuth/OAuth credentials and a Stripe publishable key are not required by the implemented custom authentication/hosted Checkout flows.
+Runtime settings are validated before the supported production launcher starts listening. `APP_URL` is the server's canonical checkout origin; public HTTPS is required, with HTTP allowed only for loopback testing. JWT, OTP, trusted-ingress and reservation-worker keys must be distinct private values of at least 32 bytes. Production also requires `TRUSTED_PROXY_SECRET` and the private gateway described in the [trusted ingress runbook](docs/TRUSTED_INGRESS_RUNBOOK.md). NextAuth/OAuth credentials and a Stripe publishable key are not required by the implemented custom authentication/hosted Checkout flows.
 
 Production requires complete Redis, SMTP, Stripe/reservation-worker and R2 settings. Development requires the database, keys and application origin; any enabled service group must be complete. Builds remove dotenv files from the standalone artifact and copy its public/static assets. Deploy with runtime environment injection and run `node start.cjs` from that artifact; `npm start` uses the same launcher and can explicitly load a private workspace `.env`. `SKIP_ENV_VALIDATION` does not bypass runtime checks. Use `/api/health` for process liveness and `/api/health/ready` for configured database/schema/Redis readiness. See the [runtime configuration runbook](docs/RUNTIME_CONFIGURATION_RUNBOOK.md).
 
@@ -298,7 +299,7 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 > **Optional: Cloudflare Tunnel for Remote / Mobile Testing**
-> If you want to test webhooks or test on mobile devices via a public HTTPS URL:
+> Configure a named tunnel and the private gateway for the exact `APP_URL` hostname as described in the [ingress runbook](docs/TRUSTED_INGRESS_RUNBOOK.md), then start your configured tunnel:
 > ```bash
 > npm run tunnel:local
 > ```
@@ -315,8 +316,10 @@ The repository includes an optimized multi-stage `Dockerfile`:
 docker build -t amar-gadget:latest .
 
 # 2. Run the container
-docker run -p 3000:3000 --env-file .env amar-gadget:latest
+docker run -p 127.0.0.1:3000:3000 --env-file .env amar-gadget:latest
 ```
+
+Production application traffic must pass through the configured private ingress gateway and named tunnel. The container's loopback mapping is the private backend, not a public storefront endpoint. Follow the [ingress deployment steps](docs/TRUSTED_INGRESS_RUNBOOK.md) before exposing the hostname.
 
 ### Production Build
 To create an optimized production build directly:

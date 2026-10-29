@@ -15,6 +15,9 @@ for (const entry of entries) {
 }
 await cp(resolve("public"), resolve(root, "public"), { recursive: true });
 await cp(resolve(".next/static"), resolve(root, ".next/static"), { recursive: true });
+for (const file of ["lib/ingress-protocol.cjs", "lib/ingress-gateway.mjs", "scripts/ingress-gateway.mjs", "scripts/checkout-reservations-worker.mjs"]) {
+  await cp(resolve(file), resolve(root, file));
+}
 // Next's banner precedes configuration loading and its eager prepare can log
 // an error without exiting. Validate before opening a production listener.
 await writeFile(resolve(root, "start.cjs"), `"use strict";

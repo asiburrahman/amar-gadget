@@ -9,8 +9,9 @@
     "dev": "next dev",
     "build": "prisma generate && next build && node scripts/prepare-standalone.mjs",
     "start": "node scripts/start-production.mjs",
-    "tunnel": "cloudflared tunnel --url http://192.168.50.210:3000 --http-host-header 192.168.50.210:3000",
-    "tunnel:local": "cloudflared tunnel --url http://localhost:3000",
+    "tunnel": "cloudflared tunnel run",
+    "tunnel:local": "cloudflared tunnel run",
+    "start:gateway": "node scripts/ingress-gateway.mjs",
     "postinstall": "patch-package --error-on-fail && prisma generate",
     "lint": "eslint",
     "test": "jest",
@@ -21,7 +22,9 @@
     "audit:dependencies": "npm audit",
     "audit:production": "npm audit --omit=dev",
     "smoke:standalone": "node scripts/smoke-standalone.mjs",
-    "smoke:runtime": "node scripts/smoke-runtime-config.mjs"
+    "smoke:runtime": "node scripts/smoke-runtime-config.mjs",
+    "smoke:ingress": "node scripts/smoke-ingress.mjs",
+    "test:gateway": "node --test tests/native/ingress-gateway.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

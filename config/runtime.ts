@@ -24,6 +24,7 @@ export const runtimeFields = {
   DIRECT_URL: optional(databaseUrl),
   JWT_SECRET: privateSecretSchema,
   OTP_SECRET: privateSecretSchema,
+  TRUSTED_PROXY_SECRET: optional(privateSecretSchema),
   APP_URL: networkUrl.refine((value) => { try { const url = new URL(value); return url.pathname === "/" && !url.search; } catch { return false; } }),
   UPSTASH_REDIS_REST_URL: optional(networkUrl),
   UPSTASH_REDIS_REST_TOKEN: optional(nonempty),
@@ -51,7 +52,7 @@ function parse<T extends z.ZodType>(schema: T, values: unknown): z.infer<T> {
   if (!result.success) throw new RuntimeConfigurationError(result.error.issues.map((issue) => String(issue.path[0] ?? "configuration")));
   return result.data;
 }
-export function readPrivateSecret(name: "JWT_SECRET" | "OTP_SECRET", values: Environment = process.env) {
+export function readPrivateSecret(name: "JWT_SECRET" | "OTP_SECRET" | "TRUSTED_PROXY_SECRET", values: Environment = process.env) {
   return parse(z.object({ [name]: privateSecretSchema }), { [name]: values[name] })[name] as string;
 }
 export function readDatabaseConfig(values: Environment = process.env) {
@@ -99,6 +100,8 @@ export function validateRuntimeConfig(values: Environment = process.env): Runtim
     ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME", "R2_PUBLIC_URL"],
   ] as const;
   const missing: string[] = [];
+  if (values.NODE_ENV === "production" && !config.TRUSTED_PROXY_SECRET) missing.push("TRUSTED_PROXY_SECRET");
+  if (config.TRUSTED_PROXY_SECRET && [config.JWT_SECRET, config.OTP_SECRET, config.CHECKOUT_SWEEP_SECRET].includes(config.TRUSTED_PROXY_SECRET)) missing.push("TRUSTED_PROXY_SECRET");
   for (const group of groups) {
     const required = values.NODE_ENV === "production" || group.some((key) => Boolean(config[key]));
     if (required) for (const key of group) if (!config[key]) missing.push(key);

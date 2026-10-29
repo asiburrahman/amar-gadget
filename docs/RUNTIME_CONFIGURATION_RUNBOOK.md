@@ -10,6 +10,7 @@ Every runtime needs a PostgreSQL TCP `DATABASE_URL`, distinct `JWT_SECRET` and `
 
 Production requires complete groups:
 
+- Ingress: a distinct `TRUSTED_PROXY_SECRET`, shared privately with the loopback gateway and authorized reservation worker. Deploy through the [trusted ingress runbook](TRUSTED_INGRESS_RUNBOOK.md); unsigned production application requests are rejected.
 - Redis: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
 - Mail: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`. Port defaults to 587; 465 uses implicit TLS and other ports require STARTTLS. Sender/host/port validation matches the actual mail transport.
 - Card payments/reservation supervision: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CHECKOUT_SWEEP_SECRET`, `CHECKOUT_SWEEP_DATABASE`. The sweep key must be distinct from JWT/OTP keys, and the target must match the database name in the connection URL. Deploy/supervise the worker separately as described in the reservation runbook; startup validation does not run that worker for you.

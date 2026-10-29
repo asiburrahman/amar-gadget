@@ -5,6 +5,7 @@ import { REQUIRED_SCHEMA_MIGRATION } from "../../lib/database-schema";
 const configured = () => ({
   NODE_ENV: "production", DATABASE_URL: "postgresql://local:local@127.0.0.1:5432/audit_config", APP_URL: "https://store.example.invalid",
   JWT_SECRET: "j".repeat(32), OTP_SECRET: "o".repeat(32),
+  TRUSTED_PROXY_SECRET: "i".repeat(32),
   UPSTASH_REDIS_REST_URL: "https://redis.example.invalid", UPSTASH_REDIS_REST_TOKEN: "local-test-redis-token",
   SMTP_HOST: "smtp.example.invalid", SMTP_USER: "local-test-user", SMTP_PASS: "local-test-password", SMTP_FROM: "Store <mail@example.invalid>",
   STRIPE_SECRET_KEY: "sk_test_local_fixture", STRIPE_WEBHOOK_SECRET: "whsec_local_fixture",
@@ -14,7 +15,7 @@ const configured = () => ({
 it("accepts complete production configuration without unused NextAuth/OAuth secrets", () => {
   expect(validateRuntimeConfig(configured()).SMTP_PORT).toBe(587);
 });
-it.each(["DATABASE_URL", "APP_URL", "JWT_SECRET", "OTP_SECRET", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "SMTP_PASS", "SMTP_FROM", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "R2_PUBLIC_URL", "CHECKOUT_SWEEP_SECRET"])("fails production configuration with missing %s even when old bypass flags are supplied", (key) => {
+it.each(["DATABASE_URL", "APP_URL", "JWT_SECRET", "OTP_SECRET", "TRUSTED_PROXY_SECRET", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "SMTP_PASS", "SMTP_FROM", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "R2_PUBLIC_URL", "CHECKOUT_SWEEP_SECRET"])("fails production configuration with missing %s even when old bypass flags are supplied", (key) => {
   const values: Record<string, string> = { ...configured(), SKIP_ENV_VALIDATION: "true", NEXT_PHASE: "phase-production-build", [key]: "" };
   expect(() => validateRuntimeConfig(values)).toThrow(RuntimeConfigurationError);
 });
@@ -26,6 +27,7 @@ it("uses the same byte-length rule for signing/OTP/runtime and rejects key reuse
   expect(() => readPrivateSecret("OTP_SECRET", { OTP_SECRET: "a".repeat(31) })).toThrow(RuntimeConfigurationError);
   expect(readPrivateSecret("JWT_SECRET", { JWT_SECRET: "ক".repeat(11) })).toBe("ক".repeat(11));
   expect(() => validateRuntimeConfig({ ...configured(), OTP_SECRET: configured().JWT_SECRET })).toThrow(RuntimeConfigurationError);
+  expect(() => validateRuntimeConfig({ ...configured(), TRUSTED_PROXY_SECRET: configured().JWT_SECRET })).toThrow(RuntimeConfigurationError);
 });
 it("returns only field names on invalid private configuration", () => {
   const privateValue = "private-value-must-never-appear";

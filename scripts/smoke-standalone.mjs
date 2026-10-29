@@ -8,6 +8,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { tsImport } from "tsx/esm/api";
 import { startRedisRestFixture } from "./testing/redis-rest-fixture.mjs";
 import { runtimeFixtureEnvironment } from "./testing/runtime-fixture.mjs";
+import { signIngress } from "../lib/ingress-protocol.cjs";
 
 class SmokeFailure extends Error {}
 
@@ -35,9 +36,8 @@ async function main() {
     await new Promise((resolveClose) => probe.close(resolveClose));
     let ready = false, output = "";
     phase = "server startup";
-    child = spawn(process.execPath, [resolve(".next/standalone/start.cjs")], { stdio: ["ignore", "pipe", "pipe"], env: {
-      ...runtimeFixtureEnvironment(url.toString(), `http://127.0.0.1:${port}`, redisFixture),
-    } });
+    const environment = runtimeFixtureEnvironment(url.toString(), `http://127.0.0.1:${port}`, redisFixture);
+    child = spawn(process.execPath, [resolve(".next/standalone/start.cjs")], { stdio: ["ignore", "pipe", "pipe"], env: environment });
     child.on("error", () => controller.abort());
     child.stdout.on("data", (chunk) => { if (!ready) { output = (output + chunk.toString()).slice(-4096); ready = output.includes("Ready"); } });
     child.stderr.on("data", () => undefined); // Never publish captured environment/provider errors.
@@ -47,7 +47,8 @@ async function main() {
       await delay(100, undefined, { signal: controller.signal });
     }
     const origin = `http://127.0.0.1:${port}`;
-    const get = (path, cookie) => fetch(`${origin}${path}`, { redirect: "manual", headers: cookie ? { Cookie: cookie } : undefined, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
+    const assertion = (method, target) => signIngress({ secret: environment.TRUSTED_PROXY_SECRET, origin, ip: "127.0.0.1", method, target });
+    const get = (path, cookie) => fetch(`${origin}${path}`, { redirect: "manual", headers: { ...assertion("GET", path), ...(cookie ? { Cookie: cookie } : {}) }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
     phase = "health lookup";
     // First probes after a fresh Windows build have exceeded the old
     // arbitrary 10-second probe. Keep a distinct bounded startup budget and
@@ -74,7 +75,7 @@ async function main() {
     phase = "signed session profile read";
     // Real built login/signing/password/SDK paths with an isolated account
     // and local REST provider fixture. No hosted provider is contacted.
-    const login = await fetch(`${origin}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: seller.email, password }), signal: AbortSignal.timeout(10_000) });
+    const login = await fetch(`${origin}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin, ...assertion("POST", "/api/auth/login") }, body: JSON.stringify({ email: seller.email, password }), signal: AbortSignal.timeout(10_000) });
     const cookie = login.headers.get("set-cookie")?.split(";")[0];
     if (login.status !== 200 || !cookie || !(await login.json()).success) throw new SmokeFailure("Configured standalone login failed.");
     phase = "readiness";

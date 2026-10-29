@@ -8,6 +8,7 @@ export function runtimeFixtureEnvironment(databaseUrl, origin, redis) {
     ...system, NODE_ENV: "production", HOSTNAME: "127.0.0.1", PORT: new URL(origin).port, NEXT_TELEMETRY_DISABLED: "1", NEXT_PHASE: "", SKIP_ENV_VALIDATION: "",
     DATABASE_URL: url.toString(), DIRECT_URL: url.toString(), APP_URL: origin,
     JWT_SECRET: randomBytes(32).toString("hex"), OTP_SECRET: randomBytes(32).toString("hex"),
+    TRUSTED_PROXY_SECRET: randomBytes(32).toString("hex"),
     UPSTASH_REDIS_REST_URL: redis.url, UPSTASH_REDIS_REST_TOKEN: redis.token,
     SMTP_HOST: "smtp.example.invalid", SMTP_PORT: "587", SMTP_USER: "local-test-only", SMTP_PASS: randomBytes(32).toString("hex"), SMTP_FROM: "Smoke <smoke@example.invalid>",
     STRIPE_SECRET_KEY: "sk_test_isolated_smoke_only", STRIPE_WEBHOOK_SECRET: "whsec_isolated_smoke_only",
