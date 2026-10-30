@@ -304,15 +304,17 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     }
   });
 
-  it("recovers the committed order when response-cookie writing fails after commit", async () => {
+  it("reports committed success when cookie writing fails and retries the same receipt without another order", async () => {
     const input = checkout();
     const usersBefore = await db.user.count();
     const ordersBefore = await db.order.count({ where: { items: { some: { productId } } } });
-    const log = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const log = jest.spyOn(console, "warn").mockImplementation(() => undefined);
     (cookies as jest.Mock).mockResolvedValueOnce({ set: () => { throw new Error("Simulated lost response boundary"); } });
     try {
-      expect(await createOrder(input)).toMatchObject({ success: false, code: "INTERNAL_ERROR" });
-      expect((await createOrder(input)).success).toBe(true);
+      const saved = await createOrder(input);
+      expect(saved).toMatchObject({ success: true, receiptRecoveryRequired: true });
+      if (!saved.success) throw new Error("Committed order was not returned");
+      expect(await createOrder(input)).toMatchObject({ success: true, orderId: saved.orderId });
       expect(await db.user.count()).toBe(usersBefore + 1);
       expect(await db.order.count({ where: { items: { some: { productId } } } })).toBe(ordersBefore + 1);
     } finally { log.mockRestore(); }

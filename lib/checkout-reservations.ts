@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe/stripe";
 import type Stripe from "stripe";
 import type { Prisma } from "@prisma/client";
+import { consumeCartForOrder } from "@/lib/cart-checkout";
 
 export const INITIAL_RESERVATION_MS = 15 * 60_000;
 export const STRIPE_RESERVATION_MS = 31 * 60_000;
@@ -42,7 +43,10 @@ export async function confirmStripePayment(orderId: string, intentId: string | n
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
     if (order.paymentMethod !== "STRIPE" || currency.toLowerCase() !== "bdt" || Math.round(Number(order.total) * 100) !== amount) throw new Error("Stripe order amount/currency/method mismatch");
     if (sessionId && order.stripeCheckoutSessionId && sessionId !== order.stripeCheckoutSessionId) throw new Error("Stripe session mismatch");
-    if (order.paymentStatus === "PAID") return;
+    if (order.paymentStatus === "PAID") {
+      if (order.status !== "CANCELLED") await consumeCartForOrder(tx, orderId);
+      return;
+    }
     const late = order.status === "CANCELLED" || order.paymentStatus === "FAILED";
     await tx.order.update({ where: { id: orderId }, data: {
       paymentStatus: "PAID", paymentIntentId: intentId,
@@ -51,6 +55,7 @@ export async function confirmStripePayment(orderId: string, intentId: string | n
       reservationNextCheckAt: null,
       reservationReviewReason: late ? "LATE_PAYMENT_REQUIRES_REFUND" : null,
     } });
+    if (!late) await consumeCartForOrder(tx, orderId);
     // A late payment is recorded for operator reconciliation, never fulfilled
     // against inventory already returned to sale. Refund operations are AUD-015.
     if (late) console.error("Late Stripe payment requires operator refund review", { orderId });

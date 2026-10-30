@@ -12,6 +12,8 @@ import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
 import { canonicalCheckoutRequest } from "@/lib/checkout-request";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 import { INITIAL_RESERVATION_MS, reconcileReservation } from "@/lib/checkout-reservations";
+import { prepareCartCheckout, consumeCartForOrder } from "@/lib/cart-checkout";
+import { CartError } from "@/lib/cart";
 
 function hashCheckoutToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -66,6 +68,7 @@ export async function createOrder(input: CheckoutInput) {
         }
         return existing;
       }
+      const cartSnapshot = await prepareCartCheckout(tx, validated, currentUser);
       const quote = await calculateCheckoutQuote(tx, validated);
       if (validated.quoteFingerprint && validated.quoteFingerprint !== quote.fingerprint) {
         throw new CheckoutError("Prices or discounts changed. Review the refreshed total before placing your order.", "QUOTE_CHANGED");
@@ -95,7 +98,7 @@ export async function createOrder(input: CheckoutInput) {
       }
       const total = new Prisma.Decimal(quote.total);
 
-      return tx.order.create({
+      const created = await tx.order.create({
         data: {
           userId: user.id,
           total,
@@ -108,6 +111,7 @@ export async function createOrder(input: CheckoutInput) {
           couponCode: validated.couponCode?.trim().toUpperCase() || null,
           checkoutTokenHash: tokenHash,
           checkoutRequestHash: requestHash,
+          ...(cartSnapshot ? { cartSnapshot } : {}),
           ...(validated.paymentMethod === "STRIPE" ? {
             reservationExpiresAt: new Date(Date.now() + INITIAL_RESERVATION_MS),
             reservationNextCheckAt: new Date(Date.now() + INITIAL_RESERVATION_MS),
@@ -116,34 +120,44 @@ export async function createOrder(input: CheckoutInput) {
         },
         select: checkoutResultSelect,
       });
+      if (cartSnapshot && validated.paymentMethod === "COD") await consumeCartForOrder(tx, created.id);
+      return created;
     });
 
     if (order.status === "CANCELLED" || order.paymentStatus === "FAILED") {
       return { success: false as const, code: "CHECKOUT_CLOSED", error: "This checkout is closed. Start a new checkout to place another order." };
     }
 
-    revalidatePath("/user/orders");
-    revalidatePath("/admin/orders");
-    (await cookies()).set("order_access_token", checkoutToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24,
-      path: `/order-success/${order.id}`,
-    });
-    (await cookies()).set("checkout_resume_token", checkoutToken, {
-      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
-      maxAge: 60 * 60 * 24, path: `/api/checkout/${order.id}`,
-    });
+    // The transaction is already committed. A cache invalidation or response
+    // cookie failure must not turn a saved order into a false creation error.
+    try { revalidatePath("/user/orders"); revalidatePath("/admin/orders"); }
+    catch { console.warn("Order saved; order-list cache refresh deferred."); }
+    let receiptRecoveryRequired = false;
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set("order_access_token", checkoutToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24,
+        path: `/order-success/${order.id}`,
+      });
+      cookieStore.set("checkout_resume_token", checkoutToken, {
+        httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
+        maxAge: 60 * 60 * 24, path: `/api/checkout/${order.id}`,
+      });
+    } catch { receiptRecoveryRequired = true; console.warn("Order saved; original checkout attempt is required to recover receipt access."); }
     return {
       success: true as const,
       orderId: order.id,
       trackingNumber: order.trackingNumber,
       status: order.status,
       paymentStatus: order.paymentStatus,
+      ...(receiptRecoveryRequired ? { receiptRecoveryRequired: true } : {}),
       ...(validated.paymentMethod === "STRIPE" ? { checkoutToken } : {}),
     };
   } catch (error) {
+    if (error instanceof CartError) return { success: false as const, code: error.code, error: error.message, ...(error.resumeOrderId ? { resumeOrderId: error.resumeOrderId } : {}) };
     if (error instanceof ZodError) {
       return { success: false as const, code: "INVALID_CHECKOUT", error: "Check your cart and shipping details, then try again." };
     }
@@ -218,6 +232,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         createdAt: true,
         checkoutTokenHash: true,
         reservationReviewReason: true,
+        cartSnapshot: true,
         items: {
           select: {
             id: true,
@@ -255,6 +270,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         createdAt: order.createdAt,
         canViewOrders: currentUser?.id === order.userId,
         needsReview: Boolean(order.reservationReviewReason),
+        cartSnapshot: order.cartSnapshot,
         items: order.items.map((item) => ({
           ...item,
           price: Number(item.price),

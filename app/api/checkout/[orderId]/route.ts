@@ -9,6 +9,8 @@ import { applyStripeSession, reconcileReservation } from "@/lib/checkout-reserva
 import { CheckoutUnavailable, startStripeCheckout } from "@/lib/stripe/order-checkout";
 import { getStripe } from "@/lib/stripe/stripe";
 import { readApplicationOrigin } from "@/config/runtime";
+import { acknowledgeGuestCart } from "@/lib/cart-checkout";
+import { CartError } from "@/lib/cart";
 
 type Context = { params: Promise<{ orderId: string }> };
 async function authorizedOrder(req: Request, context: Context) {
@@ -36,6 +38,7 @@ export async function GET(req: Request, context: Context) {
       paymentMethod: order.paymentMethod, shippingAddress: order.shippingAddress,
       reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
       needsReview: Boolean(order.reservationReviewReason),
+      cartSnapshot: order.cartSnapshot,
       items: order.items.map((item) => ({ productId: item.productId, name: item.product.name, quantity: item.quantity, price: Number(item.price) })),
     } }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ message: "Unable to load checkout. Please retry." }, { status: 503 }); }
@@ -45,8 +48,17 @@ export async function POST(req: Request, context: Context) {
   try {
     const order = await authorizedOrder(req, context);
     if (order instanceof Response) return order;
-    const input = z.object({ action: z.enum(["pay", "cancel", "refresh"]) }).safeParse(await req.json().catch(() => null));
+    const input = z.object({ action: z.enum(["pay", "cancel", "refresh", "ack-cart"]) }).safeParse(await req.json().catch(() => null));
     if (!input.success) return NextResponse.json({ message: "Invalid checkout action." }, { status: 400 });
+    if (input.data.action === "ack-cart") {
+      try {
+        await prisma.$transaction((tx) => acknowledgeGuestCart(tx, order.id));
+        return NextResponse.json({ cartAcknowledged: true }, { headers: { "Cache-Control": "private, no-store" } });
+      } catch (error) {
+        if (error instanceof CartError) return NextResponse.json({ message: error.message, code: error.code }, { status: error.status });
+        throw error;
+      }
+    }
     if (order.paymentStatus === "PAID") return NextResponse.json({ paid: true, cancelled: order.status === "CANCELLED" });
     if (input.data.action === "cancel") {
       const result = await reconcileReservation(order.id, new Date(), true);

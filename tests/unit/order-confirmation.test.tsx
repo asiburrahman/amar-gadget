@@ -2,6 +2,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { OrderConfirmation, type ConfirmedOrder } from "../../components/checkout/order-confirmation";
 import { useCartStore } from "../../stores/cart-store";
+import { seedClientCart } from "@/tests/helpers/client-cart-fixture";
+jest.mock("@/stores/cart-store", () => ({ useCartStore: jest.requireActual("@/tests/helpers/client-cart-fixture").useFixtureCartStore }));
 
 const order: ConfirmedOrder = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", total: 1050, status: "PENDING", paymentStatus: "UNPAID", paymentMethod: "STRIPE",
@@ -9,21 +11,22 @@ const order: ConfirmedOrder = {
   items: [{ id: "line", quantity: 1, price: 900, product: { name: "Gadget" } }],
 };
 const response = (body: unknown, ok = true) => ({ ok, json: async () => body }) as Response;
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
-  useCartStore.setState({ items: [{ id: "product", lineId: "line", name: "Gadget", price: 900, quantity: 2 }], couponCode: null, pendingCheckouts: {} });
-  useCartStore.getState().rememberCheckout(order.id, [{ productId: "product", quantity: 1, lineId: "line" }], null);
+  await seedClientCart([{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Gadget", price: 900, quantity: 2 }]);
+  const context = useCartStore.getState().getCheckoutContext(); context.lines[0].quantity = 1; order.cartSnapshot = context;
+  await useCartStore.getState().rememberCheckout(order.id, context.lines, null, context);
   global.fetch = jest.fn().mockResolvedValue(response({ order }));
 });
 afterEach(() => { jest.useRealTimers(); });
 
-it("shows COD amount due and a working guest tracking destination", () => {
+it("shows COD amount due and a working guest tracking destination", async () => {
   render(<OrderConfirmation initialOrder={{ ...order, paymentMethod: "COD", status: "PROCESSING" }} />);
   expect(screen.getByText("Amount due on delivery")).toBeTruthy();
   expect(screen.queryByText("Amount paid")).toBeNull();
   expect(screen.getByRole("link", { name: "Track this order" }).getAttribute("href")).toBe("/track-order?id=AG-TEST");
   expect(screen.queryByRole("link", { name: "View my orders" })).toBeNull();
-  expect(useCartStore.getState().items[0].quantity).toBe(1);
+  await waitFor(() => expect(useCartStore.getState().items[0].quantity).toBe(1));
 });
 
 it("updates all confirmation state after delayed server payment confirmation", async () => {

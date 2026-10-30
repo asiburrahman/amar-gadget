@@ -24,7 +24,7 @@ export default function CheckoutForm() {
   return <CheckoutContent key={loading ? "loading" : user?.id ?? "guest"} user={loading ? null : user} authLoading={loading} />;
 }
 function CheckoutContent({ user, authLoading }: { user: AuthUser | null; authLoading: boolean }) {
-  const { items, couponCode, removeCoupon, rememberCheckout, completeCheckout, pendingCheckouts } = useCartStore();
+  const { items, couponCode, removeCoupon, rememberCheckout, completeCheckout, pendingCheckouts, status, busy: cartBusy, refreshing, scope, catalogRevision, getCheckoutContext, refresh: refreshCart, recoverCheckoutAttempt, error: cartError, memoryOnly, retryStorage } = useCartStore();
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const [addressPage, setAddressPage] = useState(1);
   const addresses = useSavedAddresses(user?.id ?? null, addressPage);
@@ -59,11 +59,10 @@ function CheckoutContent({ user, authLoading }: { user: AuthUser | null; authLoa
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [canRestart, setCanRestart] = useState(false);
 
   const pendingOrderId = Object.keys(pendingCheckouts)[0];
   const { quote, error: quoteError, refresh: refreshQuote } = useCheckoutQuote(
-    items.map((item) => ({ productId: item.id, quantity: item.quantity })), couponCode, formData.paymentMethod, hydrated && !pendingOrderId,
+    items.map((item) => ({ productId: item.id, quantity: item.quantity })), couponCode, formData.paymentMethod, hydrated && status === "ready" && !cartBusy && !refreshing && !pendingOrderId && (scope !== "guest" || !memoryOnly), `${scope}:${catalogRevision}`,
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -73,45 +72,59 @@ function CheckoutContent({ user, authLoading }: { user: AuthUser | null; authLoa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (items.length === 0 || !quote || authLoading || addressLoading || submittingRef.current) return;
+    if (items.length === 0 || !quote || status !== "ready" || cartBusy || refreshing || authLoading || addressLoading || submittingRef.current) return;
     const parsedShipping = shippingAddressSchema.safeParse(shipping);
     if (!parsedShipping.success) { setErrorMsg(parsedShipping.error.issues[0]?.message ?? "Enter your shipping details."); return; }
 
     submittingRef.current = true;
     setLoading(true);
     setErrorMsg("");
-    setCanRestart(false);
 
     try {
       const cartSnapshot = items.map((item) => ({ productId: item.id, quantity: item.quantity, lineId: item.lineId }));
+      const context = getCheckoutContext();
       const details: CheckoutDetails = {
         items: items.map((item) => ({ productId: item.id, quantity: item.quantity })),
         ...shipping,
         paymentMethod: formData.paymentMethod,
         couponCode: couponCode || undefined,
+        cart: context,
       };
       const attempt = await getCheckoutAttempt(details, attemptRef.current);
       attemptRef.current = attempt;
       const result = await createOrder({ ...details, checkoutToken: attempt.token, quoteFingerprint: quote.fingerprint });
 
-      if (result.success && result.orderId) {
+      if (result.success) {
         attemptRef.current = bindCheckoutAttempt(attempt, result.orderId);
-        rememberCheckout(result.orderId, cartSnapshot, couponCode);
+        await rememberCheckout(result.orderId, cartSnapshot, couponCode, context);
+        if (result.receiptRecoveryRequired && useCartStore.getState().scope === scope && !(await recoverCheckoutAttempt())) {
+          setErrorMsg("Your order was saved. Keep this tab open and recover the original checkout to restore receipt access; do not place a second order.");
+          return;
+        }
+        if (formData.paymentMethod !== "STRIPE" || result.paymentStatus === "PAID") await completeCheckout(result.orderId, context);
+        if (useCartStore.getState().scope !== scope) {
+          useCartStore.setState({ notice: "An order was saved in the original checkout session. Return to that account or guest session to review its receipt." });
+          return;
+        }
         if (formData.paymentMethod === "STRIPE" && result.paymentStatus !== "PAID") {
           router.push(`/checkout?resume=${result.orderId}`);
           return;
         }
 
-        completeCheckout(result.orderId);
-        clearCheckoutAttempt(attempt.token);
+        if (!useCartStore.getState().guestCart?.ackPending || context.ownerId !== null) clearCheckoutAttempt(attempt);
         router.push(`/order-success/${result.orderId}`);
       } else {
         setErrorMsg(result.error || "Order creation failed. Please check form inputs.");
-        setCanRestart(result.code === "CHECKOUT_CLOSED" || result.code === "CHECKOUT_CONFLICT");
-        if (result.code && ["QUOTE_CHANGED", "INVALID_COUPON", "COUPON_MIN_SPEND", "PRODUCT_UNAVAILABLE", "OUT_OF_STOCK", "INVALID_PRICE", "INVALID_TOTAL"].includes(result.code)) refreshQuote();
+        if (result.code === "CART_HAS_PENDING" && "resumeOrderId" in result && result.resumeOrderId) {
+          await refreshCart(); if (useCartStore.getState().scope === scope) router.push(`/checkout?resume=${result.resumeOrderId}`);
+        } else if (result.code && ["CHECKOUT_CLOSED", "CHECKOUT_CONFLICT", "CART_GUEST_REVIEW", "INTERNAL_ERROR"].includes(result.code)) {
+          if (await recoverCheckoutAttempt()) setErrorMsg("Original checkout recovered. Review its receipt and the current cart before placing another order.");
+        }
+        if (result.code && ["CART_CHANGED", "CART_STOCK_CHANGED", "CART_CONTEXT_REQUIRED", "QUOTE_CHANGED", "INVALID_COUPON", "COUPON_MIN_SPEND", "PRODUCT_UNAVAILABLE", "OUT_OF_STOCK", "INVALID_PRICE", "INVALID_TOTAL"].includes(result.code)) { await refreshCart(); refreshQuote(); }
       }
     } catch {
       setErrorMsg("Checkout could not be completed. Retry with the same details to safely resume your order.");
+      await recoverCheckoutAttempt();
     } finally {
       submittingRef.current = false;
       setLoading(false);
@@ -120,6 +133,8 @@ function CheckoutContent({ user, authLoading }: { user: AuthUser | null; authLoa
 
   if (!hydrated) return <p className="p-8">Loading checkout…</p>;
   if (pendingOrderId) return <PaymentRecovery orderId={pendingOrderId} />;
+  if (scope === "guest" && memoryOnly) return <section className="p-8 space-y-4"><h1>Save your guest cart before checkout</h1><p>Enable browser storage so the original checkout can be recovered after a reload. Keep this tab open, or sign in and explicitly merge items into an account cart.</p><Button disabled={cartBusy} onClick={() => void retryStorage()}>Retry saving guest cart</Button><Link href="/login" className="underline">Sign in</Link><Link href="/cart" className="underline">Review cart</Link></section>;
+  if (status !== "ready") return <section className="p-8 space-y-4"><h1>Checkout</h1><p role={status === "error" ? "alert" : "status"}>{cartError || "Loading the current cart before checkout..."}</p><Button disabled={cartBusy || refreshing || scope === "loading"} onClick={() => void refreshCart()}>Refresh current cart</Button><Link href="/cart" className="underline">Review cart</Link></section>;
   return (
     <div className="min-h-screen bg-background py-12">
       <div className="container mx-auto px-4 max-w-5xl">
@@ -160,14 +175,7 @@ function CheckoutContent({ user, authLoading }: { user: AuthUser | null; authLoa
                 {errorMsg && (
                   <div role="alert" className="p-3 text-xs font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
                     <p>{errorMsg}</p>
-                    {canRestart && (
-                      <button type="button" disabled={loading} className="mt-2 underline" onClick={() => {
-                        if (attemptRef.current) clearCheckoutAttempt(attemptRef.current.token);
-                        attemptRef.current = undefined;
-                        setCanRestart(false);
-                        setErrorMsg("Ready for a new checkout. Review your details and place the order again.");
-                      }}>Start a new checkout</button>
-                    )}
+                    <button type="button" disabled={loading || cartBusy} className="mt-2 underline" onClick={() => void recoverCheckoutAttempt()}>Recover original checkout</button>
                   </div>
                 )}
 
@@ -334,7 +342,7 @@ function CheckoutContent({ user, authLoading }: { user: AuthUser | null; authLoa
 
                 <Button
                   type="submit"
-                  disabled={loading || authLoading || addressLoading || !quote}
+                  disabled={loading || cartBusy || refreshing || status !== "ready" || authLoading || addressLoading || !quote}
                   variant="default"
                   className="w-full h-12 font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
                 >

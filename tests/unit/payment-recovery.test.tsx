@@ -3,19 +3,24 @@ import { webcrypto } from "node:crypto";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PaymentRecovery } from "../../components/checkout/payment-recovery";
 import { useCartStore } from "../../stores/cart-store";
+import { seedClientCart } from "@/tests/helpers/client-cart-fixture";
+import type { CartCheckoutContext } from "@/lib/validations/cart";
+jest.mock("@/stores/cart-store", () => ({ useCartStore: jest.requireActual("@/tests/helpers/client-cart-fixture").useFixtureCartStore }));
 
 const mockPush = jest.fn();
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
 Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true });
 
-const order = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", total: 1050, status: "PENDING", paymentStatus: "UNPAID", paymentMethod: "STRIPE", shippingAddress: "Test shipping address", reservationExpiresAt: null, needsReview: false, items: [{ productId: "product", name: "Test product", quantity: 1, price: 900 }] };
+const productId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", item = { id: productId, name: "Test product", price: 900, quantity: 3 };
+const order = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", total: 1050, status: "PENDING", paymentStatus: "UNPAID", paymentMethod: "STRIPE", shippingAddress: "Test shipping address", reservationExpiresAt: null, needsReview: false, items: [{ productId, name: "Test product", quantity: 1, price: 900 }], cartSnapshot: undefined as CartCheckoutContext | undefined };
+let cartFixture: Awaited<ReturnType<typeof seedClientCart>>;
 const response = (body: unknown, ok = true) => ({ ok, json: async () => body }) as Response;
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
-  useCartStore.setState({ items: [], couponCode: null, pendingCheckouts: {} });
-  useCartStore.getState().addItem({ id: "product", name: "Test product", price: 900, quantity: 3 });
-  useCartStore.getState().rememberCheckout(order.id, [{ productId: "product", quantity: 1 }], null);
+  cartFixture = await seedClientCart([item]);
+  order.cartSnapshot = useCartStore.getState().getCheckoutContext(); order.cartSnapshot.lines[0].quantity = 1;
+  await useCartStore.getState().rememberCheckout(order.id, order.cartSnapshot.lines, null, order.cartSnapshot);
   global.fetch = jest.fn();
 });
 
@@ -57,30 +62,29 @@ it("retains the cart for a late payment on a closed order", async () => {
   expect(useCartStore.getState().items[0].quantity).toBe(3);
 });
 
-it("preserves items removed and re-added during payment", () => {
+it("preserves items removed and re-added during payment", async () => {
   const state = useCartStore.getState();
-  state.removeItem("product");
-  state.addItem({ id: "product", name: "New purchase", price: 900, quantity: 2 });
-  state.completeCheckout(order.id);
+  await state.removeItem(productId);
+  await state.addItem({ ...item, quantity: 2 });
+  await state.completeCheckout(order.id, order.cartSnapshot);
   expect(useCartStore.getState().items[0].quantity).toBe(2);
 });
 
 it("preserves the purchased snapshot across a storage reload", async () => {
-  const saved = localStorage.getItem("amar-gadget-cart")!;
-  useCartStore.setState({ items: [], pendingCheckouts: {} });
-  localStorage.setItem("amar-gadget-cart", saved);
-  await useCartStore.persist.rehydrate();
+  await seedClientCart([], { existing: new Map(cartFixture.values), catalog: [item] });
   expect(useCartStore.getState().pendingCheckouts[order.id].items[0].quantity).toBe(1);
-  useCartStore.getState().completeCheckout(order.id);
+  await useCartStore.getState().completeCheckout(order.id, order.cartSnapshot);
   expect(useCartStore.getState().items[0].quantity).toBe(2);
 });
 
-it("does not associate a replacement line with an order response arriving late", () => {
+it("does not associate a replacement line with an order response arriving late", async () => {
+  await seedClientCart([item]);
   const initial = useCartStore.getState().items[0];
+  const context = useCartStore.getState().getCheckoutContext(); context.lines[0].quantity = 1;
   const snapshot = [{ productId: initial.id, quantity: 1, lineId: initial.lineId }];
-  useCartStore.getState().removeItem(initial.id);
-  useCartStore.getState().addItem({ id: initial.id, name: "New purchase", price: 900, quantity: 2 });
-  useCartStore.getState().rememberCheckout("late-order", snapshot, null);
-  useCartStore.getState().completeCheckout("late-order");
+  await useCartStore.getState().removeItem(initial.id);
+  await useCartStore.getState().addItem({ ...item, quantity: 2 });
+  await useCartStore.getState().rememberCheckout(order.id, snapshot, null, context);
+  await useCartStore.getState().completeCheckout(order.id, context);
   expect(useCartStore.getState().items[0].quantity).toBe(2);
 });

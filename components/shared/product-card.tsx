@@ -44,18 +44,19 @@ export const ProductCard = ({
 }: ProductCardProps) => {
   const [addedNotice, setAddedNotice] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
+  const cartDisabled = useCartStore((state) => state.busy || state.refreshing || state.status !== "ready");
   const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
   const isWishlisted = isInWishlist(id);
   const effectivePrice = discountPrice ?? price;
   const publicImage = imageUrl && isPublicProductImageUrl(imageUrl) ? imageUrl : undefined;
 
-  const handleAddToCart = (e: React.MouseEvent) => {
+  const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (stock === 0) return;
 
-    addItem({
+    const saved = await addItem({
       id,
       name,
       price,
@@ -66,6 +67,7 @@ export const ProductCard = ({
       quantity: 1,
     });
 
+    if (!saved) return;
     setAddedNotice(true);
     setTimeout(() => setAddedNotice(false), 2000);
   };
@@ -204,7 +206,7 @@ export const ProductCard = ({
         <button
           type="button"
           onClick={handleAddToCart}
-          disabled={stock === 0}
+          disabled={stock === 0 || cartDisabled}
           className={`w-full h-9 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
             stock === 0
               ? "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed"

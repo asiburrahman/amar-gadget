@@ -4,6 +4,7 @@ import "@/styles/globals.css";
 import { connection } from "next/server";
 import { readApplicationOrigin } from "@/config/runtime";
 import { WishlistSync } from "@/components/account/wishlist-sync";
+import { CartSync } from "@/components/account/cart-sync";
 
 const fontSans = Geist({
   subsets: ["latin"],
@@ -42,6 +43,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-200">
         <WishlistSync />
+        <CartSync />
         {children}
       </body>
     </html>

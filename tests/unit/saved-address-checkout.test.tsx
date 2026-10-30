@@ -1,24 +1,25 @@
 /** @jest-environment jsdom */
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CheckoutForm from "@/components/checkout/checkout-form";
-import { useCartStore } from "@/stores/cart-store";
 import { createOrder } from "@/server/actions/order/order-actions";
 import type { AuthUser } from "@/hooks/use-auth";
 import type { SavedAddress, AddressPage } from "@/lib/validations/address";
+import { seedClientCart } from "@/tests/helpers/client-cart-fixture";
+jest.mock("@/stores/cart-store", () => ({ useCartStore: jest.requireActual("@/tests/helpers/client-cart-fixture").useFixtureCartStore }));
 let user: AuthUser | null;
 jest.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user, loading: false }) }));
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock("@/server/actions/order/order-actions", () => ({ createOrder: jest.fn() }));
-jest.mock("@/lib/checkout-attempt", () => ({ getCheckoutAttempt: jest.fn().mockResolvedValue({ token: "a".repeat(64), fingerprint: "fixture" }) }));
+jest.mock("@/lib/checkout-attempt", () => ({ ...jest.requireActual("@/lib/checkout-attempt"), getCheckoutAttempt: jest.fn().mockResolvedValue({ token: "a".repeat(64), fingerprint: "fixture" }) }));
 const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const first: SavedAddress = { id: "11111111-1111-4111-8111-111111111111", version: 1, fullName: "Home recipient", phone: "01700000000", street: "House 12, Home road", city: "Dhaka", district: "Dhaka", zipCode: "1200", isDefault: true };
 const second: SavedAddress = { ...first, id: "22222222-2222-4222-8222-222222222222", fullName: "Office recipient", street: "Office road 21", city: "Sylhet", district: "Sylhet", zipCode: "3100", isDefault: false };
 const quote = { currency: "BDT", subtotal: 100, discountAmount: 0, shippingFee: 150, total: 250, coupon: null, items: [{ productId: id, name: "Gadget", quantity: 1, unitPrice: 100, lineTotal: 100 }], fingerprint: "1".repeat(64) };
 const response = (body: unknown, ok = true) => ({ ok, json: async () => body }) as Response;
 const page = (rows = [first, second]): AddressPage => ({ addresses: rows, defaultAddress: rows.find((row) => row.isDefault) ?? null, page: 1, total: rows.length, totalPages: rows.length ? 1 : 0 });
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks(); user = { id: "owner", name: "Account name", phone: "01800000000", email: "owner@example.invalid", avatar: null, role: "USER", isVerified: true };
-  useCartStore.setState({ items: [{ id, lineId: "line", name: "Gadget", price: 100, quantity: 1 }], pendingCheckouts: {}, couponCode: null });
+  await seedClientCart([{ id, name: "Gadget", price: 100, quantity: 1 }], { ownerId: "owner" });
   (createOrder as jest.Mock).mockResolvedValue({ success: false, error: "Checkout fixture retained" });
   global.fetch = jest.fn().mockImplementation((url: string) => Promise.resolve(response(url.startsWith("/api/checkout/quote") ? { quote } : { success: true, ...page() })));
 });

@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/formatter";
 import { useCartStore } from "@/stores/cart-store";
 import { clearCheckoutAttemptForOrder } from "@/lib/checkout-attempt";
+import { cartCheckoutSchema } from "@/lib/validations/cart";
 
 export type ConfirmedOrder = {
   id: string; total: number; status: string; paymentStatus: string; paymentMethod: string;
   trackingNumber: string | null; shippingAddress: string | null; canViewOrders: boolean; needsReview: boolean;
   items: { id: string; quantity: number; price: number; product: { name: string } }[];
+  cartSnapshot?: unknown;
 };
 
 export function OrderConfirmation({ initialOrder }: { initialOrder: ConfirmedOrder }) {
@@ -33,10 +35,15 @@ export function OrderConfirmation({ initialOrder }: { initialOrder: ConfirmedOrd
   }, [initialOrder.id]);
 
   useEffect(() => {
-    if (order.status !== "CANCELLED" && (order.paymentStatus === "PAID" || order.paymentMethod === "COD")) completeCheckout(order.id);
-    if (order.status === "CANCELLED" || order.paymentStatus === "FAILED") forgetCheckout(order.id);
-    if (order.paymentStatus === "PAID" || order.status === "CANCELLED" || order.paymentStatus === "FAILED") clearCheckoutAttemptForOrder(order.id);
-  }, [order.id, order.status, order.paymentStatus, order.paymentMethod, completeCheckout, forgetCheckout]);
+    const closed = order.status === "CANCELLED" || order.paymentStatus === "FAILED";
+    const confirmed = !closed && (order.paymentStatus === "PAID" || (order.paymentMethod === "COD" && order.status !== "PENDING"));
+    if (!closed && !confirmed) return;
+    let active = true;
+    void (closed ? forgetCheckout(order.id, order.cartSnapshot) : completeCheckout(order.id, order.cartSnapshot)).then((handled) => {
+      if (active && handled) { const context = cartCheckoutSchema.safeParse(order.cartSnapshot); clearCheckoutAttemptForOrder(order.id, undefined, context.success ? context.data : null); }
+    });
+    return () => { active = false; };
+  }, [order.id, order.status, order.paymentStatus, order.paymentMethod, order.cartSnapshot, completeCheckout, forgetCheckout]);
 
   useEffect(() => {
     if (!pending) return;

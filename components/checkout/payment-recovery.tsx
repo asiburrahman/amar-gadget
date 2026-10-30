@@ -7,11 +7,13 @@ import { useCartStore } from "@/stores/cart-store";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
 import { clearCheckoutAttemptForOrder } from "@/lib/checkout-attempt";
+import { cartCheckoutSchema } from "@/lib/validations/cart";
 
 type CheckoutOrder = {
   id: string; total: number; status: string; paymentStatus: string; paymentMethod: string;
   shippingAddress: string | null; reservationExpiresAt: string | null; needsReview: boolean;
   items: { productId: string; name: string; quantity: number; price: number }[];
+  cartSnapshot?: unknown;
 };
 
 export function PaymentRecovery({ orderId, compact = false }: { orderId: string; compact?: boolean }) {
@@ -29,9 +31,10 @@ export function PaymentRecovery({ orderId, compact = false }: { orderId: string;
     if (!response.ok) throw new Error(data.message || "Unable to load checkout.");
     setOrder(data.order);
     setError("");
-    if (data.order.status !== "CANCELLED" && (data.order.paymentStatus === "PAID" || data.order.paymentMethod === "COD")) completeCheckout(orderId);
-    if (data.order.status === "CANCELLED" || data.order.paymentStatus === "FAILED") forgetCheckout(orderId);
-    if (data.order.paymentStatus === "PAID" || data.order.status === "CANCELLED" || data.order.paymentStatus === "FAILED") clearCheckoutAttemptForOrder(orderId);
+    const closed = data.order.status === "CANCELLED" || data.order.paymentStatus === "FAILED";
+    const confirmed = !closed && (data.order.paymentStatus === "PAID" || (data.order.paymentMethod === "COD" && data.order.status !== "PENDING"));
+    const handled = closed ? await forgetCheckout(orderId, data.order.cartSnapshot) : confirmed ? await completeCheckout(orderId, data.order.cartSnapshot) : false;
+    if ((closed || confirmed) && handled) { const context = cartCheckoutSchema.safeParse(data.order.cartSnapshot); clearCheckoutAttemptForOrder(orderId, undefined, context.success ? context.data : null); }
     return data.order as CheckoutOrder;
   }, [orderId, completeCheckout, forgetCheckout]);
 
@@ -61,7 +64,7 @@ export function PaymentRecovery({ orderId, compact = false }: { orderId: string;
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Unable to confirm payment.");
       if (data.paid && !data.cancelled) {
-        completeCheckout(orderId);
+        await load();
         router.push(`/order-success/${orderId}`);
       } else if (data.url) window.location.assign(data.url);
       else if (data.waiting) router.push(`/order-success/${orderId}`);
@@ -79,7 +82,7 @@ export function PaymentRecovery({ orderId, compact = false }: { orderId: string;
       {!order && !error && <p>Loading your order…</p>}
       {order && <>
         <p className="text-sm break-all">Order: {order.id}</p>
-        <p>{paid ? "Payment is verified. Purchased quantities have been removed from your cart." : closed ? "This order is closed. Your cart is retained." : "Your cart is retained while payment is pending. Continue payment for this same order."}</p>
+        <p>{paid ? "Payment is verified. Review your current cart before another purchase; later additions may remain." : closed ? "This order is closed. Your cart is retained." : "Your cart is retained while payment is pending. Continue payment for this same order."}</p>
         {order.needsReview && <p>{closed && order.paymentStatus === "PAID" ? "A payment was received for this closed order. Contact support for refund review; your cart is retained." : "Payment needs confirmation. Your reservation is retained; refresh the payment status or contact support before placing another order."}</p>}
         {!compact && <>
           <p>Shipping: {order.shippingAddress}</p>

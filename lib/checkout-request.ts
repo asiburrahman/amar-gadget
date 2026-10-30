@@ -14,5 +14,6 @@ export function canonicalCheckoutRequest(input: CheckoutDetails, accountId: stri
     zipCode: input.zipCode?.trim() || "",
     paymentMethod: input.paymentMethod,
     couponCode: input.couponCode?.trim().toUpperCase() || "",
+    ...(input.cart ? { cart: { ...input.cart, lines: [...input.cart.lines].sort((a, b) => a.productId.localeCompare(b.productId)) } } : {}),
   });
 }

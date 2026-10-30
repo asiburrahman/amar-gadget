@@ -1,109 +1,20 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { useSyncExternalStore } from "react";
-
-export interface CartItem {
-  lineId?: string;
-  id: string;
-  name: string;
-  price: number;
-  discountPrice?: number | null;
-  imageUrl?: string | null;
-  stock?: number;
-  category?: string;
-  brand?: string;
-  quantity: number;
+import { createCartController } from "@/lib/client/cart-controller";
+import { useAuthStore } from "@/stores/auth-store";
+export type { CartItem } from "@/lib/client/cart-controller";
+export function currentCartScope() {
+  const { user, loading } = useAuthStore.getState();
+  return loading ? "loading" as const : user?.id ? `account:${user.id}` as const : "guest" as const;
 }
-
-interface CartState {
-  items: CartItem[];
-  couponCode: string | null;
-  pendingCheckouts: Record<string, { items: { productId: string; quantity: number; lineId?: string }[]; couponCode: string | null }>;
-  rememberCheckout: (orderId: string, items: { productId: string; quantity: number; lineId?: string }[], couponCode: string | null) => void;
-  completeCheckout: (orderId: string) => void;
-  forgetCheckout: (orderId: string) => void;
-  addItem: (item: CartItem) => void;
-  removeItem: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
-  applyCoupon: (code: string) => void;
-  removeCoupon: () => void;
-  clearCart: () => void;
-}
-
-export const useCartStore = create<CartState>()(
-  persist(
-    (set) => ({
-      items: [],
-      couponCode: null,
-      pendingCheckouts: {},
-      forgetCheckout: (orderId) => set((state) => {
-        const pendingCheckouts = { ...state.pendingCheckouts };
-        delete pendingCheckouts[orderId];
-        return { pendingCheckouts };
-      }),
-      rememberCheckout: (orderId, items, couponCode) => set((state) => state.pendingCheckouts[orderId] ? state : ({
-        pendingCheckouts: { ...state.pendingCheckouts, [orderId]: {
-          items: items.map((item) => ({ ...item, lineId: "lineId" in item ? item.lineId : state.items.find((line) => line.id === item.productId)?.lineId })), couponCode,
-        } },
-      })),
-      completeCheckout: (orderId) => set((state) => {
-        const pending = state.pendingCheckouts[orderId];
-        if (!pending) return state;
-        const pendingCheckouts = { ...state.pendingCheckouts };
-        delete pendingCheckouts[orderId];
-        let changed = false;
-        const items = state.items.flatMap((item) => {
-            const purchased = pending.items.find((line) => line.productId === item.id && line.lineId === item.lineId)?.quantity ?? 0;
-            if (purchased) changed = true;
-            const remaining = item.quantity - purchased;
-            return remaining > 0 ? [{ ...item, quantity: remaining }] : [];
-        });
-        return {
-          pendingCheckouts, items,
-          ...(changed && state.couponCode === pending.couponCode ? { couponCode: null } : {}),
-        };
-      }),
-      addItem: (newItem) =>
-        set((state) => {
-          const exists = state.items.find((item) => item.id === newItem.id);
-          if (exists) {
-            return {
-              items: state.items.map((item) =>
-                item.id === newItem.id
-                  ? { ...item, quantity: item.quantity + newItem.quantity }
-                  : item
-              ),
-            };
-          }
-          return { items: [...state.items, { ...newItem, lineId: globalThis.crypto.randomUUID() }] };
-        }),
-      removeItem: (id) =>
-        set((state) => ({
-          items: state.items.filter((item) => item.id !== id),
-        })),
-      updateQuantity: (id, quantity) =>
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.id === id ? { ...item, quantity: Math.max(1, quantity) } : item
-          ),
-        })),
-      // Store only the requested code. Current prices and discounts come from
-      // the server quote, never persisted client arithmetic.
-      applyCoupon: (code) => set({ couponCode: code.trim().toUpperCase() }),
-      removeCoupon: () => set({ couponCode: null }),
-      clearCart: () => set({ items: [], couponCode: null }),
-    }),
-    { name: "amar-gadget-cart" }
-  )
-);
-
-const subscribeHydration = () => () => undefined;
-
-export function useHydratedStore<T, F>(
-  store: (selector: (state: T) => F) => F,
-  selector: (state: T) => F
-): F | undefined {
-  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
-  const value = store(selector);
-  return hydrated ? value : undefined;
-}
+export const useCartStore = createCartController({
+  fetcher: (...args) => fetch(...args),
+  storage: () => { try { return typeof window === "undefined" ? undefined : window.localStorage; } catch { return undefined; } },
+  scopeNow: currentCartScope,
+  lock: async (work) => typeof navigator !== "undefined" && navigator.locks ? await navigator.locks.request("amar-gadget-guest-cart-v3", work) : await work(),
+  accountChanged: () => { void useAuthStore.getState().fetchUser(); },
+  notify: (ownerId) => {
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel("amar-gadget-cart-v3");
+      try { channel.postMessage({ ownerId }); } finally { channel.close(); }
+    }
+  },
+});

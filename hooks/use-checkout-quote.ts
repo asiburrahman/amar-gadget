@@ -10,9 +10,9 @@ export async function fetchCheckoutQuote(items: OrderItemInput[], couponCode: st
   return data.quote;
 }
 
-export function useCheckoutQuote(items: OrderItemInput[], couponCode: string | null, paymentMethod: "COD" | "STRIPE" = "COD", enabled = true) {
+export function useCheckoutQuote(items: OrderItemInput[], couponCode: string | null, paymentMethod: "COD" | "STRIPE" = "COD", enabled = true, contextKey = "") {
   const [revision, setRevision] = useState(0);
-  const key = JSON.stringify({ items, couponCode, paymentMethod, revision });
+  const key = JSON.stringify({ items, couponCode, paymentMethod, revision, contextKey });
   const [result, setResult] = useState<{ key: string; quote: CheckoutQuote | null; error: string }>({ key: "", quote: null, error: "" });
   useEffect(() => {
     if (!enabled || !items.length) return;

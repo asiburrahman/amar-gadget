@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { shippingAddressSchema } from "@/lib/validations/address";
+import { cartCheckoutSchema } from "@/lib/validations/cart";
 
 export const orderItemSchema = z.object({
   productId: z.string().uuid("Invalid product ID"),
@@ -13,6 +14,7 @@ export const checkoutDetailsSchema = z.object({
   zipCode: z.string().trim().max(20).refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Use plain text.").optional(),
   paymentMethod: z.enum(["COD", "STRIPE"]).default("COD"),
   couponCode: z.string().trim().toUpperCase().max(64).optional(),
+  cart: cartCheckoutSchema.optional(),
 });
 
 export const checkoutSchema = checkoutDetailsSchema.extend({

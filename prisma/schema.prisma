@@ -27,6 +27,7 @@ model User {
   reviews     Review[]
   wishlists   Wishlist[]
   addresses   Address[]
+  cart        Cart?
   otpTokens   OtpToken[]
   otpThrottles OtpThrottle[]
 }
@@ -146,6 +147,9 @@ model Order {
   shipmentTrackingNumber String? @db.VarChar(120)
   trackingNumber  String?
   couponCode      String?
+  cartSnapshot    Json?
+  cartConsumedAt  DateTime?
+  cartAcknowledgedAt DateTime?
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -154,6 +158,36 @@ model Order {
   events          OrderEvent[]
 
   @@index([paymentMethod, status, paymentStatus, reservationNextCheckAt], map: "Order_reservation_sweep_idx")
+  @@index([userId, createdAt(sort: Desc)], map: "Order_userId_createdAt_idx")
+}
+
+model Cart {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version Int @default(0)
+  couponCode String? @db.VarChar(64)
+  couponVersion Int @default(0)
+  lastRequestId String? @db.VarChar(36)
+  lastRequestHash String? @db.VarChar(64)
+  lastResult Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lines CartLine[]
+}
+
+model CartLine {
+  id String @id @default(uuid())
+  cartUserId String
+  cart Cart @relation(fields: [cartUserId], references: [userId], onDelete: Cascade)
+  // Soft catalog reference: deleted/hidden products remain removable without
+  // product deletion cascading into a customer's cart or changing its version.
+  productId String @db.VarChar(64)
+  quantity Int
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([cartUserId, productId])
+  @@index([cartUserId, createdAt, id])
 }
 
 model OrderEvent {

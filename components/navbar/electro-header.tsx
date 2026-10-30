@@ -28,6 +28,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const cartItems = useCartStore((state) => state.items);
+  const cartReady = useCartStore((state) => state.status === "ready" && !state.refreshing);
   const wishlistItems = useWishlistStore((state) => state.items);
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -213,7 +214,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
                 </span>
               </div>
               <span className="hidden sm:inline-block text-xs sm:text-sm font-black text-[#333e48] ml-1">
-                {formatCurrency(totalCartPrice)}
+                {cartReady && cartItems.every((item) => item.available) ? formatCurrency(totalCartPrice) : "Review cart"}
               </span>
             </Link>
           </div>

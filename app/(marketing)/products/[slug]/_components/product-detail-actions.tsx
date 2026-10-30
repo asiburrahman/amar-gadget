@@ -25,13 +25,14 @@ export function ProductDetailActions({ product }: ProductDetailActionsProps) {
   const router = useRouter();
 
   const addItem = useCartStore((state) => state.addItem);
+  const cartDisabled = useCartStore((state) => state.busy || state.refreshing || state.status !== "ready");
   const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
   const isWishlisted = isInWishlist(product.id);
 
-  const handleAddToCart = () => {
-    if (product.stock === 0) return;
-    addItem({
+  const handleAddToCart = async () => {
+    if (product.stock === 0) return false;
+    const saved = await addItem({
       id: product.id,
       name: product.name,
       price: product.price,
@@ -41,13 +42,14 @@ export function ProductDetailActions({ product }: ProductDetailActionsProps) {
       category: product.category,
       quantity,
     });
+    if (!saved) return false;
     setAddedNotice(true);
     setTimeout(() => setAddedNotice(false), 2500);
+    return true;
   };
 
-  const handleBuyNow = () => {
-    handleAddToCart();
-    router.push("/checkout");
+  const handleBuyNow = async () => {
+    if (await handleAddToCart()) router.push("/checkout");
   };
 
   const toggleWishlist = () => {
@@ -87,8 +89,8 @@ export function ProductDetailActions({ product }: ProductDetailActionsProps) {
           </button>
           <span className="px-4 text-sm font-extrabold text-foreground">{quantity}</span>
           <button
-            onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
-            disabled={quantity >= product.stock || product.stock === 0}
+            onClick={() => setQuantity((q) => Math.min(100, product.stock, q + 1))}
+            disabled={quantity >= Math.min(100, product.stock) || product.stock === 0}
             className="px-3 py-1.5 text-sm font-bold text-muted-foreground hover:bg-muted rounded-r-lg transition"
           >
             +
@@ -100,7 +102,7 @@ export function ProductDetailActions({ product }: ProductDetailActionsProps) {
       <div className="flex flex-col sm:flex-row gap-3">
         <Button
           onClick={handleAddToCart}
-          disabled={product.stock === 0}
+          disabled={product.stock === 0 || cartDisabled}
           variant="default"
           size="lg"
           className="flex-1 font-bold text-sm h-12"
@@ -111,7 +113,7 @@ export function ProductDetailActions({ product }: ProductDetailActionsProps) {
 
         <Button
           onClick={handleBuyNow}
-          disabled={product.stock === 0}
+          disabled={product.stock === 0 || cartDisabled}
           variant="secondary"
           size="lg"
           className="flex-1 font-bold text-sm h-12 bg-emerald-600 hover:bg-emerald-700 text-white"

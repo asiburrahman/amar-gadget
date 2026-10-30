@@ -64,16 +64,17 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
   const [addedNoticeId, setAddedNoticeId] = useState<string | null>(null);
   const [selectedHeroImage, setSelectedHeroImage] = useState<string | null>(null);
   const addItem = useCartStore((state) => state.addItem);
+  const cartDisabled = useCartStore((state) => state.busy || state.refreshing || state.status !== "ready");
   const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
-  const handleAddToCart = (product: ShowcaseProduct, e?: React.MouseEvent) => {
+  const handleAddToCart = async (product: ShowcaseProduct, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     if (product.stock === 0) return;
 
-    addItem({
+    const saved = await addItem({
       id: product.id,
       name: product.name,
       price: product.price,
@@ -84,6 +85,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
       quantity: 1,
     });
 
+    if (!saved) return;
     setAddedNoticeId(product.id);
     setTimeout(() => {
       setAddedNoticeId((prev) => (prev === product.id ? null : prev));
@@ -298,7 +300,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                     <button
                       type="button"
                       onClick={() => handleAddToCart(heroProduct)}
-                      disabled={heroProduct.stock === 0}
+                      disabled={heroProduct.stock === 0 || cartDisabled}
                       className={`h-10 px-5 rounded-full font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50 ${
                         addedNoticeId === heroProduct.id
                           ? "bg-emerald-500 text-white"
@@ -437,6 +439,7 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
   isWishlisted,
 }) => {
   const wishlistDisabled = useWishlistStore((state) => state.busy || state.status !== "ready");
+  const cartDisabled = useCartStore((state) => state.busy || state.refreshing || state.status !== "ready");
   if (!product) {
     return (
       <div className="flex-1 p-5 flex flex-col items-center justify-center text-center bg-gray-50/30 min-h-[220px]">
@@ -499,7 +502,7 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
           <button
             type="button"
             onClick={(e) => onAddToCart(product, e)}
-            disabled={product.stock === 0}
+            disabled={product.stock === 0 || cartDisabled}
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-90 disabled:opacity-40 ${
               isAdded
                 ? "bg-emerald-500 text-white"
