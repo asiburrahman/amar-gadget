@@ -129,6 +129,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
                       <span>প্রোফাইল ও সেটিংস (Profile)</span>
                     </Link>
 
+                    <Link href={displayUser.role === "ADMIN" ? "/admin/reviews" : displayUser.role === "MEMBER" ? "/member/reviews" : "/user/reviews"} onClick={() => setIsUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 hover:bg-[#fed700]/20 hover:text-black font-bold transition">{displayUser.role === "ADMIN" ? "Review moderation" : displayUser.role === "MEMBER" ? "Reviews of my products" : "My purchase reviews"}</Link>
                     <div className="border-t border-gray-100 my-1"></div>
 
                     <button
@@ -415,6 +416,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
                     >
                       🚪 লগআউট (Sign Out)
                     </button>
+                    <Link href={displayUser.role === "ADMIN" ? "/admin/reviews" : displayUser.role === "MEMBER" ? "/member/reviews" : "/user/reviews"} onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-lg">{displayUser.role === "ADMIN" ? "Review moderation" : displayUser.role === "MEMBER" ? "Reviews of my products" : "My purchase reviews"}</Link>
                   </div>
                 ) : (
                   <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Register or Sign in</Link>

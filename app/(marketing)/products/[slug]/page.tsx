@@ -12,6 +12,9 @@ import { RecordProductView } from "@/components/catalog/record-product-view";
 import { getPublicProduct } from "@/lib/public-product";
 import { productPath } from "@/lib/seo/urls";
 import { createMetadata } from "@/lib/seo/metadata";
+import { readPublicReviews } from "@/lib/reviews";
+import { ProductReviews } from "@/components/reviews/product-reviews";
+import { RatingSummary } from "@/components/reviews/rating-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +50,8 @@ export default async function ProductDetailPage({
   const numericDiscountPrice = product.discountPrice === null ? null : Number(product.discountPrice);
   const effectivePrice = numericDiscountPrice ?? numericPrice;
   const specifications = specificationsSchema.parse(product.specifications);
+  let reviewPage = null;
+  try { reviewPage = await readPublicReviews(product.id); } catch { /* Keep the real product usable and expose a retryable review error. */ }
 
   const jsonLd = generateProductSchema({
     id: product.id,
@@ -108,10 +113,7 @@ export default async function ProductDetailPage({
                 {/* Rating & Stock */}
                 <div className="flex items-center space-x-4 text-xs">
                   <div className="flex items-center text-amber-500 font-semibold">
-                    {"★".repeat(Math.round(product.rating || 5))}
-                    <span className="ml-1 text-muted-foreground font-normal">
-                      ({product.reviewCount || 0} reviews)
-                    </span>
+                    {reviewPage ? <RatingSummary rating={reviewPage.rating} count={reviewPage.total} /> : <span>Ratings temporarily unavailable</span>}
                   </div>
                   <span className="text-border">|</span>
                   <span className={product.stock > 0 ? "text-emerald-600 font-bold bg-emerald-500/10 px-2 py-0.5 rounded" : "text-destructive font-bold"}>
@@ -164,6 +166,7 @@ export default async function ProductDetailPage({
           <section aria-label="Technical specifications" className="mt-8 border rounded-xl p-6"><h2 className="text-xl font-bold mb-4">Technical specifications</h2>
             {specifications.length ? <dl>{specifications.map((spec) => <div key={spec.label} className="grid sm:grid-cols-2 gap-2 border-b py-3"><dt className="font-semibold">{spec.label}</dt><dd>{spec.value}</dd></div>)}</dl> : <p>No technical specifications supplied.</p>}
           </section>
+          <ProductReviews key={product.id} productId={product.id} initialPage={reviewPage} />
         </div>
       </main>
     </>

@@ -68,6 +68,7 @@ model Product {
   status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED
   rating        Float       @default(0)
   reviewCount   Int         @default(0)
+  reviewVersion Int         @default(0)
   
   sellerId      String
   seller        User        @relation(fields: [sellerId], references: [id])
@@ -85,6 +86,8 @@ model Product {
   reviews       Review[]
   wishlists     Wishlist[]
   campaigns     CampaignProduct[]
+
+  @@index([sellerId, id])
 }
 
 model ProductImageCleanup {
@@ -218,6 +221,10 @@ model OrderItem {
   price     Decimal  @db.Decimal(10, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  reviews   Review[]
+
+  @@index([productId, orderId, id])
+  @@index([orderId, productId])
 }
 
 model Review {
@@ -230,6 +237,22 @@ model Review {
   product   Product  @relation(fields: [productId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Existing ownerless/unverified records remain quarantined as LEGACY.
+  // A SQL partial index permits one canonical row per user/product while
+  // retaining historical duplicates as read-only, noncanonical legacy rows.
+  isCanonical Boolean @default(true)
+  status String @default("PENDING")
+  version Int @default(1)
+  orderItemId String?
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+  moderationReason String? @db.VarChar(300)
+  moderatedById String? @db.VarChar(64)
+  moderatedAt DateTime?
+
+  @@index([userId, createdAt(sort: Desc), id])
+  @@index([productId, status, createdAt(sort: Desc), id])
+  @@index([status, createdAt, id])
+  @@index([orderItemId])
 }
 
 model Wishlist {

@@ -67,7 +67,7 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({ products
                   stock={item.stock}
                   imageUrl={item.imageUrl}
                   category={item.category}
-                  rating={item.rating ?? 5}
+                  rating={item.rating ?? 0}
                   unitsSold={item.unitsSold}
                 />
               ))}

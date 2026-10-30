@@ -11,6 +11,7 @@ import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
 import { productImageNeedsDirectDelivery, isPublicProductImageUrl } from "@/lib/product-media-policy";
 import { CompareButton } from "@/components/catalog/compare-button";
+import { RatingSummary } from "@/components/reviews/rating-summary";
 
 interface ProductCardProps {
   id: string;
@@ -38,7 +39,7 @@ export const ProductCard = ({
   stock,
   imageUrl,
   category,
-  rating = 5,
+  rating = 0,
   unitsSold,
   className = "",
 }: ProductCardProps) => {
@@ -165,8 +166,7 @@ export const ProductCard = ({
                 </span>
               )}
               <div className="flex items-center gap-0.5 text-amber-500 font-bold text-[11px] ml-auto shrink-0">
-                <span>★</span>
-                <span className="text-slate-700 dark:text-slate-300">{rating.toFixed(1)}</span>
+                <RatingSummary rating={rating} />
               </div>
             </div>
 
