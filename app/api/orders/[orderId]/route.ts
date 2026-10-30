@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
 import { orderHistoryEntry } from "@/lib/order-history";
+import { fulfillmentStatusLabel } from "@/lib/fulfillment-policy";
 
 export async function GET(req: Request, { params }: { params: Promise<{ orderId: string }> }) {
   const headers = { "Cache-Control": "private, no-store" };
@@ -18,7 +19,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ orderId:
     }
     const order = await prisma.order.findFirst({
       where: { OR: [{ id: orderId }, { trackingNumber: orderId }] },
-      select: { id: true, status: true, paymentStatus: true, createdAt: true, total: true, shippingPhone: true, shippingCarrier: true, shipmentTrackingNumber: true, items: { select: { quantity: true } } },
+      select: { id: true, status: true, paymentStatus: true, createdAt: true, total: true, shippingPhone: true, shippingCarrier: true, shipmentTrackingNumber: true, items: { select: { quantity: true } }, fulfillments: { where: { items: { some: {} } }, orderBy: { id: "asc" }, select: { id: true, status: true, carrier: true, trackingNumber: true, shippedAt: true, deliveredAt: true, legacySnapshot: true, items: { select: { quantity: true } } } } },
     });
     if (!order || order.shippingPhone?.replace(/\D/g, "") !== phone) return NextResponse.json({ success: false, message: "No order matched those details." }, { status: 404, headers });
     if (cursor && !(await prisma.orderEvent.findFirst({ where: { id: cursor, orderId: order.id }, select: { id: true } }))) return NextResponse.json({ success: false, message: "History position not found. Refresh tracking." }, { status: 404, headers });
@@ -28,6 +29,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ orderId:
     return NextResponse.json({ success: true, order: {
       id: order.id, status: order.status, paymentStatus: order.paymentStatus, createdAt: order.createdAt.toISOString(), total: Number(order.total),
       carrier: order.shippingCarrier, shipmentTrackingNumber: order.shipmentTrackingNumber,
+      statusLabel: fulfillmentStatusLabel(order.status),
+      shipments: order.fulfillments.map((row) => ({ id: row.id, status: row.status, statusLabel: fulfillmentStatusLabel(row.status), carrier: row.carrier, trackingNumber: row.trackingNumber, shippedAt: row.shippedAt?.toISOString() ?? null, deliveredAt: row.deliveredAt?.toISOString() ?? null, legacySnapshot: row.legacySnapshot, itemsCount: row.items.reduce((sum, item) => sum + item.quantity, 0) })),
       itemsCount: order.items.reduce((count, item) => count + item.quantity, 0),
       timeline: page.map((event, index) => ({ ...orderHistoryEntry(event), done: true, current: !nextCursor && index === page.length - 1 })), nextCursor,
     } }, { headers });

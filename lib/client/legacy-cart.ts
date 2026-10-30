@@ -95,7 +95,7 @@ export function createLegacyCartRepository(deps: Dependencies) {
       const pending = root.state.pendingCheckouts;
       if (!object(pending) || !Object.hasOwn(pending, order.id)) return;
       const closed = order.status === "CANCELLED" || order.paymentStatus === "FAILED";
-      const purchased = !closed && (order.paymentStatus === "PAID" || (order.paymentMethod === "COD" && ["PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)));
+      const purchased = !closed && (order.paymentStatus === "PAID" || (order.paymentMethod === "COD" && ["PROCESSING", "PARTIALLY_SHIPPED", "SHIPPED", "PARTIALLY_DELIVERED", "DELIVERED"].includes(order.status)));
       if (!closed && !purchased) throw new GuestCartError("This checkout is still pending. Resume or close it before importing the older cart.");
       const receipt = pending[order.id], selected = object(receipt) && Array.isArray(receipt.items) ? receipt.items : [];
       if (purchased) root.state.items = root.state.items.flatMap((row) => {

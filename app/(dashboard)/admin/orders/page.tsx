@@ -1,8 +1,7 @@
 import React from "react";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { verifyJwtToken } from "@/lib/auth";
+import { getCurrentUserWithRole } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { getAllOrdersForAdmin } from "@/server/actions/order/order-actions";
 import AdminOrdersClient from "./admin-orders-client";
@@ -10,21 +9,8 @@ import AdminOrdersClient from "./admin-orders-client";
 export const dynamic = "force-dynamic";
 
 export default async function AdminOrdersPage() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-
-  let currentUserRole: string | null = null;
-  if (token) {
-    const payload = await verifyJwtToken(token);
-    if (payload?.role) {
-      currentUserRole = payload.role as string;
-    }
-  }
-
-  // Ensure Admin role
-  if (currentUserRole !== "ADMIN") {
-    redirect("/login");
-  }
+  const actor = await getCurrentUserWithRole(["ADMIN"]);
+  if (!actor) redirect("/login");
 
   const { data: orders = [] } = await getAllOrdersForAdmin();
 
@@ -66,7 +52,7 @@ export default async function AdminOrdersPage() {
       </div>
 
       {/* Admin Orders Management Table */}
-      <AdminOrdersClient initialOrders={orders} />
+      <AdminOrdersClient ownerId={actor.id} initialOrders={orders} />
     </div>
   );
 }

@@ -39,7 +39,7 @@ it("updates all confirmation state after delayed server payment confirmation", a
   await act(async () => { await jest.advanceTimersByTimeAsync(10_000); });
   expect(screen.getByText("Payment confirmed")).toBeTruthy();
   expect(screen.getByText("Amount paid")).toBeTruthy();
-  expect(screen.getByText("PROCESSING")).toBeTruthy();
+  expect(screen.getByText("Preparing shipment")).toBeTruthy();
   expect(useCartStore.getState().items[0].quantity).toBe(1);
   await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
   expect(fetch).toHaveBeenCalledTimes(2);

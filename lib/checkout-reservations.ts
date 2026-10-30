@@ -15,9 +15,11 @@ export async function lockOrder(tx: Prisma.TransactionClient, orderId: string) {
 export async function releaseReservation(
   orderId: string,
   evidence: { noSessionBefore: Date } | { expiredSessionId: string },
+  authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
     await lockOrder(tx, orderId);
+    if (authorize) await authorize(tx);
     const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
     if (!order || order.paymentMethod !== "STRIPE" || order.status !== "PENDING" || order.paymentStatus !== "UNPAID") return false;
     if ("noSessionBefore" in evidence) {
@@ -62,7 +64,7 @@ export async function confirmStripePayment(orderId: string, intentId: string | n
   });
 }
 
-export async function applyStripeSession(session: Stripe.Checkout.Session) {
+export async function applyStripeSession(session: Stripe.Checkout.Session, authorizeCancellation?: (tx: Prisma.TransactionClient) => Promise<void>) {
   const orderId = session.metadata?.orderId;
   if (!orderId) throw new Error("Missing Stripe order metadata");
   if (session.payment_status === "paid") {
@@ -71,19 +73,19 @@ export async function applyStripeSession(session: Stripe.Checkout.Session) {
     return "paid" as const;
   }
   if (session.status === "expired") {
-    return await releaseReservation(orderId, { expiredSessionId: session.id }) ? "released" as const : "unchanged" as const;
+    return await releaseReservation(orderId, { expiredSessionId: session.id }, authorizeCancellation) ? "released" as const : "unchanged" as const;
   }
   return "waiting" as const;
 }
 
 /** Safe for overlapping workers: every release/payment write locks the order. */
-export async function reconcileReservation(orderId: string, now = new Date(), force = false) {
+export async function reconcileReservation(orderId: string, now = new Date(), force = false, authorizeCancellation?: (tx: Prisma.TransactionClient) => Promise<void>) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order || order.paymentMethod !== "STRIPE" || order.status !== "PENDING" || order.paymentStatus !== "UNPAID") return "unchanged" as const;
   if (!force && (!order.reservationExpiresAt || order.reservationExpiresAt > now)) return "unchanged" as const;
   if (!order.stripeSessionRequestedAt) {
     const cutoff = force ? order.reservationExpiresAt ?? now : now;
-    return await releaseReservation(orderId, { noSessionBefore: cutoff }) ? "released" as const : "unchanged" as const;
+    return await releaseReservation(orderId, { noSessionBefore: cutoff }, authorizeCancellation) ? "released" as const : "unchanged" as const;
   }
   if (!order.stripeCheckoutSessionId) {
     // A timeout could mean Stripe created a session but its response was lost.
@@ -104,7 +106,7 @@ export async function reconcileReservation(orderId: string, now = new Date(), fo
       session = await stripe.checkout.sessions.retrieve(session.id);
     }
   }
-  const result = await applyStripeSession(session);
+  const result = await applyStripeSession(session, authorizeCancellation);
   if (result === "waiting") {
     await prisma.order.updateMany({ where: { id: orderId, status: "PENDING", paymentStatus: "UNPAID" }, data: {
       reservationNextCheckAt: new Date(now.getTime() + 5 * 60_000), reservationReviewReason: "PAYMENT_PENDING_PROVIDER",

@@ -31,6 +31,7 @@ model User {
   addresses   Address[]
   cart        Cart?
   legacyAvatar UserAvatarLegacy?
+  vendorFulfillments OrderFulfillment[]
   otpTokens   OtpToken[]
   otpThrottles OtpThrottle[]
 }
@@ -152,6 +153,7 @@ model Order {
   user            User        @relation(fields: [userId], references: [id])
   total           Decimal     @db.Decimal(10, 2)
   status          String      @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  fulfillmentVersion Int @default(1)
   paymentMethod   String      @default("COD") // COD, STRIPE
   paymentStatus   String      @default("UNPAID") // UNPAID, PAID, FAILED
   paymentIntentId String?
@@ -179,6 +181,7 @@ model Order {
   
   items           OrderItem[]
   events          OrderEvent[]
+  fulfillments    OrderFulfillment[]
 
   @@index([paymentMethod, status, paymentStatus, reservationNextCheckAt], map: "Order_reservation_sweep_idx")
   @@index([userId, createdAt(sort: Desc)], map: "Order_userId_createdAt_idx")
@@ -225,6 +228,8 @@ model OrderEvent {
   paymentStatus          String?
   shippingCarrier        String? @db.VarChar(80)
   shipmentTrackingNumber String? @db.VarChar(120)
+  fulfillmentId          String? @db.VarChar(64)
+  fulfillmentStatus      String? @db.VarChar(16)
   occurredAt             DateTime?
   recordedAt             DateTime @default(now())
 
@@ -242,9 +247,57 @@ model OrderItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   reviews   Review[]
+  // The database binds new items to their seller shipment before INSERT.
+  // Nullable in Prisma permits existing nested-create callers to omit it;
+  // the reviewed SQL constraints enforce a populated, matching assignment.
+  fulfillmentId String?
+  fulfillment OrderFulfillment? @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
 
   @@index([productId, orderId, id])
   @@index([orderId, productId])
+  @@index([fulfillmentId, id])
+}
+
+model OrderFulfillment {
+  id String @id @default(uuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerId String
+  seller User @relation(fields: [sellerId], references: [id])
+  status String @default("PENDING")
+  version Int @default(1)
+  carrier String? @db.VarChar(80)
+  trackingNumber String? @db.VarChar(120)
+  shippedAt DateTime?
+  deliveredAt DateTime?
+  codCollected Boolean @default(false)
+  codCollectedAt DateTime?
+  legacySnapshot Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items OrderItem[]
+  events FulfillmentEvent[]
+  @@unique([orderId, sellerId])
+  @@index([sellerId, createdAt(sort: Desc), id])
+  @@index([sellerId, status, createdAt(sort: Desc), id])
+}
+
+model FulfillmentEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  fulfillmentId String
+  fulfillment OrderFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
+  kind String
+  previousStatus String?
+  status String
+  carrier String? @db.VarChar(80)
+  trackingNumber String? @db.VarChar(120)
+  codCollected Boolean
+  actorId String? @db.VarChar(64)
+  actorRole String? @db.VarChar(16)
+  occurredAt DateTime?
+  recordedAt DateTime @default(now())
+  @@index([fulfillmentId, sequence])
 }
 
 model Review {

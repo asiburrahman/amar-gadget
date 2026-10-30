@@ -48,7 +48,9 @@ async function main() {
     const checkout = await call("/checkout", action("createOrder", "app/(marketing)/checkout/page"), [{ cart: context, items: [{ productId: product.id, quantity: 1 }], fullName: "Native buyer", phone: "01700000000", street: "Review fixture road", city: "Dhaka", district: "Dhaka", paymentMethod: "COD", checkoutToken: randomBytes(32).toString("hex") }], a); assert.equal(checkout.success, true);
     assert.equal((await readAccess()).eligible, false);
     phase = "compiled authorized delivery and paid purchase eligibility";
-    const delivered = await call("/admin/orders", action("updateOrderStatusByAdmin", "app/(dashboard)/admin/orders/page"), [checkout.orderId, "DELIVERED"], moderator); assert.equal(delivered.success, true); assert.equal(delivered.data.paymentStatus, "PAID"); assert.equal((await readAccess(b)).eligible, true);
+    const groupsResponse = await send("/api/member/fulfillments?orderId=" + checkout.orderId, "GET", undefined, vendor, seller.id, "X-Fulfillment-Owner"); assert.equal(groupsResponse.status, 200); const group = (await groupsResponse.json()).shipments[0];
+    assert.equal((await send("/api/member/fulfillments", "POST", { fulfillmentId: group.id, version: group.version, action: "ship", carrier: "Native courier", trackingNumber: "NATIVE-REVIEW" }, vendor, seller.id, "X-Fulfillment-Owner")).status, 200);
+    const delivered = await send("/api/admin/fulfillments", "POST", { fulfillmentId: group.id, version: group.version + 1, action: "deliver", codMoneyReceived: true }, moderator, admin.id, "X-Fulfillment-Owner"); assert.equal(delivered.status, 200); assert.equal((await delivered.json()).shipment.paymentStatus, "PAID"); assert.equal((await readAccess(b)).eligible, true);
     phase = "real pending submission and cross-session owner/duplicate guards";
     const text = "Native <script>review-only</script> purchased product feedback";
     const submitted = await send(path, "POST", { productId: product.id, rating: 4, comment: text }, a, buyer.id); assert.equal(submitted.status, 201); let review = (await submitted.json()).review; assert.equal(review.status, "PENDING");

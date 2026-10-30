@@ -7,12 +7,16 @@ import { formatCurrency } from "@/lib/formatter";
 import { useCartStore } from "@/stores/cart-store";
 import { clearCheckoutAttemptForOrder } from "@/lib/checkout-attempt";
 import { cartCheckoutSchema } from "@/lib/validations/cart";
+import { CustomerShipments } from "@/components/orders/customer-shipments";
+import type { CustomerFulfillment } from "@/lib/validations/fulfillment";
+import { fulfillmentStatusLabel } from "@/lib/fulfillment-policy";
 
 export type ConfirmedOrder = {
   id: string; total: number; status: string; paymentStatus: string; paymentMethod: string;
   trackingNumber: string | null; shippingAddress: string | null; canViewOrders: boolean; needsReview: boolean;
   items: { id: string; quantity: number; price: number; product: { name: string } }[];
   cartSnapshot?: unknown;
+  fulfillments?: CustomerFulfillment[];
 };
 
 export function OrderConfirmation({ initialOrder }: { initialOrder: ConfirmedOrder }) {
@@ -84,11 +88,12 @@ export function OrderConfirmation({ initialOrder }: { initialOrder: ConfirmedOrd
     <p className="break-all">Order ID: {order.id}</p>
     {order.trackingNumber && <p>Tracking code: <strong>{order.trackingNumber}</strong></p>}
     <div className="space-y-2 rounded-xl bg-muted/30 p-4">
-      <p>Delivery status: <strong>{order.status}</strong></p>
+      <p>Delivery status: <strong>{fulfillmentStatusLabel(order.status)}</strong></p>
       <p>Payment status: <strong>{order.paymentStatus}</strong></p>
       <p>Payment method: {order.paymentMethod === "COD" ? "Cash on Delivery" : "Card (Stripe)"}</p>
       {order.shippingAddress && <p>Shipping address: {order.shippingAddress}</p>}
     </div>
+    <CustomerShipments shipments={order.fulfillments} items={order.items} />
     {pending && <p>We are waiting for server confirmation. Do not place another order. Your cart is retained until payment is verified.</p>}
     {cancelled && <p>This order will not be fulfilled. Your cart is retained.</p>}
     {failed && !cancelled && <p>Payment was not completed. Your cart is retained; check the saved checkout before trying again.</p>}

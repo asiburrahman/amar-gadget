@@ -11,6 +11,7 @@ import { getStripe } from "@/lib/stripe/stripe";
 import { readApplicationOrigin } from "@/config/runtime";
 import { acknowledgeGuestCart } from "@/lib/cart-checkout";
 import { CartError } from "@/lib/cart";
+import { customerShipmentSelect, customerShipment } from "@/lib/fulfillments";
 
 type Context = { params: Promise<{ orderId: string }> };
 async function authorizedOrder(req: Request, context: Context) {
@@ -18,7 +19,7 @@ async function authorizedOrder(req: Request, context: Context) {
   if (!limit.success) return NextResponse.json({ message: "Too many requests. Please wait a minute." }, { status: 429 });
   const { orderId } = await context.params;
   if (!z.string().uuid().safeParse(orderId).success) return NextResponse.json({ message: "Checkout not found." }, { status: 404 });
-  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: { include: { product: { select: { name: true } } } } } });
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { fulfillments: { where: { items: { some: {} } }, orderBy: { id: "asc" }, select: customerShipmentSelect }, items: { include: { product: { select: { name: true } } } } } });
   const user = await getCurrentUser();
   const token = (await cookies()).get("checkout_resume_token")?.value;
   const candidate = createHash("sha256").update(token ?? "").digest();
@@ -39,6 +40,7 @@ export async function GET(req: Request, context: Context) {
       reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
       needsReview: Boolean(order.reservationReviewReason),
       cartSnapshot: order.cartSnapshot,
+      fulfillments: order.fulfillments.map(customerShipment),
       items: order.items.map((item) => ({ productId: item.productId, name: item.product.name, quantity: item.quantity, price: Number(item.price) })),
     } }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ message: "Unable to load checkout. Please retry." }, { status: 503 }); }

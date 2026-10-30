@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { AuthenticatedUser } from "@/lib/session";
 import { publicProductWhere } from "@/lib/catalog-visibility";
 import { isPublicProductImageUrl } from "@/lib/product-media-policy";
+import { deliveredPaidItemWhere, deliveredPaidItemSql, isDeliveredPaidItem } from "@/lib/fulfilled-purchase";
 import { createReviewSchema, editReviewSchema, moderateReviewSchema, withdrawReviewSchema, REVIEW_PAGE_SIZE, type CreateReviewInput, type EditReviewInput, type ModerateReviewInput, type OwnedReview, type PublicReviewPage, type ReviewAccess, type ReviewProduct, type ReviewStatus } from "@/lib/validations/review";
 
 export class ReviewError extends Error {
@@ -10,7 +11,7 @@ export class ReviewError extends Error {
 }
 export const publishedReviewWhere: Prisma.ReviewWhereInput = {
   status: "PUBLISHED", isCanonical: true,
-  orderItem: { is: { order: { is: { status: "DELIVERED", paymentStatus: "PAID" } } } },
+  orderItem: { is: deliveredPaidItemWhere },
 };
 const productSelect = { id: true, name: true, slug: true, imageUrl: true } satisfies Prisma.ProductSelect;
 const ownerInclude = { product: { select: productSelect } } satisfies Prisma.ReviewInclude;
@@ -43,7 +44,7 @@ async function lockProduct(tx: Prisma.TransactionClient, id: string) {
   return product;
 }
 async function eligiblePurchase(tx: Prisma.TransactionClient, userId: string, productId: string) {
-  return tx.orderItem.findFirst({ where: { productId, order: { userId, status: "DELIVERED", paymentStatus: "PAID" } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, orderId: true } });
+  return tx.orderItem.findFirst({ where: { productId, order: { userId }, AND: [deliveredPaidItemWhere, { fulfillment: { is: { sellerId: { not: userId } } } }] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, orderId: true } });
 }
 async function lockPurchase(tx: Prisma.TransactionClient, itemId: string) {
   const candidate = await tx.orderItem.findUnique({ where: { id: itemId }, select: { orderId: true } });
@@ -51,20 +52,20 @@ async function lockPurchase(tx: Prisma.TransactionClient, itemId: string) {
   // Payment/refund code uses the same Order-before-User direction. A review
   // never waits for an existing order while holding the product/account lock.
   await tx.$queryRaw`SELECT id FROM "Order" WHERE id=${candidate.orderId} FOR UPDATE`;
-  return tx.orderItem.findUniqueOrThrow({ where: { id: itemId }, include: { order: { select: { userId: true, status: true, paymentStatus: true } } } });
+  return tx.orderItem.findUniqueOrThrow({ where: { id: itemId }, include: { fulfillment: { select: { status: true, codCollected: true, sellerId: true } }, order: { select: { userId: true, status: true, paymentStatus: true, paymentMethod: true } } } });
 }
-function assertPurchase(item: { productId: string; order: { userId: string; status: string; paymentStatus: string } }, userId: string, productId: string) {
-  if (item.productId !== productId || item.order.userId !== userId || item.order.status !== "DELIVERED" || item.order.paymentStatus !== "PAID") throw new ReviewError("A delivered, paid purchase of this product is required.", "REVIEW_INELIGIBLE", 403);
+function assertPurchase(item: { productId: string; fulfillment: { status: string; codCollected: boolean; sellerId: string } | null; order: { userId: string; status: string; paymentStatus: string; paymentMethod: string } }, userId: string, productId: string) {
+  if (item.productId !== productId || item.order.userId !== userId || item.fulfillment?.sellerId === userId || !isDeliveredPaidItem(item)) throw new ReviewError("A delivered, paid purchase of this product is required.", "REVIEW_INELIGIBLE", 403);
 }
 /** Call with the Product lock held. Future refund/fulfillment changes must
  * reuse this reconciliation when they change delivered-purchase eligibility. */
 export async function reconcileProductReviews(tx: Prisma.TransactionClient, productId: string) {
   const [summary] = await tx.$queryRaw<{ total: bigint; rating: number }[]>`
     SELECT count(*) AS total,COALESCE(avg(r.rating),0)::double precision AS rating
-    FROM "Review" r JOIN "OrderItem" i ON i.id=r."orderItemId" JOIN "Order" o ON o.id=i."orderId" JOIN "Product" p ON p.id=r."productId"
+    FROM "Review" r JOIN "OrderItem" i ON i.id=r."orderItemId" JOIN "Order" o ON o.id=i."orderId" JOIN "OrderFulfillment" f ON f.id=i."fulfillmentId" JOIN "Product" p ON p.id=r."productId"
     WHERE r."productId"=${productId} AND r.status='PUBLISHED' AND r."isCanonical"
       AND i."productId"=r."productId" AND o."userId"=r."userId" AND p."sellerId"<>r."userId"
-      AND o.status='DELIVERED' AND o."paymentStatus"='PAID'`;
+      AND f."sellerId"<>r."userId" AND ${deliveredPaidItemSql}`;
   await tx.product.update({ where: { id: productId }, data: { reviewCount: Number(summary.total), rating: summary.rating, reviewVersion: { increment: 1 } } });
 }
 export async function readPublicReviews(productId: string, page = 1): Promise<PublicReviewPage> {
@@ -99,12 +100,12 @@ export async function readOwnerReviews(actor: AuthenticatedUser, page = 1) {
 export async function readEligibleReviews(actor: AuthenticatedUser, page = 1) {
   return transaction(async (tx) => {
     await lockActor(tx, actor);
-    const [count] = await tx.$queryRaw<{ total: bigint }[]>`SELECT count(DISTINCT p.id) AS total FROM "Product" p JOIN "OrderItem" i ON i."productId"=p.id JOIN "Order" o ON o.id=i."orderId"
-      WHERE o."userId"=${actor.id} AND o.status='DELIVERED' AND o."paymentStatus"='PAID' AND p."sellerId"<>${actor.id}
+    const [count] = await tx.$queryRaw<{ total: bigint }[]>`SELECT count(DISTINCT p.id) AS total FROM "Product" p JOIN "OrderItem" i ON i."productId"=p.id JOIN "Order" o ON o.id=i."orderId" JOIN "OrderFulfillment" f ON f.id=i."fulfillmentId"
+      WHERE o."userId"=${actor.id} AND ${deliveredPaidItemSql} AND f."sellerId"<>${actor.id} AND p."sellerId"<>${actor.id}
       AND NOT EXISTS(SELECT 1 FROM "Review" r WHERE r."productId"=p.id AND r."userId"=${actor.id} AND r."isCanonical")`;
     const total = Number(count.total); checkPage(page, total); const offset = (page - 1) * REVIEW_PAGE_SIZE;
-    const products = await tx.$queryRaw<ReviewProduct[]>`SELECT DISTINCT p.id,p.name,p.slug,p."imageUrl" FROM "Product" p JOIN "OrderItem" i ON i."productId"=p.id JOIN "Order" o ON o.id=i."orderId"
-      WHERE o."userId"=${actor.id} AND o.status='DELIVERED' AND o."paymentStatus"='PAID' AND p."sellerId"<>${actor.id}
+    const products = await tx.$queryRaw<ReviewProduct[]>`SELECT DISTINCT p.id,p.name,p.slug,p."imageUrl" FROM "Product" p JOIN "OrderItem" i ON i."productId"=p.id JOIN "Order" o ON o.id=i."orderId" JOIN "OrderFulfillment" f ON f.id=i."fulfillmentId"
+      WHERE o."userId"=${actor.id} AND ${deliveredPaidItemSql} AND f."sellerId"<>${actor.id} AND p."sellerId"<>${actor.id}
       AND NOT EXISTS(SELECT 1 FROM "Review" r WHERE r."productId"=p.id AND r."userId"=${actor.id} AND r."isCanonical")
       ORDER BY p.id LIMIT ${REVIEW_PAGE_SIZE} OFFSET ${offset}`;
     return { ownerId: actor.id, products: products.map(productDto), total, page, totalPages: pages(total) };

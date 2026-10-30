@@ -38,15 +38,12 @@ export default async function SellerDashboardPage() {
   const orderItemsRaw = seller
     ? await prisma.orderItem.findMany({
         where: {
-          product: { sellerId: seller.id },
+          fulfillment: { is: { sellerId: seller.id } },
         },
         orderBy: { createdAt: "desc" },
         include: {
-          order: {
-            include: {
-              user: { select: { name: true, email: true, phone: true } },
-            },
-          },
+          order: { select: { id: true, paymentMethod: true, paymentStatus: true, createdAt: true } },
+          fulfillment: { select: { status: true, codCollected: true } },
           product: { select: { id: true, name: true, imageUrl: true, price: true } },
         },
       })
@@ -81,13 +78,10 @@ export default async function SellerDashboardPage() {
     },
     order: {
       id: item.order.id,
-      status: item.order.status,
+      status: item.fulfillment!.status,
       paymentMethod: item.order.paymentMethod,
-      paymentStatus: item.order.paymentStatus,
-      shippingAddress: item.order.shippingAddress,
-      trackingNumber: item.order.trackingNumber,
+      paymentStatus: item.order.paymentMethod === "COD" ? item.fulfillment!.codCollected ? "PAID" : "UNPAID" : item.order.paymentStatus,
       createdAt: item.order.createdAt.toISOString(),
-      user: item.order.user,
     },
   }));
 

@@ -4,6 +4,9 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
+import { CustomerShipments } from "@/components/orders/customer-shipments";
+import type { CustomerFulfillment } from "@/lib/validations/fulfillment";
+import { useAuth } from "@/hooks/use-auth";
 
 interface OrderItem {
   id: string;
@@ -27,6 +30,7 @@ interface Order {
   trackingNumber: string | null;
   createdAt: string | Date;
   items: OrderItem[];
+  fulfillments?: CustomerFulfillment[];
 }
 
 interface Props {
@@ -38,7 +42,13 @@ interface Props {
   initialOrders: Order[];
 }
 
-export default function UserOrdersClient({ user, initialOrders }: Props) {
+export default function UserOrdersClient(props: Props) {
+  const { user, loading } = useAuth();
+  if (loading) return <p role="status">Loading your account...</p>;
+  if (!user || user.id !== props.user.id) return <p>Reload your order history with the matching account.</p>;
+  return <OwnedUserOrdersClient key={user.id} {...props} />;
+}
+function OwnedUserOrdersClient({ initialOrders }: Props) {
   const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "DELIVERED" | "CANCELLED">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -81,6 +91,8 @@ export default function UserOrdersClient({ user, initialOrders }: Props) {
         label: "In Transit / Shipped",
         className: "bg-purple-500/10 text-purple-600 border-purple-500/20",
       },
+      PARTIALLY_SHIPPED: { label: "Partially shipped", className: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
+      PARTIALLY_DELIVERED: { label: "Partially delivered", className: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
       PROCESSING: {
         label: "Processing Order",
         className: "bg-blue-500/10 text-blue-600 border-blue-500/20",
@@ -277,6 +289,7 @@ export default function UserOrdersClient({ user, initialOrders }: Props) {
                 </div>
 
                 {/* Order Footer */}
+                <CustomerShipments shipments={order.fulfillments} items={order.items} />
                 <div className="p-4 sm:p-5 bg-muted/20 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="text-muted-foreground text-[11px]">
                     {order.shippingAddress && (

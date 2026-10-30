@@ -26,7 +26,7 @@ import type { OwnedReview } from "@/lib/validations/review";
     actAs(buyer); const response = await own.POST(request("/api/user/reviews", "POST", { productId: product.id, rating, comment })); expect(response.status).toBe(201); return (await response.json()).review as OwnedReview;
   };
   const publicRead = (page = 1) => publicApi(request(`/api/reviews?productId=${product.id}&page=${page}`));
-  const purchase = async (userId: string, productId: string) => db.order.create({ data: { userId, total: 100, status: "DELIVERED", paymentStatus: "PAID", paymentMethod: "COD", items: { create: { productId, quantity: 1, price: 100 } } }, include: { items: true } });
+  const purchase = async (userId: string, productId: string) => db.order.create({ data: { userId, total: 100, status: "DELIVERED", paymentStatus: "PAID", paymentMethod: "STRIPE", items: { create: { productId, quantity: 1, price: 100 } } }, include: { items: true } });
   beforeAll(async () => {
     db = (await import("@/lib/prisma")).prisma;
     [buyer, other, seller, secondSeller, admin] = await Promise.all(["buyer", "other", "seller", "second-seller", "admin"].map((name) => db.user.create({ data: { email: `${prefix}-${name}@example.invalid`, name: `${name} Private-family-name`, isVerified: true, role: name === "admin" ? "ADMIN" : name.includes("seller") ? "MEMBER" : "USER", sellerStatus: "APPROVED" } })));
@@ -38,7 +38,7 @@ import type { OwnedReview } from "@/lib/validations/review";
   beforeEach(async () => {
     await db.review.deleteMany({ where: { product: { categoryId: category.id } } });
     await db.product.updateMany({ where: { categoryId: category.id }, data: { status: "APPROVED", rating: 0, reviewCount: 0, reviewVersion: 0 } });
-    await db.order.updateMany({ where: { items: { some: { product: { categoryId: category.id } } } }, data: { status: "DELIVERED", paymentStatus: "PAID" } });
+    await db.order.updateMany({ where: { items: { some: { id: { in: [buyerItem, otherItem] } } } }, data: { status: "DELIVERED", paymentStatus: "PAID" } });
     await db.user.updateMany({ where: { id: { in: [seller.id, secondSeller.id] } }, data: { sellerStatus: "APPROVED", isVerified: true } });
     await db.user.update({ where: { id: admin.id }, data: { role: "ADMIN", isVerified: true } });
     [buyer, seller, secondSeller, admin] = await Promise.all([buyer, seller, secondSeller, admin].map((actor) => db.user.findUniqueOrThrow({ where: { id: actor.id } })));
@@ -58,9 +58,10 @@ import type { OwnedReview } from "@/lib/validations/review";
     const access = await own.GET(request(`/api/user/reviews?productId=${product.id}`)); expect(access.status).toBe(200); expect(await access.json()).toMatchObject({ ownerId: buyer.id, eligible: true, review: null });
     const eligible = await own.GET(request("/api/user/reviews?tab=eligible")); expect((await eligible.json()).products.map((row: { id: string }) => row.id)).toEqual([product.id]);
     for (const extra of [{ userId: other.id }, { orderItemId: otherItem }, { status: "PUBLISHED" }, { isCanonical: false }]) expect((await own.POST(request("/api/user/reviews", "POST", { productId: product.id, rating: 5, comment: null, ...extra }))).status).toBe(400);
-    const orderId = (await db.orderItem.findUniqueOrThrow({ where: { id: buyerItem } })).orderId;
     for (const state of [{ status: "PROCESSING", paymentStatus: "PAID" }, { status: "DELIVERED", paymentStatus: "UNPAID" }, { status: "CANCELLED", paymentStatus: "PAID" }]) {
-      await db.order.update({ where: { id: orderId }, data: state }); const result = await own.POST(request("/api/user/reviews", "POST", { productId: product.id, rating: 5, comment: null })); expect(result.status).toBe(403); expect((await result.json()).code).toBe("REVIEW_INELIGIBLE");
+      const account = await db.user.create({ data: { email: prefix + "-ineligible-" + randomUUID() + "@example.invalid", role: "USER", isVerified: true } });
+      await db.order.create({ data: { ...state, userId: account.id, total: 100, paymentMethod: "STRIPE", items: { create: { productId: product.id, quantity: 1, price: 100 } } } });
+      actAs(account); const result = await own.POST(request("/api/user/reviews", "POST", { productId: product.id, rating: 5, comment: null }, account)); expect(result.status).toBe(403); expect((await result.json()).code).toBe("REVIEW_INELIGIBLE");
     }
   });
   it("stores pending feedback privately and publishes actual text/rating only after authorized moderation", async () => {

@@ -1,3 +1,4 @@
+import { deliveredPaidItemSql } from "@/lib/fulfilled-purchase";
 import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -61,7 +62,7 @@ const runListing = cache(async (serialized: string, serializedScope: string) => 
     const totalPages = Math.ceil(total / query.limit);
     if (query.page > Math.max(1, totalPages)) return { ...empty, total, totalPages, outOfRange: true };
     if (!total) return empty;
-    const sales = query.sort === "bestsellers" ? Prisma.sql`LEFT JOIN LATERAL (SELECT sum(oi.quantity)::bigint AS units FROM "OrderItem" oi JOIN "Order" o ON o.id = oi."orderId" WHERE oi."productId" = p.id AND o.status = 'DELIVERED' AND o."paymentStatus" = 'PAID') sold ON true` : Prisma.empty;
+    const sales = query.sort === "bestsellers" ? Prisma.sql`LEFT JOIN LATERAL (SELECT sum(oi.quantity)::bigint AS units FROM "OrderItem" oi JOIN "Order" o ON o.id = oi."orderId" JOIN "OrderFulfillment" f ON f.id=oi."fulfillmentId" WHERE oi."productId" = p.id AND ${deliveredPaidItemSql}) sold ON true` : Prisma.empty;
     const units = query.sort === "bestsellers" ? Prisma.sql`COALESCE(sold.units, 0)::bigint` : Prisma.sql`0::bigint`;
     const ordering = {
       latest: Prisma.sql`p."createdAt" DESC, p.id ASC`,

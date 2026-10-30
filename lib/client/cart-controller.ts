@@ -363,7 +363,7 @@ export function createCartController(deps: Dependencies) {
             bindCheckoutAttempt(attempt, order.id, deps.attemptStorage?.());
             set({ recentCheckout: { id: order.id, status: order.status, paymentStatus: order.paymentStatus, paymentMethod: order.paymentMethod, createdAt: order.createdAt ?? "" } });
             const closed = order.status === "CANCELLED" || order.paymentStatus === "FAILED";
-            const confirmed = !closed && (order.paymentStatus === "PAID" || (order.paymentMethod === "COD" && ["PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)));
+            const confirmed = !closed && (order.paymentStatus === "PAID" || (order.paymentMethod === "COD" && ["PROCESSING", "PARTIALLY_SHIPPED", "SHIPPED", "PARTIALLY_DELIVERED", "DELIVERED"].includes(order.status)));
             let handled = false;
             if (closed) handled = await get().forgetCheckout(order.id, context);
             else if (confirmed) handled = await get().completeCheckout(order.id, context);

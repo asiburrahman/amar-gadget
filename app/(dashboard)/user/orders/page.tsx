@@ -1,44 +1,27 @@
 import React from "react";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { verifyJwtToken } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import UserOrdersClient from "./user-orders-client";
+import { customerShipment, customerShipmentSelect } from "@/lib/fulfillments";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomerOrdersPage() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-
-  let currentUserId: string | null = null;
-  if (token) {
-    const payload = await verifyJwtToken(token);
-    if (payload?.sub) {
-      currentUserId = payload.sub as string;
-    }
-  }
-
-  if (!currentUserId) {
-    redirect("/login");
-  }
-
-  const currentUser = await prisma.user.findUnique({
-    where: { id: currentUserId },
-    select: { id: true, name: true, email: true },
-  });
-
-  if (!currentUser) {
-    redirect("/login");
-  }
+  const actor = await getCurrentUser();
+  if (!actor) redirect("/login");
+  const currentUserId = actor.id;
+  const currentUser = await prisma.user.findUnique({ where: { id: actor.id }, select: { id: true, name: true, email: true } });
+  if (!currentUser) redirect("/login");
 
   // Fetch orders STRICTLY belonging to this user
   const orders = await prisma.order.findMany({
     where: { userId: currentUserId },
     orderBy: { createdAt: "desc" },
     include: {
+      fulfillments: { where: { items: { some: {} } }, orderBy: { id: "asc" }, select: customerShipmentSelect },
       items: {
         include: {
           product: {
@@ -57,6 +40,7 @@ export default async function CustomerOrdersPage() {
     paymentStatus: o.paymentStatus,
     shippingAddress: o.shippingAddress,
     trackingNumber: o.trackingNumber,
+    fulfillments: o.fulfillments.map(customerShipment),
     createdAt: o.createdAt.toISOString(),
     items: o.items.map((i) => ({
       id: i.id,

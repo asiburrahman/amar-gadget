@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
 import { updateOrderStatusByAdmin } from "@/server/actions/order/order-actions";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/stores/auth-store";
+import { AGGREGATE_ORDER_STATES, fulfillmentStatusLabel } from "@/lib/fulfillment-policy";
 import { ShipmentEditor } from "@/components/orders/shipment-editor";
 
 interface OrderItem {
@@ -22,6 +26,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  fulfillmentVersion: number;
   total: number;
   status: string;
   paymentMethod: string;
@@ -41,24 +46,40 @@ interface Order {
 }
 
 interface Props {
+  ownerId: string;
   initialOrders: Order[];
 }
 
-const STATUS_OPTIONS = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
+const STATUS_OPTIONS = AGGREGATE_ORDER_STATES;
 
-export default function AdminOrdersClient({ initialOrders }: Props) {
+export default function AdminOrdersClient(props: Props) {
+  const { user, loading } = useAuth();
+  if (loading) return <p role="status">Loading administrator account...</p>;
+  if (!user || user.id !== props.ownerId || user.role !== "ADMIN") return <p>Reload the administrator area with the matching account.</p>;
+  return <OwnedAdminOrdersClient key={props.ownerId + props.initialOrders.map((o) => o.id + ":" + o.fulfillmentVersion).join(",")} {...props} />;
+}
+function OwnedAdminOrdersClient({ initialOrders, ownerId }: Props) {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [isPending, startTransition] = useTransition();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [statusError, setStatusError] = useState("");
+  const mutation = useRef(false);
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
+    if (mutation.current) return;
+    mutation.current = true;
     setUpdatingId(orderId);
     setStatusError("");
     startTransition(async () => {
-      const res = await updateOrderStatusByAdmin(orderId, newStatus);
+      try {
+      const order = orders.find((row) => row.id === orderId);
+      if (!order) return;
+      const res = await updateOrderStatusByAdmin(orderId, newStatus, { ownerId, version: order.fulfillmentVersion });
+      const actor = useAuthStore.getState().user;
+      if (!actor || actor.id !== ownerId || actor.role !== "ADMIN") return;
       if (res.success) {
         setOrders((prev) =>
           prev.map((o) =>
@@ -67,12 +88,15 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
                   ...o,
                   status: res.data?.status ?? o.status,
                   paymentStatus: res.data?.paymentStatus ?? o.paymentStatus,
+                  fulfillmentVersion: res.data?.fulfillmentVersion ?? o.fulfillmentVersion,
                 }
               : o
           )
         );
       } else setStatusError(res.error || "The order could not be updated.");
-      setUpdatingId(null);
+      router.refresh();
+      } catch { if (useAuthStore.getState().user?.id === ownerId) setStatusError("The order change was not confirmed. Reload orders before retrying."); }
+      finally { mutation.current = false; setUpdatingId(null); }
     });
   };
 
@@ -106,7 +130,7 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
 
   return (
     <div className="space-y-6">
-      {statusError && <p role="alert" className="text-destructive">{statusError}</p>}
+      {statusError && <p role="alert" className="text-destructive">{statusError} <button type="button" className="underline" onClick={() => router.refresh()}>Reload orders</button></p>}
       {/* Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-card border border-border p-5 rounded-2xl shadow-xs space-y-1">
@@ -286,11 +310,7 @@ export default function AdminOrdersClient({ initialOrders }: Props) {
                           onChange={(e) => handleStatusChange(order.id, e.target.value)}
                           className="h-8 px-2.5 rounded-lg border border-input bg-background text-xs font-semibold focus:ring-2 focus:ring-primary focus:outline-none cursor-pointer"
                         >
-                          {STATUS_OPTIONS.map((st) => (
-                            <option key={st} value={st}>
-                              {st}
-                            </option>
-                          ))}
+                          {[order.status, ...(order.status === "PENDING" && (order.paymentMethod === "COD" || order.paymentStatus === "PAID") ? ["PROCESSING"] : []), ...(["PENDING", "PROCESSING"].includes(order.status) && order.paymentStatus !== "PAID" ? ["CANCELLED"] : [])].map((st) => <option key={st} value={st}>{fulfillmentStatusLabel(st)}</option>)}
                         </select>
                       </td>
 

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/formatter";
-import { updateOrderStatusBySeller } from "@/server/actions/order/order-actions";
+import { FulfillmentConsole } from "@/components/orders/fulfillment-console";
 
 interface ProductItem {
   id: string;
@@ -37,11 +37,6 @@ interface OrderItemData {
     shippingAddress?: string | null;
     trackingNumber?: string | null;
     createdAt: string;
-    user: {
-      name: string | null;
-      email: string;
-      phone: string | null;
-    };
   };
 }
 
@@ -63,9 +58,7 @@ export default function SellerDashboardClient({
 }: SellerDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<"ALL" | "APPROVED" | "PENDING">("ALL");
   const [activeMainTab, setActiveMainTab] = useState<"ORDERS" | "CATALOG" | "ANALYTICS">("ORDERS");
-  const [orderItems, setOrderItems] = useState<OrderItemData[]>(initialOrderItems);
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
-  const [msg, setMsg] = useState("");
+  const orderItems = initialOrderItems;
 
   const sellerStatus = seller?.sellerStatus || "PENDING";
   const isApproved = sellerStatus === "APPROVED";
@@ -124,39 +117,6 @@ export default function SellerDashboardClient({
       : activeTab === "PENDING"
       ? pendingProducts
       : products;
-
-  // Handler for Seller updating Order Status
-  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
-    if (!seller) return;
-    setUpdatingOrderId(orderId);
-    setMsg("");
-
-    try {
-      const result = await updateOrderStatusBySeller(orderId, newStatus);
-      if (result.success) {
-        setOrderItems((prev) =>
-          prev.map((item) =>
-            item.order.id === orderId
-              ? {
-                  ...item,
-                  order: {
-                    ...item.order,
-                    status: newStatus,
-                  },
-                }
-              : item
-          )
-        );
-        setMsg(`✓ Order ${newStatus === "DELIVERED" ? "marked as Delivered! Earnings credited." : "updated to " + newStatus}`);
-      } else {
-        setMsg(`❌ ${result.error || "Failed to update order"}`);
-      }
-    } catch (err) {
-      setMsg("❌ An error occurred updating status.");
-    } finally {
-      setUpdatingOrderId(null);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 space-y-8">
@@ -221,11 +181,7 @@ export default function SellerDashboardClient({
         </div>
       </div>
 
-      {msg && (
-        <div className="p-3 rounded-lg text-xs font-bold bg-primary/10 border border-primary/20 text-primary">
-          {msg}
-        </div>
-      )}
+
 
       {/* Financial & Sales Performance Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -302,139 +258,7 @@ export default function SellerDashboardClient({
       </div>
 
       {/* 1. INCOMING ORDERS & DELIVERY WORKFLOW TAB */}
-      {activeMainTab === "ORDERS" && (
-        <div className="bg-card border border-border rounded-2xl shadow-sm p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border pb-4 gap-2">
-            <div>
-              <h2 className="text-lg font-bold text-foreground">Customer Order Processing Workflow</h2>
-              <p className="text-xs text-muted-foreground">
-                Approve orders after customer confirmation, prepare for shipment, and mark as 'Delivered' to credit earnings to your account.
-              </p>
-            </div>
-            <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-lg">
-              {orderItems.length} Total Orders Received
-            </span>
-          </div>
-
-          {orderItems.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground text-xs space-y-2">
-              <p className="font-semibold">No orders received for your products yet.</p>
-              <p className="text-[11px]">When customers purchase your listed items, orders will appear here for processing.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {orderItems.map((item) => {
-                const isDelivered = item.order.status === "DELIVERED";
-                const isReady = item.order.status === "READY_FOR_DELIVERY" || item.order.status === "SHIPPED";
-                const isProcessing =
-                  item.order.status === "PROCESSING" ||
-                  (item.order.status === "PENDING" &&
-                    item.order.paymentMethod === "COD");
-                const itemTotalPrice = item.price * item.quantity;
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`border rounded-xl p-5 space-y-4 transition ${
-                      isDelivered
-                        ? "bg-emerald-500/5 border-emerald-500/30"
-                        : isReady
-                        ? "bg-amber-500/5 border-amber-500/30"
-                        : "bg-background border-border"
-                    }`}
-                  >
-                    {/* Header bar */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-border pb-3">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-extrabold text-foreground">
-                            Order #{item.order.trackingNumber || item.order.id.substring(0, 8)}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            Placed: {new Date(item.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Customer: <strong className="text-foreground">{item.order.user?.name || "Customer"}</strong> ({item.order.user?.phone || item.order.user?.email || "No phone"})
-                        </p>
-                        {item.order.shippingAddress && (
-                          <p className="text-[11px] text-muted-foreground">
-                            📍 Address: <span className="text-foreground font-medium">{item.order.shippingAddress}</span>
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {isDelivered ? (
-                          <span className="text-xs font-bold text-emerald-600 bg-emerald-500/20 px-3 py-1 rounded-lg border border-emerald-500/30">
-                            ✓ Delivered (Earnings Credited)
-                          </span>
-                        ) : isReady ? (
-                          <span className="text-xs font-bold text-amber-600 bg-amber-500/20 px-3 py-1 rounded-lg border border-amber-500/30">
-                            🚚 Ready for Delivery / Out for Delivery
-                          </span>
-                        ) : (
-                          <span className="text-xs font-bold text-blue-600 bg-blue-500/20 px-3 py-1 rounded-lg border border-blue-500/30">
-                            ⏳ Order Received (Pending Seller Action)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Product & Action Row */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div className="flex items-center gap-3">
-                        {item.product.imageUrl ? (
-                          <img
-                            src={item.product.imageUrl}
-                            alt={item.product.name}
-                            className="w-14 h-14 rounded-lg object-contain bg-card border border-border p-1 shrink-0"
-                          />
-                        ) : (
-                          <div className="w-14 h-14 rounded-lg bg-muted border border-border shrink-0 flex items-center justify-center font-bold text-muted-foreground text-xs">
-                            No Img
-                          </div>
-                        )}
-
-                        <div className="space-y-1 text-xs">
-                          <h4 className="font-bold text-sm text-foreground">{item.product.name}</h4>
-                          <div className="flex items-center gap-3 text-muted-foreground">
-                            <span>Quantity: <strong className="text-foreground">{item.quantity} units</strong></span>
-                            <span>•</span>
-                            <span>Unit Price: <strong className="text-foreground">{formatCurrency(item.price)}</strong></span>
-                          </div>
-                          <p className="font-extrabold text-foreground text-sm">
-                            Total Item Value: <span className="text-primary">{formatCurrency(itemTotalPrice)}</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Workflow Actions */}
-                      <div className="flex flex-wrap gap-2 w-full sm:w-auto shrink-0 border-t sm:border-t-0 border-border pt-3 sm:pt-0">
-                        {isProcessing && (
-                          <button
-                            disabled={updatingOrderId === item.order.id}
-                            onClick={() => handleUpdateStatus(item.order.id, "SHIPPED")}
-                            className="px-4 py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition shadow-sm"
-                          >
-                            {updatingOrderId === item.order.id ? "Updating..." : "📦 Mark as Shipped"}
-                          </button>
-                        )}
-
-                        {isDelivered && (
-                          <div className="text-xs text-emerald-600 font-bold bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20">
-                            💰 +{formatCurrency(itemTotalPrice)} Added to Account
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+      {activeMainTab === "ORDERS" && <FulfillmentConsole role="MEMBER" />}
 
       {/* 2. MANAGE STORE CATALOG TAB */}
       {activeMainTab === "CATALOG" && (
