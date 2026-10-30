@@ -38,29 +38,34 @@ export async function startS3MediaFixture() {
     // Test-only CDN contract over loopback with an exact Host. Public DNS,
     // TLS and the operator's Cloudflare bucket are separate release checks.
     if (req.headers.host === "cdn.media.example.invalid") {
-      if (!["GET", "HEAD"].includes(req.method ?? "") || url.search || !/^\/products\/[A-Za-z0-9-]+\/[a-f0-9-]+\.(png|jpg|webp)$/.test(url.pathname)) { reject(403, "InvalidPublicRequest"); return; }
+      if (!["GET", "HEAD"].includes(req.method ?? "") || url.search || !/^\/(?:products|avatars)\/[A-Za-z0-9-]+\/[a-f0-9-]+\.(png|jpg|webp)$/.test(url.pathname)) { reject(403, "InvalidPublicRequest"); return; }
       const object = objects.get(`/fixture-media${url.pathname}`);
       if (!object) { reject(404, "NoSuchKey"); return; }
       res.writeHead(200, { "Content-Type": object.type, "Content-Length": object.body.length, "Cache-Control": "public, max-age=31536000, immutable" });
       res.end(req.method === "HEAD" ? undefined : object.body); return;
     }
     if (!signed(req, url)) { reject(403, "SignatureDoesNotMatch"); return; }
+    const storagePath = req.headers.host === `fixture-media.${"a".repeat(32)}.r2.cloudflarestorage.com` ? `/fixture-media${url.pathname}` : url.pathname;
     if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
-      const contents = [...objects].filter(([key]) => key.startsWith("/fixture-media/products/")).map(([key]) => `<Contents><Key>${key.slice("/fixture-media/".length)}</Key></Contents>`).join("");
-      res.writeHead(200, { "Content-Type": "application/xml" }); res.end(`<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><IsTruncated>false</IsTruncated>${contents}</ListBucketResult>`); return;
+      const prefix = url.searchParams.get("prefix") ?? "", cursor = Number(url.searchParams.get("continuation-token") ?? 0), limit = Number(url.searchParams.get("max-keys") ?? 1000);
+      if (!Number.isInteger(cursor) || cursor < 0 || !Number.isInteger(limit) || limit < 1 || limit > 1000) { reject(400, "InvalidArgument"); return; }
+      const keys = [...objects.keys()].filter((key) => key.startsWith(`/fixture-media/${prefix}`)).sort(), selected = keys.slice(cursor, cursor + limit), next = cursor + selected.length, more = next < keys.length;
+      const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const contents = selected.map((key) => `<Contents><Key>${escape(key.slice("/fixture-media/".length))}</Key></Contents>`).join("");
+      res.writeHead(200, { "Content-Type": "application/xml" }); res.end(`<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><IsTruncated>${more}</IsTruncated>${contents}${more ? `<NextContinuationToken>${next}</NextContinuationToken>` : ""}</ListBucketResult>`); return;
     }
-    if (req.method === "DELETE") { objects.delete(url.pathname); res.writeHead(204); res.end(); return; }
+    if (req.method === "DELETE") { objects.delete(storagePath); res.writeHead(204); res.end(); return; }
     if (req.method === "PUT") {
       if (req.headers["if-none-match"] !== "*") { reject(400, "MissingWriteCondition"); return; }
-      if (objects.has(url.pathname)) { reject(412, "PreconditionFailed"); return; }
+      if (objects.has(storagePath)) { reject(412, "PreconditionFailed"); return; }
       const chunks: Buffer[] = []; let size = 0;
       for await (const chunk of req) { size += chunk.length; if (size > 5 * 1024 * 1024) { reject(413, "EntityTooLarge"); req.destroy(); return; } chunks.push(chunk); }
       const body = Buffer.concat(chunks);
       const etag = `"${hash(body)}"`;
-      objects.set(url.pathname, { body, type: String(req.headers["content-type"]), etag, modified: new Date() });
+      objects.set(storagePath, { body, type: String(req.headers["content-type"]), etag, modified: new Date() });
       res.writeHead(200, { ETag: etag }); res.end(); return;
     }
-    const object = objects.get(url.pathname);
+    const object = objects.get(storagePath);
     if (!object) { reject(404, "NoSuchKey"); return; }
     if (req.headers["if-match"] && req.headers["if-match"] !== object.etag) { reject(412, "PreconditionFailed"); return; }
     const range = req.headers.range === "bytes=0-31";

@@ -1,3 +1,4 @@
+jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("next/headers", () => ({ cookies: jest.fn().mockResolvedValue({ get: () => ({ value: "isolated-account-test" }) }) }));
 jest.mock("@/lib/session-validation", () => ({ validateSessionToken: jest.fn() }));
 jest.mock("@/lib/rate-limit", () => ({ getClientIp: jest.fn(() => "192.0.2.1"), rateLimit: jest.fn().mockResolvedValue({ success: true }) }));

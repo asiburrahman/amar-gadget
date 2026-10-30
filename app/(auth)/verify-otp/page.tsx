@@ -4,7 +4,9 @@ import React, { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { H1 } from "@/components/ui/typography";
-import { useAuthStore } from "@/stores/auth-store";
+import { useAuthStore, type AuthUser } from "@/stores/auth-store";
+import { registrationAvatar, clearRegistrationAvatar } from "@/stores/registration-avatar-store";
+import { checkedAvatar, uploadAvatarFile } from "@/lib/client/avatar-client";
 
 function VerifyOtpForm() {
   const searchParams = useSearchParams();
@@ -18,6 +20,8 @@ function VerifyOtpForm() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const [verifiedUser, setVerifiedUser] = useState<AuthUser | null>(null);
+  const [navigating, setNavigating] = useState(false);
   const busy = useRef(false);
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(redirectTimer.current), []);
@@ -26,6 +30,37 @@ function VerifyOtpForm() {
     const timer = setTimeout(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
+
+  const goToAccount = (user: AuthUser) => {
+    clearTimeout(redirectTimer.current); setNavigating(true);
+    clearRegistrationAvatar(email);
+    const path = user.role === "ADMIN" ? "/admin" : user.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard";
+    redirectTimer.current = setTimeout(() => router.replace(path), 800);
+  };
+  const saveSignupPhoto = async (user: AuthUser, reload = false) => {
+    const file = registrationAvatar(email);
+    if (!file) { goToAccount(user); return; }
+    if (user.email.trim().toLowerCase() !== email.trim().toLowerCase() || useAuthStore.getState().user?.id !== user.id) throw new Error("Your account changed. Upload the photo from your profile after signing in.");
+    let version = user.avatarVersion ?? 0;
+    if (reload) {
+      const response = await fetch("/api/user/upload-avatar", { headers: { "X-Avatar-Owner": user.id }, cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "Unable to reload your saved photo.");
+      version = checkedAvatar(data.photo, user.id).avatarVersion;
+    }
+    const photo = await uploadAvatarFile(user.id, version, file);
+    if (useAuthStore.getState().user?.id !== user.id) throw new Error("Your account changed. Check your saved photo after signing in.");
+    useAuthStore.getState().updateUser({ avatar: photo.avatar, avatarVersion: photo.avatarVersion });
+    setSuccessMsg("Email verified and profile photo saved. Redirecting...");
+    goToAccount(user);
+  };
+  const retryPhoto = async () => {
+    if (!verifiedUser || busy.current) return;
+    busy.current = true; setLoading(true); setErrorMsg("");
+    try { await saveSignupPhoto(verifiedUser, true); }
+    catch (error) { setErrorMsg(error instanceof Error ? error.message : "Photo was not confirmed. Retry or continue to your account."); }
+    finally { busy.current = false; setLoading(false); }
+  };
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,17 +93,10 @@ function VerifyOtpForm() {
       setSuccessMsg("✓ Email verified successfully! Redirecting to your dashboard...");
       setPassword("");
       useAuthStore.getState().setUser(data.user);
-
-      redirectTimer.current = setTimeout(() => {
-        const userRole = data.user?.role?.toUpperCase();
-        if (userRole === "ADMIN") {
-          router.replace("/admin");
-        } else if (userRole === "MEMBER") {
-          router.replace("/member/dashboard");
-        } else {
-          router.replace("/user/dashboard");
-        }
-      }, 800);
+      setVerifiedUser(data.user);
+      try { await saveSignupPhoto(data.user); }
+      catch (error) { setSuccessMsg("Your email is verified. Your selected photo has not been confirmed."); setErrorMsg(error instanceof Error ? error.message : "Retry your photo or continue to your account."); }
+      setLoading(false);
     } catch {
       setErrorMsg("Network error during verification.");
       setLoading(false);
@@ -132,7 +160,11 @@ function VerifyOtpForm() {
         </div>
       )}
 
-      <form onSubmit={handleVerify} className="space-y-6">
+      {verifiedUser ? <div className="space-y-3">
+        <p>Your account is verified. You can also upload a photo from your profile.</p>
+        <button type="button" disabled={loading || navigating} onClick={() => void retryPhoto()} className="block underline disabled:opacity-50">Retry selected photo</button>
+        <button type="button" disabled={loading || navigating} onClick={() => goToAccount(verifiedUser)} className="block underline disabled:opacity-50">Continue to my account</button>
+      </div> : <form onSubmit={handleVerify} className="space-y-6">
         <div>
           <label htmlFor="signup-code" className="block text-xs font-bold text-foreground mb-2 text-center">
             Enter 6-Digit Verification Code
@@ -163,7 +195,7 @@ function VerifyOtpForm() {
         >
           {loading ? "Verifying..." : "Verify & Authenticate Account"}
         </button>
-      </form>
+      </form>}
       <Link href="/login" className="block text-xs underline">Already verified? Sign in</Link>
 
       <div className="text-center text-xs text-muted-foreground border-t border-border pt-4 flex items-center justify-between">
@@ -171,7 +203,7 @@ function VerifyOtpForm() {
         <button
           type="button"
           onClick={handleResend}
-          disabled={resending || loading || cooldown > 0}
+          disabled={resending || loading || cooldown > 0 || !!verifiedUser}
           className="text-primary font-bold hover:underline disabled:opacity-50"
         >
           {resending ? "Sending..." : cooldown ? `Resend after ${cooldown}s` : "Resend OTP Code"}

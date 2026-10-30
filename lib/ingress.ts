@@ -10,5 +10,5 @@ export function isAllowedRequestOrigin(headers: Headers, method: string, pathnam
   if (origin) return origin === readApplicationOrigin();
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return true;
   // Server-to-server endpoints keep their own Stripe/Bearer verification.
-  return ["/api/stripe/webhook", "/api/internal/checkout/expire", "/api/internal/media/cleanup"].includes(pathname) && !headers.has("next-action");
+  return ["/api/stripe/webhook", "/api/internal/checkout/expire", "/api/internal/media/cleanup", "/api/internal/avatars/cleanup"].includes(pathname) && !headers.has("next-action");
 }

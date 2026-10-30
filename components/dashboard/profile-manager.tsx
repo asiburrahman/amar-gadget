@@ -5,6 +5,8 @@ import Link from "next/link";
 import NextImage from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/stores/auth-store";
+import { useAvatarEditor } from "@/hooks/use-avatar-editor";
 import { newPasswordSchema, PASSWORD_POLICY_MESSAGE } from "@/lib/validations/auth";
 
 interface AddressData {
@@ -24,6 +26,8 @@ interface ProfileUser {
   email: string;
   phone: string | null;
   avatar: string | null;
+  avatarVersion: number;
+  legacyAvatarAvailable: boolean;
   role: string;
   sellerStatus?: string | null;
   isVerified: boolean;
@@ -42,23 +46,37 @@ const BD_DISTRICTS = [
 ];
 
 export function ProfileManager({ initialRole }: ProfileManagerProps) {
+  const { user, loading } = useAuth();
+  if (loading) return <p role="status">Loading account...</p>;
+  if (!user) return <p>Sign in to manage your profile.</p>;
+  return <OwnedProfileManager key={user.id} ownerId={user.id} initialRole={initialRole} />;
+}
+
+function OwnedProfileManager({ initialRole, ownerId }: ProfileManagerProps & { ownerId: string }) {
   const router = useRouter();
-  const { refreshUser, updateUser, setUser } = useAuth();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const isCurrent = () => mounted.current && useAuthStore.getState().user?.id === ownerId;
+  const refreshUser = async () => isCurrent() ? useAuthStore.getState().fetchUser() : null;
+  const updateUser: ReturnType<typeof useAuth>["updateUser"] = (value) => { if (isCurrent()) useAuthStore.getState().updateUser(value); };
+  const setUser: ReturnType<typeof useAuth>["setUser"] = (value) => { if (isCurrent() && (value === null || value.id === ownerId)) useAuthStore.getState().setUser(value); };
+  const avatarEditor = useAvatarEditor(ownerId);
+  const avatarPreview = avatarEditor.preview;
+  const isUploadingAvatar = avatarEditor.busy;
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; event.target.value = ""; avatarEditor.selectFile(file); };
+  const handleRemovePhoto = () => { void avatarEditor.remove(); };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<"profile" | "email" | "password" | "address">("profile");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileUser | null>(null);
+  const [profileLoadRevision, setProfileLoadRevision] = useState(0);
 
   // Profile Form State
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatar, setAvatar] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Email Change State
@@ -93,17 +111,17 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
   // Load user data
   useEffect(() => {
+    const abort = new AbortController();
     async function loadProfile() {
       try {
         setLoading(true);
-        const res = await fetch("/api/user/profile", { cache: "no-store" });
+        const res = await fetch("/api/user/profile", { cache: "no-store", headers: { "X-Profile-Owner": ownerId }, signal: abort.signal });
         const data = await res.json();
-        if (data.success && data.user) {
+        if (!isCurrent() || abort.signal.aborted) return;
+        if (res.ok && data.success && data.user?.id === ownerId) {
           setProfile(data.user);
           setName(data.user.name || "");
           setPhone(data.user.phone || "");
-          setAvatar(data.user.avatar || "");
-          setAvatarPreview(data.user.avatar || null);
           setUser(data.user);
 
           if (data.user.addresses && data.user.addresses.length > 0) {
@@ -118,16 +136,19 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
             setAddressFullName(data.user.name || "");
             setAddressPhone(data.user.phone || "");
           }
-        }
-      } catch (err) {
-        console.error("Failed to load profile:", err);
+        } else setProfileMsg({ type: "error", text: data.message || "Unable to load your saved profile." });
+      } catch {
+        if (isCurrent() && !abort.signal.aborted) setProfileMsg({ type: "error", text: "Unable to load your saved profile. Try again." });
       } finally {
-        setLoading(false);
+        if (!abort.signal.aborted && isCurrent()) setLoading(false);
       }
     }
 
-    loadProfile();
-  }, [setUser]);
+    void loadProfile();
+    return () => abort.abort();
+    // The parent keys profile drafts by account.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerId, profileLoadRevision]);
 
   // Resend OTP countdown
   useEffect(() => {
@@ -140,135 +161,6 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
-  // Compress & resize image to 400x400 for optimal fast upload and DB storage
-  const processImageFile = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX_SIZE = 400;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_SIZE) {
-              height = Math.round((height * MAX_SIZE) / width);
-              width = MAX_SIZE;
-            }
-          } else {
-            if (height > MAX_SIZE) {
-              width = Math.round((width * MAX_SIZE) / height);
-              height = MAX_SIZE;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            resolve(event.target?.result as string);
-            return;
-          }
-
-          ctx.drawImage(img, 0, 0, width, height);
-          // Export as compressed WebP or JPEG
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-          resolve(dataUrl);
-        };
-        img.onerror = (err) => reject(err);
-      };
-      reader.onerror = (err) => reject(err);
-    });
-  };
-
-  // Direct File Selection Handler
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setProfileMsg({ type: "error", text: "শুধুমাত্র ছবি (JPG, PNG, WebP) ফাইল নির্বাচন করুন।" });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setProfileMsg({ type: "error", text: "ছবির সাইজ সর্বোচ্চ ৫ মেগাবাইট (5MB) হতে পারবে।" });
-      return;
-    }
-
-    try {
-      setIsUploadingAvatar(true);
-      setProfileMsg(null);
-
-      // Process and optimize image
-      const optimizedDataUrl = await processImageFile(file);
-      setAvatarFile(file);
-      setAvatarPreview(optimizedDataUrl);
-      setAvatar(optimizedDataUrl);
-
-      // Directly upload to server
-      const res = await fetch("/api/user/upload-avatar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatar: optimizedDataUrl }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setProfileMsg({ type: "success", text: "প্রোফাইল ছবি সফলভাবে আপলোড হয়েছে! (Photo uploaded successfully)" });
-        const updatedUser = { ...(profile || {}), avatar: optimizedDataUrl, name, phone };
-        if (profile) {
-          setProfile({ ...profile, avatar: optimizedDataUrl });
-        }
-        updateUser({ avatar: optimizedDataUrl });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
-        }
-        await refreshUser();
-      } else {
-        setProfileMsg({ type: "error", text: data.message || "Failed to upload image." });
-      }
-    } catch (err) {
-      setProfileMsg({ type: "error", text: err instanceof Error ? err.message : "Error reading image file." });
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
-
-  // Remove Photo Handler
-  const handleRemovePhoto = async () => {
-    try {
-      setIsUploadingAvatar(true);
-      const res = await fetch("/api/user/upload-avatar", { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        setAvatar("");
-        setAvatarPreview(null);
-        setAvatarFile(null);
-        const updatedUser = { ...(profile || {}), avatar: null, name, phone };
-        if (profile) {
-          setProfile({ ...profile, avatar: null });
-        }
-        updateUser({ avatar: null });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
-        }
-        setProfileMsg({ type: "success", text: "প্রোফাইল ছবি মুছে ফেলা হয়েছে।" });
-        await refreshUser();
-      } else {
-        setProfileMsg({ type: "error", text: data.message || "Failed to remove photo." });
-      }
-    } catch (err) {
-      setProfileMsg({ type: "error", text: err instanceof Error ? err.message : "Error removing photo." });
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
-
   // Handle Profile Update
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -278,26 +170,22 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     try {
       const res = await fetch("/api/user/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({
           name,
           phone,
-          avatar,
         }),
       });
 
       const data = await res.json();
+      if (!isCurrent()) return;
       if (res.ok && data.success && data.user) {
         setProfileMsg({ type: "success", text: "প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে! (Profile updated successfully)" });
         const updatedUser = data.user;
         setProfile((current) => current ? { ...current, ...updatedUser } : current);
         setName(updatedUser.name || "");
         setPhone(updatedUser.phone || "");
-        setAvatar(updatedUser.avatar || "");
         updateUser(updatedUser);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
-        }
         await refreshUser();
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to update profile." });
@@ -326,11 +214,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     try {
       const res = await fetch("/api/user/change-email/request", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({ newEmail, currentPassword: emailCurrentPassword }),
       });
 
       const data = await res.json();
+      if (!isCurrent()) return;
       if (res.ok && data.success) {
         setIsOtpSent(true);
         setNewEmail(data.email);
@@ -368,11 +257,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     try {
       const res = await fetch("/api/user/change-email/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({ newEmail, otp: emailOtp }),
       });
 
       const data = await res.json();
+      if (!isCurrent()) return;
       if (res.ok && data.success && typeof data.user?.email === "string") {
         const confirmedEmail = data.user.email;
         setEmailMsg({
@@ -381,11 +271,6 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         });
         setProfile((current) => current ? { ...current, email: confirmedEmail, isVerified: true } : current);
         updateUser({ email: confirmedEmail, isVerified: true });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", {
-            detail: data.user
-          }));
-        }
         setIsOtpSent(false);
         setNewEmail("");
         setEmailOtp("");
@@ -420,7 +305,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     try {
       const res = await fetch("/api/user/change-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({
           currentPassword,
           newPassword,
@@ -429,6 +314,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       });
 
       const data = await res.json();
+      if (!isCurrent()) return;
       if (res.ok && data.success) {
         setPasswordMsg({ type: "success", text: "Password updated. All sessions signed out. Please sign in again." });
         setCurrentPassword("");
@@ -458,7 +344,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     try {
       const res = await fetch("/api/user/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({
           address: {
             fullName: addressFullName,
@@ -473,6 +359,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       });
 
       const data = await res.json();
+      if (!isCurrent()) return;
       if (res.ok && data.success && data.user?.addresses?.[0]) {
         setAddressMsg({ type: "success", text: "ঠিকানা সফলভাবে সংরক্ষণ করা হয়েছে! (Address saved successfully)" });
         const confirmed = data.user.addresses[0];
@@ -503,7 +390,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     );
   }
 
-  const role = profile?.role || initialRole || "USER";
+  if (!profile) return <div role="alert"><p>{profileMsg?.text || "Unable to load your saved profile."}</p><button type="button" onClick={() => setProfileLoadRevision((value) => value + 1)}>Retry profile load</button></div>;
+  const role = profile.role || initialRole || "USER";
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
@@ -512,9 +400,27 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         type="file"
         ref={heroFileInputRef}
         onChange={handleFileChange}
-        accept="image/png, image/jpeg, image/jpg, image/webp"
+        accept="image/png,image/jpeg,image/webp"
+        disabled={isUploadingAvatar}
         className="hidden"
       />
+
+      <div className="rounded-xl border p-4 space-y-2" aria-live="polite">
+        {avatarEditor.message && <p role={avatarEditor.needsReload ? "alert" : "status"}>{avatarEditor.message}</p>}
+        {avatarEditor.draft && <p>Selected photo is not saved yet.</p>}
+        <div className="flex flex-wrap gap-3 text-sm">
+          <button type="button" disabled={isUploadingAvatar} onClick={() => void avatarEditor.reload()} className="underline disabled:opacity-50">Reload saved photo</button>
+          {avatarEditor.draft && <>
+            <button type="button" disabled={isUploadingAvatar || avatarEditor.needsReload || !avatarEditor.photo} onClick={() => void avatarEditor.retry()} className="underline disabled:opacity-50">Retry selected photo</button>
+            <button type="button" disabled={isUploadingAvatar} onClick={avatarEditor.discard} className="underline">Discard selected photo</button>
+          </>}
+          {avatarEditor.photo?.legacyAvatarAvailable && <>
+            <p>An older photo is stored privately. Restore a supported image or choose a new photo.</p>
+            <button type="button" disabled={isUploadingAvatar || avatarEditor.needsReload} onClick={() => void avatarEditor.restore()} className="underline disabled:opacity-50">Restore older photo</button>
+            <button type="button" disabled={isUploadingAvatar || avatarEditor.needsReload} onClick={handleRemovePhoto} className="underline disabled:opacity-50">Remove saved photo and older copy</button>
+          </>}
+        </div>
+      </div>
 
       {/* 1. Profile Hero Card */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden p-6 md:p-8">
@@ -738,7 +644,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  accept="image/png, image/jpeg, image/jpg, image/webp"
+                  accept="image/png,image/jpeg,image/webp"
+        disabled={isUploadingAvatar}
                   className="hidden"
                 />
 
@@ -755,7 +662,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                     <span>{avatarPreview ? "নতুন ছবি নির্বাচন করুন" : "ছবি আপলোড করুন (Choose Photo)"}</span>
                   </button>
 
-                  {avatarPreview && (
+                  {(avatarEditor.photo?.avatar || avatarEditor.photo?.legacyAvatarAvailable) && (
                     <button
                       type="button"
                       onClick={handleRemovePhoto}

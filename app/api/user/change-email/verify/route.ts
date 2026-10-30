@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { accountWithSafeAvatar } from "@/lib/avatar-policy";
 import { getCurrentUser } from "@/lib/session";
 import { signJwtToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -21,9 +22,9 @@ export async function POST(req: Request) {
     const account = await prisma.user.findUnique({ where: { id: actor.id } });
     if (!account || otpAccountFingerprint(account) !== ticket.accountFingerprint) return invalid();
     const token = await signJwtToken({ id: account.id, email: newEmail, name: account.name, role: account.role, sessionVersion: account.sessionVersion + 1 });
-    const updated = await consumeVerifiedOtp(ticket, (tx, user) => tx.user.update({ where: { id: user.id }, data: { email: newEmail, isVerified: true }, select: { id: true, name: true, email: true, role: true, avatar: true, phone: true, sellerStatus: true, isVerified: true } }));
+    const updated = await consumeVerifiedOtp(ticket, (tx, user) => tx.user.update({ where: { id: user.id }, data: { email: newEmail, isVerified: true }, select: { id: true, name: true, email: true, role: true, avatar: true, avatarKey: true, avatarVersion: true, phone: true, sellerStatus: true, isVerified: true } }));
     if (!updated) return invalid();
-    const response = NextResponse.json({ success: true, message: "Email address updated and verified.", user: updated });
+    const response = NextResponse.json({ success: true, message: "Email address updated and verified.", user: accountWithSafeAvatar(updated) });
     response.cookies.set("auth_token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 604800, path: "/" });
     return response;
   } catch (error) { return accountErrorResponse(error); }

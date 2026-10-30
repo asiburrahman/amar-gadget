@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useAuthStore, AuthUser } from "@/stores/auth-store";
+import { useAuthStore, AuthUser, safeAuthUser } from "@/stores/auth-store";
 
 export type { AuthUser };
 
@@ -20,9 +20,9 @@ export function useAuth() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const handleUserUpdated = (e: any) => {
-      if (e.detail) {
-        useAuthStore.setState({ user: e.detail });
+    const handleUserUpdated = (e: Event) => {
+      if (e instanceof CustomEvent && e.detail) {
+        useAuthStore.setState({ user: safeAuthUser(e.detail) });
       }
     };
 

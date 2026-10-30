@@ -1,3 +1,4 @@
+jest.mock("server-only", () => ({}), { virtual: true });
 jest.mock("next/headers", () => ({ cookies: jest.fn().mockResolvedValue({ get: () => ({ value: "local-profile-token" }) }) }));
 jest.mock("@/lib/session-validation", () => ({ validateSessionToken: jest.fn() }));
 jest.mock("@/lib/rate-limit", () => ({ getClientIp: () => "127.0.0.1", rateLimit: jest.fn().mockResolvedValue({ success: true }) }));
@@ -104,7 +105,7 @@ databaseSuite("atomic profile and single-default address", () => {
   it("does not present a nondefault address as the current default", async () => {
     const user = await createUser(); authenticate(user);
     await db.address.create({ data: { ...address("Saved only"), userId: user.id, isDefault: false } });
-    expect((await (await read()).json()).user.addresses).toEqual([]);
+    expect((await (await read(new Request("http://localhost/api/user/profile"))).json()).user.addresses).toEqual([]);
     expect(await db.address.count({ where: { userId: user.id } })).toBe(1);
   });
 });

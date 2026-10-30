@@ -8,6 +8,8 @@ import { FormInput } from "@/components/shared/form-input";
 import { H1 } from "@/components/ui/typography";
 import { useAuth } from "@/hooks/use-auth";
 import { newPasswordSchema, PASSWORD_POLICY_MESSAGE } from "@/lib/validations/auth";
+import { stageRegistrationAvatar } from "@/stores/registration-avatar-store";
+import { validateAvatarFile } from "@/lib/avatar-policy";
 
 function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -65,6 +67,14 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [avatar, setAvatar] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const avatarObjectUrl = useRef<string | null>(null);
+  useEffect(() => () => { if (avatarObjectUrl.current) URL.revokeObjectURL(avatarObjectUrl.current); }, []);
+  const selectAvatar = (file: File | null) => {
+    if (avatarObjectUrl.current) URL.revokeObjectURL(avatarObjectUrl.current);
+    avatarObjectUrl.current = file ? URL.createObjectURL(file) : null;
+    setAvatarFile(file); setAvatar(avatarObjectUrl.current || "");
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -129,7 +139,6 @@ export default function RegisterPage() {
           email, 
           password, 
           confirmPassword, 
-          avatar: avatar || undefined, 
           role 
         }),
       });
@@ -141,6 +150,8 @@ export default function RegisterPage() {
         setIsLoading(false);
         return;
       }
+
+      stageRegistrationAvatar(email, avatarFile);
 
       setSuccessMessage("✓ Registration successful! Sending OTP code to your email...");
 
@@ -164,16 +175,13 @@ export default function RegisterPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      if (validateAvatarFile(file)) {
         setErrorMessage("Choose a PNG, JPEG or WebP image no larger than 5 MB.");
         e.target.value = "";
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatar(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      selectAvatar(file);
+      e.target.value = "";
     }
   };
 
@@ -255,12 +263,15 @@ export default function RegisterPage() {
               <div className="flex-1 space-y-1">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/webp"
+                  disabled={isLoading}
                   onChange={handleFileChange}
                   className="w-full text-xs text-muted-foreground file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:opacity-90 cursor-pointer"
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">Optional. Your photo uploads after email verification. Keep this tab open; after a reload you can upload it from your profile.</p>
+            {avatarFile && <button type="button" disabled={isLoading} onClick={() => selectAvatar(null)} className="text-xs underline">Remove selected photo</button>}
           </div>
 
           <FormInput

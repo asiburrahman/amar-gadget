@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { validateSessionToken } from "@/lib/session-validation";
 import { prisma } from "@/lib/prisma";
+import { accountWithSafeAvatar } from "@/lib/avatar-policy";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,6 +30,8 @@ export async function GET() {
         email: true,
         role: true,
         avatar: true,
+        avatarKey: true,
+        avatarVersion: true,
         phone: true,
         isVerified: true,
         sellerStatus: true,
@@ -39,7 +42,7 @@ export async function GET() {
       return NextResponse.json({ success: false, user: null });
     }
 
-    const res = NextResponse.json({ success: true, user });
+    const res = NextResponse.json({ success: true, user: accountWithSafeAvatar(user) });
     res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     return res;
   } catch {

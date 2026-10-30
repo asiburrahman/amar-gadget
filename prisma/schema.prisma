@@ -13,6 +13,8 @@ model User {
   name         String?
   password     String?
   avatar       String?
+  avatarKey    String? @db.VarChar(160)
+  avatarVersion Int @default(0)
   phone        String?
   role         String      @default("USER") // USER, MEMBER (Seller), ADMIN
   sellerStatus String      @default("APPROVED") // APPROVED, PENDING, BLOCKED, REJECTED
@@ -28,8 +30,26 @@ model User {
   wishlists   Wishlist[]
   addresses   Address[]
   cart        Cart?
+  legacyAvatar UserAvatarLegacy?
   otpTokens   OtpToken[]
   otpThrottles OtpThrottle[]
+}
+
+model UserAvatarLegacy {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  value String
+  createdAt DateTime @default(now())
+}
+
+model AvatarImageCleanup {
+  key String @id @db.VarChar(160)
+  ownerId String @db.VarChar(64)
+  availableAt DateTime
+  attempts Int @default(0)
+  lastError String? @db.VarChar(100)
+  createdAt DateTime @default(now())
+  @@index([availableAt, key])
 }
 
 model Category {

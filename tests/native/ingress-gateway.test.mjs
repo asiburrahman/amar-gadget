@@ -68,7 +68,7 @@ test("invalid trust configuration and unavailable backend fail closed", async ()
   try { assert.equal((await fetch(url, { headers: { Host: "store.example.invalid" } })).status, 502); }
   finally { await close(gateway); }
 });
-for (const [worker, path] of [["checkout-reservations-worker", "/api/internal/checkout/expire"], ["media-cleanup-worker", "/api/internal/media/cleanup"]]) test(`${worker} sends both a real scoped ingress signature and independent maintenance authentication`, { timeout: 10_000 }, async () => {
+for (const [worker, path] of [["checkout-reservations-worker", "/api/internal/checkout/expire"], ["media-cleanup-worker", "/api/internal/media/cleanup"], ["avatar-cleanup-worker", "/api/internal/avatars/cleanup"]]) test(`${worker} sends both a real scoped ingress signature and independent maintenance authentication`, { timeout: 10_000 }, async () => {
   const sweepKey = "independent-private-sweep-fixture-".repeat(2);
   let observed;
   const arrived = new Promise((resolve) => { observed = resolve; });

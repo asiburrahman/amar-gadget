@@ -35,7 +35,10 @@
     "test:gateway": "node --test tests/native/ingress-gateway.test.mjs",
     "cleanup:product-images": "tsx scripts/cleanup-product-images.ts",
     "worker:media-cleanup": "node scripts/media-cleanup-worker.mjs",
-    "config:r2-cors": "tsx scripts/print-product-image-cors.ts"
+    "config:r2-cors": "tsx scripts/print-product-image-cors.ts",
+    "cleanup:avatars": "tsx scripts/cleanup-avatars.ts",
+    "worker:avatar-cleanup": "node scripts/avatar-cleanup-worker.mjs",
+    "smoke:avatars": "node scripts/smoke-avatars.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

@@ -36,4 +36,4 @@ Code remediation removes hardcoded account/password/host fallback behavior, requ
 
 This additional task stays open until that confirmation is received. Actual configured SMTP delivery remains release verification under AUD-044. Independent original audit work continues; no production deployment/account change is performed automatically.
 
-**Owner status, 29 October 2026 (Asia/Dhaka):** the owner confirmed that the credential has **not yet been revoked**. AUD-051 remains open. The source fix and tests do not change that provider state; revocation and private replacement remain required owner actions. No credential was requested or supplied in this confirmation.
+**Owner status, 29 October 2026 (Asia/Dhaka), reconfirmed on 30 October:** the owner confirmed that the credential has **not yet been revoked**. AUD-051 remains open. The source fix and tests do not change that provider state; revocation and private replacement remain required owner actions. No credential was requested or supplied in this confirmation.

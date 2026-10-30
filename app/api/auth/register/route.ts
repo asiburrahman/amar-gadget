@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   try {
     await limitAccountIp(req, "auth-register", 5);
 
-    const body = await readAccountJson(req, 7 * 1024 * 1024 + 16 * 1024);
+    const body = await readAccountJson(req);
     const validated = registerSchema.safeParse(body);
 
     if (!validated.success) {
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, password, confirmPassword, role, avatar } = validated.data;
+    const { name, email, password, confirmPassword, role } = validated.data;
     await limitAccountIdentity(email, "auth-register", 3, 600);
 
     if (confirmPassword && confirmPassword !== password) {
@@ -61,7 +61,6 @@ export async function POST(req: Request) {
         data: {
           name,
           password: hashedPassword,
-          avatar: avatar || existingUser.avatar,
           role: existingUser.role,
         },
       });
@@ -88,7 +87,6 @@ export async function POST(req: Request) {
         name,
         email: email.toLowerCase(),
         password: hashedPassword,
-        avatar: avatar || null,
         role: role || "USER",
         sellerStatus: role === "MEMBER" ? "PENDING" : "APPROVED",
         isVerified: false,

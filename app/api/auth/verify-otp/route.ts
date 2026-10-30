@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { accountAvatar } from "@/lib/avatar-policy";
 import { signJwtToken, verifyPassword, hashPassword, passwordNeedsRehash } from "@/lib/auth";
 import { verifyOtpSchema } from "@/lib/validations/auth";
 import { prepareOtpAttempt, consumeVerifiedOtp, otpAccountFingerprint } from "@/lib/otp";
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     const token = await signJwtToken({ id: found.id, email: found.email, name: found.name, role: found.role, sessionVersion: found.sessionVersion + 1 });
     const user = await consumeVerifiedOtp(ticket, (tx, current) => tx.user.update({ where: { id: current.id }, data: { isVerified: true, ...(upgraded ? { password: upgraded } : {}) } }));
     if (!user) return invalid();
-    const response = NextResponse.json({ success: true, message: "Email successfully verified!", user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar, phone: user.phone, sellerStatus: user.sellerStatus, isVerified: user.isVerified } });
+    const response = NextResponse.json({ success: true, message: "Email successfully verified!", user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: accountAvatar(user), avatarVersion: user.avatarVersion, phone: user.phone, sellerStatus: user.sellerStatus, isVerified: user.isVerified } });
     response.cookies.set("auth_token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 604800, path: "/" });
     return response;
   } catch (error) { return accountErrorResponse(error); }

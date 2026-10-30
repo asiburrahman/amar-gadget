@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { accountAvatar } from "@/lib/avatar-policy";
 import { loginSchema } from "@/lib/validations/auth";
 import { verifyPassword, hashPassword, passwordNeedsRehash, PasswordWorkloadBusy, signJwtToken } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
@@ -100,6 +101,11 @@ export async function POST(req: Request) {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatar: accountAvatar(user),
+        avatarVersion: user.avatarVersion,
+        phone: user.phone,
+        isVerified: user.isVerified,
+        sellerStatus: user.sellerStatus,
       },
     });
 

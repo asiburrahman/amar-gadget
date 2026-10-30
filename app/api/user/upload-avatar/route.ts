@@ -1,142 +1,29 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { validateSessionToken } from "@/lib/session-validation";
-import { prisma } from "@/lib/prisma";
+﻿import { NextResponse } from "next/server";
+import { avatarActor, avatarFailure, avatarPrivateHeaders, readAvatarRemoval, readAvatarUpload } from "@/lib/avatar-request";
+import { normalizeAvatarImage, withAvatarUploadSlot } from "@/lib/avatar-image";
+import { publishOwnedAvatar, readOwnedAvatar, removeOwnedAvatar, restoreLegacyAvatar } from "@/lib/avatars";
 
-export async function POST(req: Request) {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth_token")?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please sign in." },
-        { status: 401 }
-      );
-    }
-
-    const account = await validateSessionToken(token);
-    const payload = account ? { sub: account.id } : null;
-    if (!payload?.sub) {
-      return NextResponse.json(
-        { success: false, message: "Invalid session." },
-        { status: 401 }
-      );
-    }
-
-    const userId = payload.sub as string;
-
-    const contentType = req.headers.get("content-type") || "";
-
-    let avatarDataUrl = "";
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      const file = formData.get("file") as File | null;
-
-      if (!file) {
-        return NextResponse.json(
-          { success: false, message: "No image file provided." },
-          { status: 400 }
-        );
-      }
-
-      // Check mime type
-      if (!file.type.startsWith("image/")) {
-        return NextResponse.json(
-          { success: false, message: "Only image files (JPG, PNG, WebP) are allowed." },
-          { status: 400 }
-        );
-      }
-
-      // 5MB limit
-      if (file.size > 5 * 1024 * 1024) {
-        return NextResponse.json(
-          { success: false, message: "Image size must be less than 5MB." },
-          { status: 400 }
-        );
-      }
-
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      const mime = file.type || "image/jpeg";
-      avatarDataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
-    } else {
-      const body = await req.json();
-      if (!body.avatar || typeof body.avatar !== "string") {
-        return NextResponse.json(
-          { success: false, message: "Invalid image data." },
-          { status: 400 }
-        );
-      }
-      avatarDataUrl = body.avatar;
-    }
-
-    // Update avatar in Database
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: { avatar: avatarDataUrl },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        role: true,
-        phone: true,
-        isVerified: true,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: "Profile image uploaded and updated successfully!",
-      avatar: updatedUser.avatar,
-      user: updatedUser,
-    });
-  } catch {
-    console.error("POST /api/user/upload-avatar error:");
-    return NextResponse.json(
-      { success: false, message: "Failed to upload avatar." },
-      { status: 500 }
-    );
-  }
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
+export async function GET(request: Request) {
+  try { return NextResponse.json({ success: true, photo: await readOwnedAvatar(await avatarActor(request)) }, { headers: avatarPrivateHeaders }); }
+  catch (error) { return avatarFailure(error); }
 }
-
-export async function DELETE() {
+export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth_token")?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please sign in." },
-        { status: 401 }
-      );
-    }
-
-    const account = await validateSessionToken(token);
-    const payload = account ? { sub: account.id } : null;
-    if (!payload?.sub) {
-      return NextResponse.json(
-        { success: false, message: "Invalid session." },
-        { status: 401 }
-      );
-    }
-
-    await prisma.user.update({
-      where: { id: payload.sub as string },
-      data: { avatar: null },
+    const actor = await avatarActor(request, true);
+    return await withAvatarUploadSlot(async () => {
+      const input = await readAvatarUpload(request);
+      const photo = input.source ? await publishOwnedAvatar(actor, input.avatarVersion, await normalizeAvatarImage(input.source.bytes, input.source.type)) : await restoreLegacyAvatar(actor, input.avatarVersion);
+      return NextResponse.json({ success: true, photo, message: "Profile photo saved." }, { headers: avatarPrivateHeaders });
     });
-
-    return NextResponse.json({
-      success: true,
-      message: "Profile photo removed successfully.",
-    });
-  } catch {
-    console.error("DELETE /api/user/upload-avatar error:");
-    return NextResponse.json(
-      { success: false, message: "Failed to remove avatar." },
-      { status: 500 }
-    );
-  }
+  } catch (error) { return avatarFailure(error); }
+}
+export async function DELETE(request: Request) {
+  try {
+    const actor = await avatarActor(request, true);
+    const photo = await removeOwnedAvatar(actor, await readAvatarRemoval(request));
+    return NextResponse.json({ success: true, photo, message: "Profile photo removed." }, { headers: avatarPrivateHeaders });
+  } catch (error) { return avatarFailure(error); }
 }

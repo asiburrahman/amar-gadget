@@ -48,7 +48,7 @@ it("requires the exact browser origin, including server actions and exceptional 
   for (const value of ["https://evil.invalid", "https://sub.store.example.invalid", "null", "https://store.example.invalid:444"]) expect(isAllowedRequestOrigin(new Headers({ origin: value }), "POST", "/api/auth/login")).toBe(false);
   expect(isAllowedRequestOrigin(new Headers({ origin }), "POST", "/api/auth/login")).toBe(true);
   expect(isAllowedRequestOrigin(new Headers(), "POST", "/api/auth/login")).toBe(false);
-  for (const path of ["/api/stripe/webhook", "/api/internal/checkout/expire", "/api/internal/media/cleanup"]) {
+  for (const path of ["/api/stripe/webhook", "/api/internal/checkout/expire", "/api/internal/media/cleanup", "/api/internal/avatars/cleanup"]) {
     expect(isAllowedRequestOrigin(new Headers(), "POST", path)).toBe(true);
     expect(isAllowedRequestOrigin(new Headers({ "next-action": "fake" }), "POST", path)).toBe(false);
   }

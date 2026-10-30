@@ -11,12 +11,18 @@ const setUser = jest.fn();
 const refreshUser = jest.fn();
 const updateUser = jest.fn();
 jest.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("email=signup%40example.invalid"), useRouter: () => ({ replace, push, refresh: jest.fn() }) }));
-jest.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ setUser, refreshUser, updateUser }) }));
+jest.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: useAuthStore((state) => state.user), loading: false }) }));
+// This suite covers credentials/address forms. Avatar transport and concurrent
+// account changes are exercised separately with the actual hook/component.
+jest.mock("@/hooks/use-avatar-editor", () => ({ useAvatarEditor: () => ({ preview: null, photo: null, busy: false, draft: null, needsReload: false, message: "", selectFile: jest.fn(), reload: jest.fn(), retry: jest.fn(), discard: jest.fn(), remove: jest.fn(), restore: jest.fn() }) }));
+const actualSetUser = useAuthStore.getState().setUser;
+const actualUpdateUser = useAuthStore.getState().updateUser;
 const user = { id: "otp-ui", name: "Account owner", email: "old@example.invalid", role: "USER", phone: null, avatar: null, isVerified: true, createdAt: "2026-10-01T00:00:00Z", addresses: [] };
 const response = (body: unknown, status = 200, retryAfter?: string) => ({ ok: status < 400, status, json: async () => body, headers: new Headers(retryAfter ? { "Retry-After": retryAfter } : {}) }) as Response;
 beforeEach(() => {
   jest.clearAllMocks();
-  useAuthStore.setState({ user: null });
+  setUser.mockImplementation(actualSetUser); updateUser.mockImplementation(actualUpdateUser);
+  useAuthStore.setState({ user: null, setUser, updateUser, fetchUser: refreshUser });
   global.fetch = jest.fn();
 });
 afterEach(() => { jest.useRealTimers(); });
@@ -67,6 +73,7 @@ it("honors server resend Retry-After without claiming a code was delivered", asy
 });
 
 async function openEmailForm() {
+  useAuthStore.setState({ user });
   (fetch as jest.Mock).mockResolvedValueOnce(response({ success: true, user }));
   render(<ProfileManager />);
   fireEvent.click(await screen.findByRole("button", { name: /Change Email \+ OTP/ }));
@@ -131,6 +138,7 @@ it("keeps the reauthentication form when email delivery fails", async () => {
 });
 
 it.each([true, false])("clears local authentication and redirects only after a successful password change: %s", async (success) => {
+  useAuthStore.setState({ user });
   (fetch as jest.Mock).mockResolvedValueOnce(response({ success: true, user }));
   render(<ProfileManager />);
   fireEvent.click(await screen.findByRole("button", { name: /Security/ }));
@@ -143,7 +151,7 @@ it.each([true, false])("clears local authentication and redirects only after a s
   if (success) {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?reason=password-changed"));
     expect(setUser).toHaveBeenCalledWith(null);
-    expect((screen.getByLabelText(/Current Password/) as HTMLInputElement).value).toBe("");
+    expect(screen.queryByLabelText(/Current Password/)).toBeNull();
   } else {
     expect(await screen.findByText("Credential conflict.")).toBeTruthy();
     expect(setUser).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
@@ -170,6 +178,7 @@ it("applies the shared password policy before reset and clears secrets after ser
 });
 
 it.each([true, false])("shows the committed default-address result or preserves edits after failure: %s", async (success) => {
+  useAuthStore.setState({ user });
   (fetch as jest.Mock).mockResolvedValueOnce(response({ success: true, user }));
   render(<ProfileManager />);
   fireEvent.click(await screen.findByRole("button", { name: /\(Address\)/ }));

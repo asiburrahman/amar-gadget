@@ -97,10 +97,10 @@ databaseSuite("real signed session revocation", () => {
     const { GET: profile, PUT: updateProfile } = await import("@/app/api/user/profile/route");
     const { POST: avatar, DELETE: removeAvatar } = await import("@/app/api/user/upload-avatar/route");
     expect((await (await me()).json()).success).toBe(false);
-    expect((await profile()).status).toBe(401);
+    expect((await profile(new Request("http://localhost/api/user/profile"))).status).toBe(401);
     expect((await updateProfile(request({ name: "Unauthorized update" }))).status).toBe(401);
     expect((await avatar(request({ avatar: "data:image/png;base64,ignored" }))).status).toBe(401);
-    expect((await removeAvatar()).status).toBe(401);
+    expect((await removeAvatar(new Request("http://localhost/api/user/upload-avatar", { method: "DELETE" }))).status).toBe(401);
     expect(await currentUser()).toBeNull();
     expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).name).toBeNull();
   });

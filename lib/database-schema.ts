@@ -1,2 +1,2 @@
 // Advance with each reviewed schema migration. Readiness rejects an older DB.
-export const REQUIRED_SCHEMA_MIGRATION = "20261030110000_review_listing_indexes";
+export const REQUIRED_SCHEMA_MIGRATION = "20261030120000_owned_avatars";
