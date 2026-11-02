@@ -531,7 +531,29 @@ model Coupon {
   minSpend    Decimal?  @db.Decimal(10, 2)
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime  @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  version     Int       @default(1)
+  updatedAt   DateTime  @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)")) @updatedAt
+}
+
+model CouponRequest {
+  id        String   @id
+  ownerId   String
+  hash      String
+  result    Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model CouponEvent {
+  id        String   @id @default(uuid())
+  sequence  BigInt   @unique @default(autoincrement())
+  couponId  String
+  action    String
+  actorId   String?
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([couponId, sequence])
 }
 
 model Banner {

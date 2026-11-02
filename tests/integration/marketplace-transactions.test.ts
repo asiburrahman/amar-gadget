@@ -143,7 +143,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
     });
 
     it.each([
-      { isActive: false }, { expiresAt: new Date(0) }, { minSpend: 901 }, { discount: 101, isPercentage: true }, { discount: -1 },
+      { isActive: false }, { expiresAt: new Date(0) }, { minSpend: 901 },
     ])("rejects invalid coupon conditions without guest, stock or order writes: %s", async (conditions) => {
       const coupon = await fixtureCoupon(conditions);
       const input = checkout({ couponCode: coupon.code });
@@ -163,6 +163,14 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
       expect(await response.json()).toMatchObject({ code: "INVALID_COUPON" });
     });
 
+    it.each([{ discount: 101, isPercentage: true }, { discount: -1 }])("rejects invalid coupon rules at the database boundary before checkout: %s", async (conditions) => {
+      const before = await Promise.all([db.user.count(), db.order.count(), db.product.findUniqueOrThrow({ where: { id: productId } })]);
+      await expect(fixtureCoupon(conditions)).rejects.toThrow();
+      expect(await db.user.count()).toBe(before[0]);
+      expect(await db.order.count()).toBe(before[1]);
+      expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(before[2].stock);
+    });
+
     it("caps fixed discounts at the subtotal and enforces minimum spend at equality", async () => {
       const coupon = await fixtureCoupon({ discount: 2000, minSpend: 900 });
       const response = await quoteRequest(checkout({ couponCode: coupon.code }));
@@ -179,7 +187,7 @@ databaseSuite("PostgreSQL marketplace transactions", () => {
         await db.product.update({ where: { id: productId }, data: { discountPrice: 950 } });
         expect(await createOrder({ ...input, quoteFingerprint: quote.fingerprint })).toMatchObject({ success: false, code: "QUOTE_CHANGED" });
         await db.product.update({ where: { id: productId }, data: { discountPrice: 900 } });
-        await db.coupon.update({ where: { id: coupon.id }, data: { discount: 126 } });
+        await db.coupon.update({ where: { id: coupon.id }, data: { discount: 126, version: { increment: 1 } } });
         expect(await createOrder({ ...input, quoteFingerprint: quote.fingerprint })).toMatchObject({ success: false, code: "QUOTE_CHANGED" });
         expect(await db.user.count()).toBe(beforeUsers);
         expect((await db.product.findUniqueOrThrow({ where: { id: productId } })).stock).toBe(beforeStock);

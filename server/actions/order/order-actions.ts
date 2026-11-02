@@ -73,6 +73,8 @@ export async function createOrder(input: CheckoutInput) {
         return existing;
       }
       const cartSnapshot = await prepareCartCheckout(tx, validated, currentUser);
+      // Serialize redemption with administrative rule changes through commit.
+      if (validated.couponCode) await tx.$queryRaw`SELECT id FROM "Coupon" WHERE code=${validated.couponCode} FOR SHARE`;
       const quote = await calculateCheckoutQuote(tx, validated);
       if (validated.quoteFingerprint && validated.quoteFingerprint !== quote.fingerprint) {
         throw new CheckoutError("Prices or discounts changed. Review the refreshed total before placing your order.", "QUOTE_CHANGED");
