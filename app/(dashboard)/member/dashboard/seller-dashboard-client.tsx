@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/formatter";
 import { FulfillmentConsole } from "@/components/orders/fulfillment-console";
+import { useAuth } from "@/hooks/use-auth";
+import type { SellerDashboardMetrics } from "@/lib/dashboard-metrics";
 
 interface ProductItem {
   id: string;
@@ -16,33 +18,6 @@ interface ProductItem {
   category?: { name: string } | null;
 }
 
-interface OrderItemData {
-  id: string;
-  orderId: string;
-  productId: string;
-  quantity: number;
-  refundedQuantity?: number;
-  netAmount?: number | null;
-  price: number;
-  createdAt: string;
-  product: {
-    id: string;
-    name: string;
-    imageUrl?: string | null;
-    price: number;
-  };
-  order: {
-    id: string;
-    status: string;
-    paymentMethod: string;
-    paymentStatus: string;
-    financialReview?: boolean;
-    shippingAddress?: string | null;
-    trackingNumber?: string | null;
-    createdAt: string;
-  };
-}
-
 interface SellerDashboardClientProps {
   seller: {
     id: string;
@@ -51,65 +26,31 @@ interface SellerDashboardClientProps {
     sellerStatus: string;
   } | null;
   products: ProductItem[];
-  orderItems: OrderItemData[];
+  metrics: SellerDashboardMetrics;
+  initialMainTab: "ORDERS" | "ANALYTICS";
 }
 
-export default function SellerDashboardClient({
-  seller,
-  products,
-  orderItems: initialOrderItems,
-}: SellerDashboardClientProps) {
+export default function SellerDashboardClient(props: SellerDashboardClientProps) {
+  const { user, loading } = useAuth();
+  if (loading) return <p role="status">Loading seller account...</p>;
+  if (!user || user.id !== props.seller?.id || user.id !== props.metrics.ownerId || user.role !== "MEMBER" || user.sellerStatus !== "APPROVED") return <p>Reload the dashboard with the matching approved seller account.</p>;
+  return <OwnedSellerDashboard key={user.id} {...props} />;
+}
+function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: SellerDashboardClientProps) {
   const [activeTab, setActiveTab] = useState<"ALL" | "APPROVED" | "PENDING">("ALL");
-  const [activeMainTab, setActiveMainTab] = useState<"ORDERS" | "CATALOG" | "ANALYTICS">("ORDERS");
-  const orderItems = initialOrderItems;
+  const [activeMainTab, setActiveMainTab] = useState<"ORDERS" | "CATALOG" | "ANALYTICS">(initialMainTab);
 
   const sellerStatus = seller?.sellerStatus || "PENDING";
   const isApproved = sellerStatus === "APPROVED";
   const isBlocked = sellerStatus === "BLOCKED";
   const isPending = sellerStatus === "PENDING";
 
-  // Financial Analytics Calculations
-  const totalUnitsSold = orderItems.reduce((acc, item) => acc + item.quantity - (item.refundedQuantity ?? 0), 0);
-  const incompletePricingCount = orderItems.filter((item) => item.netAmount == null || item.order.financialReview).length;
-  const itemValue = (item: OrderItemData) => item.netAmount == null || item.order.financialReview ? 0 : item.netAmount;
-  const totalRevenue = orderItems.reduce((acc, item) => acc + itemValue(item), 0);
-
-  const deliveredEarnings = orderItems
-    .filter((item) => item.order.status === "DELIVERED" && item.order.paymentStatus === "PAID")
-    .reduce((acc, item) => acc + itemValue(item), 0);
-
-  const pendingDeliveryCount = orderItems.filter(
-    (item) => item.order.status !== "DELIVERED" && item.order.status !== "CANCELLED"
-  ).length;
-
-  // Month-wise Sales Breakdown calculation
-  const monthlyDataMap: Record<
-    string,
-    { monthLabel: string; totalRevenue: number; deliveredEarnings: number; ordersCount: number }
-  > = {};
-
-  orderItems.forEach((item) => {
-    const dateObj = new Date(item.createdAt);
-    const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}`;
-    const monthLabel = dateObj.toLocaleString("en-US", { month: "long", year: "numeric" });
-
-    if (!monthlyDataMap[monthKey]) {
-      monthlyDataMap[monthKey] = { monthLabel, totalRevenue: 0, deliveredEarnings: 0, ordersCount: 0 };
-    }
-
-    const itemTotal = itemValue(item);
-    monthlyDataMap[monthKey].totalRevenue += itemTotal;
-    monthlyDataMap[monthKey].ordersCount += 1;
-
-    if (item.order.status === "DELIVERED" && item.order.paymentStatus === "PAID") {
-      monthlyDataMap[monthKey].deliveredEarnings += itemTotal;
-    }
-  });
-
-  const monthlyAnalytics = Object.keys(monthlyDataMap)
-    .sort()
-    .reverse()
-    .map((key) => monthlyDataMap[key]);
+  const totalUnitsSold = metrics.deliveredUnits;
+  const incompletePricingCount = metrics.excludedLines;
+  const totalRevenue = metrics.paidItemCents / 100;
+  const deliveredEarnings = metrics.deliveredItemCents / 100;
+  const pendingDeliveryCount = metrics.pendingOrders;
+  const monthlyAnalytics = metrics.monthly;
 
   // Product counts
   const totalProducts = products.length;
@@ -158,7 +99,7 @@ export default function SellerDashboardClient({
           </span>
           <h1 className="text-3xl font-extrabold text-foreground mt-2">Seller Dashboard & Sales Center</h1>
           <p className="text-xs text-muted-foreground">
-            Monitor sales earnings, process customer orders, track monthly revenue, and manage store catalog.
+            Monitor paid item value, process customer orders, track monthly order cohorts, and manage your catalog.
           </p>
         </div>
 
@@ -189,7 +130,7 @@ export default function SellerDashboardClient({
 
 
       {/* Financial & Sales Performance Stats Cards */}
-      {incompletePricingCount > 0 && <p role="status">{incompletePricingCount} item lines need purchase-pricing or financial reconciliation and are excluded from monetary totals below.</p>}
+      {incompletePricingCount > 0 && <p role="status">{incompletePricingCount} paid item lines need purchase-pricing or financial reconciliation and are excluded from monetary totals below.</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Delivered Account Earnings */}
         <div className="bg-card border border-emerald-500/30 p-6 rounded-2xl shadow-sm space-y-2 relative overflow-hidden">
@@ -203,10 +144,10 @@ export default function SellerDashboardClient({
 
         {/* Total Orders Revenue */}
         <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-2">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Reconciled Ordered Item Value</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Reconciled Paid Item Value</span>
           <p className="text-3xl font-black text-foreground">{formatCurrency(totalRevenue)}</p>
           <span className="text-[11px] text-muted-foreground font-medium block">
-            Across {totalUnitsSold} item units ordered
+            {totalUnitsSold} retained units delivered and paid
           </span>
         </div>
 
@@ -215,7 +156,7 @@ export default function SellerDashboardClient({
           <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Orders Pending Delivery</span>
           <p className="text-3xl font-black text-amber-500">{pendingDeliveryCount}</p>
           <span className="text-[11px] text-muted-foreground font-medium block">
-            Requires your processing & dispatch
+            Distinct orders with an unfinished seller shipment
           </span>
         </div>
 
@@ -229,6 +170,8 @@ export default function SellerDashboardClient({
         </div>
       </div>
 
+      <p className="text-sm text-muted-foreground">Item figures are after purchase discounts and confirmed refunds, before commission, and exclude shipping. These are not credited earnings or available payout balances.</p>
+
       {/* Navigation Tabs (Orders, Catalog, Monthly Analytics) */}
       <div className="flex border-b border-border space-x-6 text-sm font-bold">
         <button
@@ -239,7 +182,7 @@ export default function SellerDashboardClient({
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          📦 Incoming Customer Orders ({orderItems.length})
+          📦 Incoming Customer Orders ({metrics.totalOrders})
         </button>
         <button
           onClick={() => setActiveMainTab("CATALOG")}
@@ -447,15 +390,17 @@ export default function SellerDashboardClient({
       {activeMainTab === "ANALYTICS" && (
         <div className="bg-card border border-border rounded-2xl shadow-sm p-6 space-y-6">
           <div className="border-b border-border pb-4">
-            <h2 className="text-lg font-bold text-foreground">📊 Month-wise Sales & Earnings Report</h2>
+            <h2 className="text-lg font-bold text-foreground">📊 Monthly Paid Item Value</h2>
             <p className="text-xs text-muted-foreground">
-              Detailed breakdown of orders count, gross sales volume, and net delivered earnings grouped by month.
+              Order cohorts by placement month in Asia/Dhaka, updated for current refunds. Distinct orders include unpaid/cancelled orders; monetary columns include reconciled paid items only. Values are before commission and exclude shipping and payout balances.
             </p>
           </div>
 
+          <nav aria-label="Analytics years" className="flex flex-wrap gap-4"><span>{metrics.year}</span>{metrics.year > metrics.firstYear && <Link className="underline" href={`/member/dashboard?year=${metrics.year - 1}`}>Previous year</Link>}{metrics.year < metrics.currentYear && <Link className="underline" href={`/member/dashboard?year=${metrics.year + 1}`}>Next year</Link>}</nav>
+          <p className="text-sm text-muted-foreground">All-time cards include every year. Monthly values are purchase cohorts, not cash received or seller payout balances.</p>
           {monthlyAnalytics.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground text-xs font-medium">
-              No sales recorded yet to generate monthly analytics report.
+              No orders were placed in this year. Use another year to view earlier order cohorts.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -464,8 +409,9 @@ export default function SellerDashboardClient({
                   <tr className="border-b border-border text-muted-foreground font-bold uppercase text-[11px] bg-muted/30">
                     <th className="p-3 rounded-l-lg">Month Period</th>
                     <th className="p-3">Orders Count</th>
-                    <th className="p-3">Gross Sales Volume</th>
-                    <th className="p-3 rounded-r-lg">Delivered Item Value After Refunds</th>
+                    <th className="p-3">Reconciled Paid Item Value</th>
+                    <th className="p-3">Delivered Item Value After Refunds</th>
+                    <th className="p-3 rounded-r-lg">Paid Lines Awaiting Reconciliation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -473,8 +419,9 @@ export default function SellerDashboardClient({
                     <tr key={idx} className="hover:bg-muted/30 transition">
                       <td className="p-3 font-extrabold text-foreground">{m.monthLabel}</td>
                       <td className="p-3 font-bold text-foreground">{m.ordersCount} orders</td>
-                      <td className="p-3 font-bold text-foreground">{formatCurrency(m.totalRevenue)}</td>
-                      <td className="p-3 font-black text-emerald-600">{formatCurrency(m.deliveredEarnings)}</td>
+                      <td className="p-3 font-bold text-foreground">{formatCurrency(m.paidItemCents / 100)}</td>
+                      <td className="p-3 font-black text-emerald-600">{formatCurrency(m.deliveredItemCents / 100)}</td>
+                      <td className="p-3">{m.excludedLines}</td>
                     </tr>
                   ))}
                 </tbody>

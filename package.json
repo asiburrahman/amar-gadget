@@ -41,7 +41,8 @@
     "smoke:avatars": "node scripts/smoke-avatars.mjs",
     "smoke:fulfillments": "node scripts/smoke-fulfillments.mjs",
     "worker:refunds": "node scripts/refund-reconciliation-worker.mjs",
-    "smoke:refunds": "node scripts/smoke-refunds.mjs"
+    "smoke:refunds": "node scripts/smoke-refunds.mjs",
+    "smoke:dashboard-metrics": "node scripts/smoke-dashboard-metrics.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

@@ -3,10 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithRole } from "@/lib/session";
 import { redirect } from "next/navigation";
 import SellerDashboardClient from "./seller-dashboard-client";
+import { DashboardAccessError, dashboardYear, readSellerDashboardMetrics } from "@/lib/dashboard-metrics";
+import Link from "next/link";
 
 export const revalidate = 0; // Ensure fresh data on every request
 
-export default async function SellerDashboardPage() {
+export default async function SellerDashboardPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   const currentUser = await getCurrentUserWithRole(["MEMBER", "ADMIN"]);
   if (!currentUser) redirect("/login");
   if (currentUser.role.toUpperCase() === "ADMIN") redirect("/admin");
@@ -21,6 +23,13 @@ export default async function SellerDashboardPage() {
       </section>
     );
   }
+  const query = searchParams ? await searchParams : {};
+  const year = dashboardYear(query.year);
+  if (year === null) return <main className="p-6"><p role="alert">Invalid analytics year. <Link href="/member/dashboard">Reset dashboard</Link></p></main>;
+  let metrics;
+  try { metrics = await readSellerDashboardMetrics(currentUser, year); }
+  catch (error) { if (error instanceof DashboardAccessError) redirect("/login"); throw error; }
+
   const seller = await prisma.user.findUnique({ where: { id: currentUser.id } });
 
   // Fetch seller's products (Filtered strictly by seller's own sellerId)
@@ -30,21 +39,6 @@ export default async function SellerDashboardPage() {
         orderBy: { createdAt: "desc" },
         include: {
           category: { select: { name: true } },
-        },
-      })
-    : [];
-
-  // Fetch orders placed for seller's products
-  const orderItemsRaw = seller
-    ? await prisma.orderItem.findMany({
-        where: {
-          fulfillment: { is: { sellerId: seller.id } },
-        },
-        orderBy: { createdAt: "desc" },
-        include: {
-          order: { select: { id: true, paymentMethod: true, paymentStatus: true, financialReviewReason: true, disputeStatus: true, createdAt: true } },
-          fulfillment: { select: { status: true, codCollected: true } },
-          product: { select: { id: true, name: true, imageUrl: true, price: true } },
         },
       })
     : [];
@@ -63,31 +57,6 @@ export default async function SellerDashboardPage() {
     category: p.category ? { name: p.category.name } : null,
   }));
 
-  const serializedOrderItems = orderItemsRaw.map((item) => ({
-    id: item.id,
-    orderId: item.orderId,
-    productId: item.productId,
-    quantity: item.quantity,
-    refundedQuantity: item.refundedQuantity,
-    netAmount: item.netCents == null || item.retainedCents == null ? null : Number(item.retainedCents) / 100,
-    price: Number(item.price),
-    createdAt: item.createdAt.toISOString(),
-    product: {
-      id: item.product.id,
-      name: item.product.name,
-      imageUrl: item.product.imageUrl,
-      price: Number(item.product.price),
-    },
-    order: {
-      id: item.order.id,
-      status: item.fulfillment!.status,
-      paymentMethod: item.order.paymentMethod,
-      paymentStatus: item.order.paymentMethod === "COD" ? item.fulfillment!.codCollected ? "PAID" : "UNPAID" : item.order.paymentStatus,
-      financialReview: Boolean(item.order.financialReviewReason || ["ACTIVE", "LOST"].includes(item.order.disputeStatus)),
-      createdAt: item.order.createdAt.toISOString(),
-    },
-  }));
-
   const serializedSeller = seller
     ? {
         id: seller.id,
@@ -101,7 +70,9 @@ export default async function SellerDashboardPage() {
     <SellerDashboardClient
       seller={serializedSeller}
       products={serializedProducts}
-      orderItems={serializedOrderItems}
+      metrics={metrics}
+      initialMainTab={query.year === undefined ? "ORDERS" : "ANALYTICS"}
+      key={`${currentUser.id}:${year}`}
     />
   );
 }
