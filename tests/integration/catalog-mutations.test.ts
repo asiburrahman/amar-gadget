@@ -1,5 +1,6 @@
 jest.mock("@/lib/session", () => ({ getCurrentUserWithRole: jest.fn() }));
 jest.mock("next/cache", () => ({ revalidatePath: jest.fn() }));
+jest.mock("@/lib/rate-limit", () => ({ getClientIp: () => "127.0.0.1", rateLimit: jest.fn().mockResolvedValue({ success: true }) }));
 
 import { randomUUID } from "node:crypto";
 import type { PrismaClient, User, Product, Category } from "@prisma/client";
@@ -84,14 +85,15 @@ databaseSuite("catalog mutations use runtime validation and current PostgreSQL a
   it("guards seller statuses through both entry points and rejects malformed JSON/body size", async () => {
     expect((await updateSellerStatus(seller.id, "ADMIN")).success).toBe(false);
     expect((await updateSellerStatus(customer.id, "APPROVED")).success).toBe(false);
-    const request = (body: string) => new Request("http://localhost/api/admin/sellers", { method: "POST", body });
+    const request = (body: string) => new Request("http://localhost/api/admin/sellers", { method: "POST", headers: { "X-Account-Owner": admin.id }, body });
     for (const body of ["{", JSON.stringify({ sellerId: seller.id, sellerStatus: "ADMIN" }), JSON.stringify({ sellerId: seller.id, sellerStatus: "BLOCKED", role: "ADMIN" })]) expect((await POST(request(body))).status).toBe(400);
-    expect((await POST(request("x".repeat(2049)))).status).toBe(413);
-    const response = await POST(request(JSON.stringify({ sellerId: seller.id, sellerStatus: "BLOCKED" })));
-    expect(response.status).toBe(200); expect((await response.json()).user.sellerStatus).toBe("BLOCKED");
+    expect((await POST(request("x".repeat(8193)))).status).toBe(413);
+    const intent = () => ({ action: "seller-status", id: seller.id, version: seller.administrationVersion, requestId: randomUUID(), reason: "Reviewed seller suspension", confirmed: true, sellerStatus: "BLOCKED" });
+    const response = await POST(request(JSON.stringify(intent())));
+    expect(response.status).toBe(200); expect((await response.json()).row.sellerStatus).toBe("BLOCKED");
     seller = await db.user.update({ where: { id: seller.id }, data: { sellerStatus: "APPROVED" } });
     (getCurrentUserWithRole as jest.Mock).mockRejectedValueOnce(new Error("private-provider-detail"));
-    const unavailable = await POST(request(JSON.stringify({ sellerId: seller.id, sellerStatus: "BLOCKED" })));
+    const unavailable = await POST(request(JSON.stringify(intent())));
     expect(unavailable.status).toBe(503); expect(await unavailable.text()).not.toContain("private-provider-detail");
   });
   it("reports missing records and preserves foreign-key protected product history", async () => {

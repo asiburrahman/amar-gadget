@@ -3,12 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserWithRole } from "@/lib/session";
-import { catalogIdSchema, productStatusUpdateSchema, productPriceUpdateSchema, productApprovalSchema, sellerStatusUpdateSchema } from "@/lib/validations/product";
+import { catalogIdSchema, productStatusUpdateSchema, productPriceUpdateSchema, productApprovalSchema } from "@/lib/validations/product";
 import { CatalogMutationError, withCurrentAdmin } from "@/lib/catalog-mutations";
 import { Prisma } from "@prisma/client";
 import { isPublicAsset } from "@/lib/public-assets";
 import { enqueueDetachedImages } from "@/lib/product-image-lifecycle";
-import { netCollectedRevenue } from "@/lib/financial-metrics";
+import { readAdministratorOverview } from "@/lib/admin-reporting";
+import { accountAdminMutationSchema } from "@/lib/validations/admin-accounts";
+import { mutateAccountAdministration, AccountAdminError } from "@/lib/account-administration";
 
 function mutationError(error: unknown) {
   if (error instanceof CatalogMutationError) return error.message;
@@ -22,38 +24,34 @@ function refreshCatalog(slug?: string) {
 }
 
 export async function getAdminStats() {
-  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
+  const actor = await getCurrentUserWithRole(["ADMIN"]);
+  if (!actor) {
     return {
       success: false,
-      stats: { totalUsers: 0, totalProducts: 0, pendingProducts: 0, totalOrders: 0, totalRevenue: 0 },
+      stats: { totalUsers: 0, totalProducts: 0, pendingProducts: 0, totalOrders: 0, totalRevenue: 0, totalRevenueCents: 0 },
     };
   }
 
   try {
-    const [totalUsers, totalProducts, pendingProducts, totalOrders, aggregateRevenue] = await Promise.all([
-      prisma.user.count(),
-      prisma.product.count(),
-      prisma.product.count({ where: { status: "PENDING_APPROVAL" } }),
-      prisma.order.count(),
-      netCollectedRevenue(),
-    ]);
+    const overview = await readAdministratorOverview(actor);
 
     return {
       success: true,
       stats: {
-        totalUsers,
-        totalProducts,
-        pendingProducts,
-        totalOrders,
-        totalRevenue: aggregateRevenue,
+        totalUsers: overview.users,
+        totalProducts: overview.products,
+        pendingProducts: overview.pendingProducts,
+        totalOrders: overview.orders,
+        totalRevenue: overview.paidRevenueCents / 100,
+        totalRevenueCents: overview.paidRevenueCents,
       },
     };
-  } catch (error) {
-    console.error("Failed to load admin statistics:", error);
+  } catch {
+    console.error("Administrator statistics are temporarily unavailable.");
     return {
       success: false,
       error: "Failed to load admin statistics.",
-      stats: { totalUsers: 0, totalProducts: 0, pendingProducts: 0, totalOrders: 0, totalRevenue: 0 },
+      stats: { totalUsers: 0, totalProducts: 0, pendingProducts: 0, totalOrders: 0, totalRevenue: 0, totalRevenueCents: 0 },
     };
   }
 }
@@ -86,31 +84,17 @@ export async function updateProductStatus(productId: unknown, status: unknown) {
   }
 }
 
-export async function updateSellerStatus(sellerId: unknown, sellerStatus: unknown) {
+export async function updateSellerStatus(sellerId: unknown, sellerStatus: unknown, version?: unknown, requestId?: unknown, reason?: unknown, confirmed?: unknown) {
   const actor = await getCurrentUserWithRole(["ADMIN"]);
-  if (!actor) {
-    return { success: false, error: "Unauthorized" };
-  }
-
-  const parsed = sellerStatusUpdateSchema.safeParse({ sellerId, sellerStatus });
-  if (!parsed.success) return { success: false, error: "Invalid seller identifier or status." };
+  if (!actor) return { success: false as const, error: "Unauthorized" };
+  const parsed = accountAdminMutationSchema.safeParse({ action: "seller-status", id: sellerId, sellerStatus, version, requestId, reason, confirmed });
+  if (!parsed.success) return { success: false as const, error: "Reload seller management and confirm the current revision, reason and request identity." };
   try {
-    const user = await withCurrentAdmin(actor, async (tx) => {
-      const seller = await tx.user.findUnique({ where: { id: parsed.data.sellerId }, select: { role: true } });
-      if (!seller || seller.role.toUpperCase() !== "MEMBER") throw new CatalogMutationError("Seller not found.");
-      const updated = await tx.user.updateMany({ where: { id: parsed.data.sellerId, role: seller.role }, data: { sellerStatus: parsed.data.sellerStatus } });
-      if (updated.count !== 1) throw new CatalogMutationError("Seller access changed. Refresh before retrying.");
-      return tx.user.findUniqueOrThrow({ where: { id: parsed.data.sellerId }, select: { id: true, email: true, name: true, role: true, sellerStatus: true } });
-    });
-
-    revalidatePath("/admin");
-    revalidatePath("/admin/sellers");
-    revalidatePath("/member/dashboard");
-    revalidatePath("/products");
-
-    return { success: true, data: user };
+    const result = await mutateAccountAdministration(actor, parsed.data);
+    try { revalidatePath("/", "layout"); } catch { console.warn("Seller administration committed; cache refresh deferred."); }
+    return { success: true as const, data: result.row, receipt: result.result };
   } catch (error) {
-    return { success: false, error: mutationError(error) };
+    return { success: false as const, error: error instanceof AccountAdminError ? error.message : mutationError(error) };
   }
 }
 

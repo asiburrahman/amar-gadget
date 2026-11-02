@@ -1,55 +1,13 @@
-import { Metadata } from "next";
 import Link from "next/link";
-import { H1, H2, P } from "@/components/ui/typography";
-import { StatNumericCard } from "@/components/dashboard/stat-numeric-card";
-
-export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: "Admin Analytics & Control | Amar Gadget",
-    description: "Platform analytics, vendor moderation queue, system performance, and sales oversight.",
-  };
-}
-
-export default function AdminAnalyticsPage() {
-  return (
-    <div className="space-y-8">
-      {/* Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-rose-500/10 via-amber-500/5 to-transparent border border-rose-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Super Admin Control</span>
-          <H1 className="text-3xl font-extrabold">Platform System Overview</H1>
-          <P className="text-sm text-muted-foreground">Monitor marketplace activity, approve pending seller listings, and manage system users.</P>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatNumericCard title="Total Platform Volume" value="৳8.45M" change="24.2%" isPositive={true} description="YTD Gross Merchandise Value" />
-        <StatNumericCard title="Registered Users" value="12,450" change="1,200 new" isPositive={true} description="Customers & Vendors" />
-        <StatNumericCard title="Pending Approvals" value="8" change="Action Needed" isPositive={false} description="Product approval queue" />
-        <StatNumericCard title="System Health" value="99.98%" change="100% Uptime" isPositive={true} description="API & DB status" />
-      </div>
-
-      {/* Admin Quick Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <Link href="/admin/products" className="p-6 rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-all space-y-2">
-          <div className="text-2xl">🔍</div>
-          <h3 className="font-bold text-base text-foreground">Product Moderation</h3>
-          <p className="text-xs text-muted-foreground">Approve or reject pending product listings submitted by sellers.</p>
-        </Link>
-
-        <Link href="/admin/users" className="p-6 rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-all space-y-2">
-          <div className="text-2xl">👥</div>
-          <h3 className="font-bold text-base text-foreground">User Management</h3>
-          <p className="text-xs text-muted-foreground">Manage user roles, ban suspicious accounts, and inspect permissions.</p>
-        </Link>
-
-        <Link href="/admin/reports" className="p-6 rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-all space-y-2">
-          <div className="text-2xl">📊</div>
-          <h3 className="font-bold text-base text-foreground">Financial Reports</h3>
-          <p className="text-xs text-muted-foreground">Inspect platform commission revenue and payment gateway reconciliation.</p>
-        </Link>
-      </div>
-    </div>
-  );
+import { redirect } from "next/navigation";
+import { getCurrentUserWithRole } from "@/lib/session";
+import { readAdministratorOverview } from "@/lib/admin-reporting";
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Administrator analytics | Amar Gadget", description: "Current account, catalog, moderation and collected-order totals." };
+function money(cents: number) { const value = BigInt(cents); return `BDT ${new Intl.NumberFormat("en-BD").format(value / BigInt(100))}.${String(value % BigInt(100)).padStart(2, "0")}`; }
+export default async function Page() {
+  const actor = await getCurrentUserWithRole(["ADMIN"]); if (!actor) redirect("/login");
+  let data: Awaited<ReturnType<typeof readAdministratorOverview>> | null = null;
+  try { data = await readAdministratorOverview(actor); } catch { /* Render an explicit unavailable state below. */ }
+  return <main className="mx-auto max-w-7xl space-y-6 p-6"><h1 className="text-3xl font-bold">Platform analytics</h1><nav className="flex flex-wrap gap-4"><Link className="underline" href="/admin/users">All accounts</Link><Link className="underline" href="/admin/members">Seller members</Link><Link className="underline" href="/admin/products">Product moderation</Link><Link className="underline" href="/admin/reports">Filtered order reports and CSV</Link></nav>{data ? <><p>All-time database snapshot generated {data.asOf}. Customer accounts use USER; seller members use MEMBER. Counts include unverified registrations.</p><dl className="grid gap-4 sm:grid-cols-3">{[["Registered accounts", String(data.users)], ["Customer accounts", String(data.customers)], ["Seller members", String(data.sellers)], ["Administrators", String(data.administrators)], ["Unverified registrations", String(data.unverified)], ["Pending seller approvals", String(data.pendingSellers)], ["Catalog products", String(data.products)], ["Pending product approvals", String(data.pendingProducts)], ["Orders placed", String(data.orders)], ["Net fully collected orders", money(data.paidRevenueCents)]].map(([label, value]) => <div className="rounded border p-4" key={label}><dt>{label}</dt><dd className="text-2xl font-semibold">{value}</dd></div>)}</dl><p>Net fully collected includes shipping on PAID orders, subtracts confirmed refunds and lost dispute principal, and floors each order at zero. Unpaid and partially collected COD orders are excluded from this amount; review them in the filtered report. This is not commission, seller payout availability or an uptime measurement.</p></> : <p role="alert">Administrator analytics are temporarily unavailable. Reload to query the current saved state.</p>}</main>;
 }

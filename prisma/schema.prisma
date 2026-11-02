@@ -20,6 +20,7 @@ model User {
   sellerStatus String      @default("APPROVED") // APPROVED, PENDING, BLOCKED, REJECTED
   isVerified   Boolean     @default(false)
   sessionVersion Int       @default(0)
+  administrationVersion Int @default(1)
   wishlistVersion Int      @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -34,6 +35,8 @@ model User {
   vendorFulfillments OrderFulfillment[]
   otpTokens   OtpToken[]
   otpThrottles OtpThrottle[]
+  @@index([role, createdAt, id])
+  @@index([createdAt, id])
 }
 
 model UserAvatarLegacy {
@@ -41,6 +44,26 @@ model UserAvatarLegacy {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   value String
   createdAt DateTime @default(now())
+}
+
+model AccountAdminRequest {
+  id String @id
+  ownerId String
+  hash String
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+}
+
+model AccountAdminEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  userId String
+  actorId String?
+  reason String?
+  before Json
+  after Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  @@index([userId, sequence])
 }
 
 model AvatarImageCleanup {
@@ -242,6 +265,7 @@ model Order {
 
   @@index([paymentMethod, status, paymentStatus, reservationNextCheckAt], map: "Order_reservation_sweep_idx")
   @@index([userId, createdAt(sort: Desc)], map: "Order_userId_createdAt_idx")
+  @@index([createdAt, id])
 }
 
 model Cart {

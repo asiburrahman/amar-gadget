@@ -11,6 +11,8 @@ export default async function AdminDashboardPage() {
     throw new Error(statsResult.error || "Failed to load admin statistics.");
   }
   const stats = statsResult.stats;
+  const revenueCents = BigInt(stats.totalRevenueCents);
+  const collectedRevenue = `BDT ${new Intl.NumberFormat("en-BD").format(revenueCents / BigInt(100))}.${String(revenueCents % BigInt(100)).padStart(2, "0")}`;
 
   // Fetch pending products for approval
   const pendingProducts = await prisma.product.findMany({
@@ -59,7 +61,7 @@ export default async function AdminDashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-2">
           <span className="text-xs font-semibold text-muted-foreground uppercase">Net Collected</span>
-          <p className="text-2xl font-extrabold text-foreground">{formatCurrency(stats.totalRevenue)}</p>
+          <p className="text-2xl font-extrabold text-foreground">{collectedRevenue}</p>
           <span className="text-[11px] text-emerald-600 font-medium">✓ Verified System Transactions</span>
         </div>
 
