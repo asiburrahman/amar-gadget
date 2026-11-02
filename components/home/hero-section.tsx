@@ -2,9 +2,15 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { formatCurrency } from "@/lib/formatter";
+import type { HomepageBanner } from "@/lib/homepage-banners";
+import { BannerCarousel } from "@/components/home/banner-carousel";
+import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 
 interface HeroSectionProps {
+  banners?: HomepageBanner[];
+  unavailable?: boolean;
   featuredProduct?: {
     id: string;
     slug?: string;
@@ -19,6 +25,8 @@ interface HeroSectionProps {
 export const HeroSection: React.FC<HeroSectionProps> = ({
   featuredProduct,
   categories = [],
+  banners = [],
+  unavailable = false,
 }) => {
   const categoryList = [
     { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
@@ -56,7 +64,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         </div>
 
         {/* Right Hero Banner Slider */}
-        <div className="lg:col-span-3 bg-transparent p-8 sm:p-10 lg:p-12 flex flex-col md:flex-row items-center justify-between min-h-[460px] relative overflow-hidden">
+        {unavailable ? <p role="alert" className="lg:col-span-3 p-8">Featured offers are temporarily unavailable.</p> : banners.length ? <BannerCarousel banners={banners} /> : <div className="lg:col-span-3 bg-transparent p-8 sm:p-10 lg:p-12 flex flex-col md:flex-row items-center justify-between min-h-[460px] relative overflow-hidden">
           
           {/* Banner Text Content */}
           <div className="max-w-md z-10 space-y-4 text-center md:text-left">
@@ -76,7 +84,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <div className="flex items-baseline justify-center md:justify-start space-x-1 mb-5">
                 <span className="text-3xl lg:text-4xl font-black text-[#333e48] tracking-tight">
                   {featuredProduct
-                    ? formatCurrency(featuredProduct.discountPrice || featuredProduct.price)
+                    ? formatCurrency(featuredProduct.discountPrice ?? featuredProduct.price)
                     : "Best Deals in BD"}
                 </span>
               </div>
@@ -89,26 +97,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </Link>
             </div>
 
-            {/* Slider Bar & Dots */}
-            <div className="flex items-center justify-center md:justify-start space-x-2 pt-6">
-              <span className="w-6 h-2 rounded-full bg-[#fed700] cursor-pointer shadow-xs"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-gray-300 hover:bg-gray-400 cursor-pointer"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-gray-300 hover:bg-gray-400 cursor-pointer"></span>
-            </div>
           </div>
 
           {/* Banner Image */}
-          <div className="mt-8 md:mt-0 relative w-full max-w-md h-72 md:h-96 flex justify-center items-center">
-            <img
+          {featuredProduct?.imageUrl && <div className="mt-8 md:mt-0 relative w-full max-w-md h-72 md:h-96 flex justify-center items-center">
+            <Image
               src={
-                featuredProduct?.imageUrl ||
-                "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80"
+                featuredProduct.imageUrl
               }
               alt={featuredProduct?.name || "Featured Product"}
+              width={640}
+              height={480}
+              unoptimized={productImageNeedsDirectDelivery(featuredProduct.imageUrl)}
               className="object-contain max-h-full drop-shadow-2xl hover:scale-105 transition-transform duration-500"
             />
-          </div>
-        </div>
+          </div>}
+        </div>}
 
       </div>
     </section>

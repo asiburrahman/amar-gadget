@@ -563,7 +563,33 @@ model Banner {
   imageUrl    String
   linkUrl     String?
   isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  placement   String   @default("HERO")
+  position    Int      @default(0)
+  version     Int      @default(1)
+  createdAt   DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  updatedAt   DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)")) @updatedAt
+
+  @@index([placement, isActive, position, id])
+}
+
+model BannerRequest {
+  id String @id
+  ownerId String
+  hash String
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+}
+
+model BannerEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  bannerId String
+  action String
+  actorId String?
+  before Json?
+  after Json?
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  @@index([bannerId, sequence])
 }
 
 model OtpToken {
