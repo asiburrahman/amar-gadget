@@ -12,7 +12,9 @@ export async function enqueueDetachedImages(tx: Prisma.TransactionClient, ownerI
 export async function imageKeyReferenced(tx: Prisma.TransactionClient, key: string) {
   if (!imageKeyOwner(key)) throw new Error("Invalid managed image key");
   const suffix = `%/${key}`;
-  const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Product" WHERE "imageUrl" LIKE ${suffix} OR EXISTS (SELECT 1 FROM unnest(images) AS image WHERE image LIKE ${suffix}) LIMIT 1`;
+  const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Product" WHERE "imageUrl" LIKE ${suffix} OR EXISTS (SELECT 1 FROM unnest(images) AS image WHERE image LIKE ${suffix})
+    UNION ALL SELECT id FROM "Category" WHERE image LIKE ${suffix}
+    UNION ALL SELECT id FROM "Brand" WHERE logo LIKE ${suffix} LIMIT 1`;
   return rows.length > 0;
 }
 export async function processImageCleanupJobs(db: PrismaClient, store: ReturnType<typeof createProductMediaStore>, { apply = false, limit = 5 }: { apply?: boolean; limit?: number } = {}) {

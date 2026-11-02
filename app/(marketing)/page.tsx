@@ -26,7 +26,7 @@ export default async function Home() {
   const [featured, sale, rated, best, campaigns, categories, brands] = await Promise.allSettled([
     prisma.product.findMany({ where: { ...publicProductWhere, isFeatured: true }, take: 12, orderBy: [{ createdAt: "desc" }, { id: "asc" }], include: { category: { select: { name: true } } } }),
     getCatalogListing({ filter: "sale", limit: 12 }), getCatalogListing({ sort: "rating", limit: 12 }), getCatalogListing({ sort: "bestsellers", limit: 8 }),
-    getActiveCampaigns(), prisma.category.findMany({ select: { id: true, name: true, slug: true }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 10 }),
+    getActiveCampaigns(), prisma.category.findMany({ where: { parentId: null }, select: { id: true, name: true, slug: true }, orderBy: [{ name: "asc" }, { id: "asc" }], take: 10 }),
     prisma.brand.findMany({ select: { id: true, name: true, slug: true, _count: { select: { products: { where: publicProductWhere } } } }, take: 12, orderBy: [{ name: "asc" }, { id: "asc" }] }),
   ]);
   const featuredProducts: DynamicProductItem[] = featured.status === "fulfilled" ? featured.value.map((product) => ({ ...product, ...publicProductMedia(product), description: product.description ?? undefined, price: Number(product.price), discountPrice: product.discountPrice === null ? null : Number(product.discountPrice), imageUrl: publicProductMedia(product).imageUrl ?? undefined, category: product.category.name })) : [];

@@ -55,12 +55,18 @@ model AvatarImageCleanup {
 
 model Category {
   id          String      @id @default(uuid())
-  name        String      @unique
+  name        String
   slug        String      @unique
   image       String?
+  version     Int         @default(1)
+  parentId    String?
+  parent      Category?   @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Category[]  @relation("CategoryHierarchy")
+  aliases     CategoryAlias[]
   products    Product[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  @@index([parentId, id])
 }
 
 model Brand {
@@ -68,9 +74,45 @@ model Brand {
   name        String      @unique
   slug        String      @unique
   logo        String?
+  version     Int         @default(1)
+  aliases     BrandAlias[]
   products    Product[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+}
+
+model CategoryAlias {
+  slug       String   @id
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  @@index([categoryId])
+}
+
+model BrandAlias {
+  slug    String @id
+  brandId String
+  brand   Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  @@index([brandId])
+}
+
+model TaxonomyRequest {
+  id        String   @id
+  ownerId   String
+  hash      String
+  result    Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model TaxonomyEvent {
+  id        String   @id @default(uuid())
+  kind      String
+  targetId  String
+  action    String
+  actorId   String?
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([kind, targetId, createdAt, id])
 }
 
 model Product {
@@ -98,7 +140,7 @@ model Product {
   category      Category    @relation(fields: [categoryId], references: [id])
   
   brandId       String?
-  brand         Brand?       @relation(fields: [brandId], references: [id])
+  brand         Brand?       @relation(fields: [brandId], references: [id], onDelete: Restrict)
   
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt

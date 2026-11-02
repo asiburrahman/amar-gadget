@@ -15,7 +15,7 @@ export default function AddProductPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; pathLabel?: string }[]>([]);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
 
   const [formData, setFormData] = useState({
@@ -204,7 +204,7 @@ export default function AddProductPage() {
             >
               <option value="">Select Category</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>{c.pathLabel || c.name}</option>
               ))}
             </select>
           </div>

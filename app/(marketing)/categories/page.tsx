@@ -24,6 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function CategoriesPage() {
   let categories: Prisma.CategoryGetPayload<{ include: { products: { include: { category: { select: { name: true } } } } } }>[] = [];
 
+  let unavailable = false;
   try {
     categories = await prisma.category.findMany({
       include: {
@@ -45,11 +46,13 @@ export default async function CategoriesPage() {
         name: "asc",
       },
     });
-  } catch (error) {
-    console.error("Error fetching categories with products:", error);
+  } catch {
+    unavailable = true; console.error("Category directory unavailable; private details were not logged.");
   }
 
   // Build format for ElectroCategoryShowcase
+  if (unavailable) return <section className="container mx-auto space-y-3 p-6"><h1>Product Categories</h1><p role="alert">Categories are temporarily unavailable.</p><Link href="/categories" className="underline">Reload categories</Link></section>;
+
   const allProducts: ShowcaseProduct[] = [];
   const showcaseCategories: ShowcaseCategory[] = categories.map((cat) => {
     const products: ShowcaseProduct[] = cat.products.map((p) => {
@@ -75,6 +78,8 @@ export default async function CategoriesPage() {
       id: cat.id,
       name: cat.name,
       slug: cat.slug,
+      parentId: cat.parentId,
+      image: cat.image,
       products,
     };
   });
@@ -102,7 +107,7 @@ export default async function CategoriesPage() {
             Shop by Category
           </H1>
           <P className="mt-2.5 text-gray-500 text-xs sm:text-sm max-w-xl mx-auto leading-relaxed">
-            Click on any category in the navigation bar below to view its specific devices, official warranty information, and deals.
+            Choose a category below to browse its approved products and subcategories.
           </P>
 
           {/* Quick Metrics Bar */}
@@ -113,11 +118,11 @@ export default async function CategoriesPage() {
             </span>
             <span className="flex items-center gap-1.5 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-2xs">
               <span className="text-amber-500 font-bold">📦</span>
-              <span>{totalApprovedProducts} In-Stock Gadgets</span>
+              <span>{totalApprovedProducts} Approved Gadgets</span>
             </span>
             <span className="flex items-center gap-1.5 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-2xs">
               <span className="text-blue-500 font-bold">★</span>
-              <span>100% Genuine with Warranty</span>
+              <span>Current approved listings</span>
             </span>
           </div>
         </div>

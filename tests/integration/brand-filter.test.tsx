@@ -54,13 +54,13 @@ databaseSuite("canonical brand filtering across actual SQL, API, action and rend
       expect(action.data.map((item) => item.id).sort()).toEqual([visible.id, secondVisible.id].sort());
     }
   });
-  it("treats SQL wildcard characters literally and refuses ambiguous case-folded aliases", async () => {
+  it("treats SQL wildcard characters literally and prevents new case-folded slug collisions", async () => {
     for (const value of [`${brand.slug}%`, brand.slug.slice(0, -1) + "_", `${brand.slug}\\`]) expect(await resolveCatalogBrand(value, undefined)).toEqual({ state: "missing" });
     const literal = await db.brand.create({ data: { name: `000-${prefix} Literal`, slug: `${prefix}-literal_%` } });
     expect(await resolveCatalogBrand(literal.slug.toUpperCase(), undefined)).toMatchObject({ state: "found", brand: { id: literal.id } });
     await db.brand.create({ data: { name: `000-${prefix} Mixed one`, slug: `${prefix}-Mixed` } });
-    await db.brand.create({ data: { name: `000-${prefix} Mixed two`, slug: `${prefix}-mIXED` } });
-    expect(await resolveCatalogBrand(`${prefix.toUpperCase()}-MIXED`, undefined)).toMatchObject({ state: "invalid" });
+    await expect(db.brand.create({ data: { name: `000-${prefix} Mixed two`, slug: `${prefix}-mIXED` } })).rejects.toMatchObject({ code: "P2002" });
+    expect(await resolveCatalogBrand(`${prefix.toUpperCase()}-MIXED`, undefined)).toMatchObject({ state: "found" });
   });
   it("intersects brand, category and search instead of replacing existing predicates", async () => {
     const response = await api({ brand: brand.slug, categoryId: category.id, search: prefix });

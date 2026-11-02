@@ -1,4 +1,4 @@
-jest.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); }, permanentRedirect: (path: string) => { throw new Error(`REDIRECT:${path}`); }, useRouter: () => ({ push: jest.fn() }) }));
+jest.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); }, permanentRedirect: (path: string) => { throw new Error(`REDIRECT:${path}`); }, redirect: (path: string) => { throw new Error(`TEMPORARY_REDIRECT:${path}`); }, useRouter: () => ({ push: jest.fn() }) }));
 import { randomUUID } from "node:crypto";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PrismaClient, Product, User, Category, Brand } from "@prisma/client";
@@ -24,7 +24,19 @@ import { SITEMAP_PAGE_SIZE } from "@/lib/seo/sitemaps";
     await db.product.createMany({ data: Array.from({ length: SITEMAP_PAGE_SIZE + 1 }, (_, index) => ({ name: `${prefix}-bulk-${index}`, slug: `${prefix}-bulk-${index}`, price: 100, stock: 1, status: "APPROVED", sellerId: seller.id, categoryId: category.id })) });
   });
   beforeEach(() => { process.env.APP_URL = origin; });
-  afterAll(async () => { if (db) try { await db.product.deleteMany({ where: { slug: { startsWith: prefix } } }); await db.brand.deleteMany({ where: { id: brand.id } }); await db.category.deleteMany({ where: { id: category.id } }); await db.user.deleteMany({ where: { email: { startsWith: prefix } } }); } finally { process.env.APP_URL = "http://localhost"; await db.$disconnect(); } });
+  afterAll(async () => {
+    if (!db) return;
+    try {
+      const ids = [seller?.id, blocked?.id].filter((id): id is string => Boolean(id));
+      // Slugs are mutable in these tests. Cleanup follows only the users this
+      // invocation created, so a failed legacy-slug assertion cannot strand a
+      // product or bypass the new restrictive brand relationship.
+      if (ids.length) await db.product.deleteMany({ where: { sellerId: { in: ids } } });
+      if (brand) await db.brand.deleteMany({ where: { id: brand.id } });
+      if (category) await db.category.deleteMany({ where: { id: category.id } });
+      if (ids.length) await db.user.deleteMany({ where: { id: { in: ids } } });
+    } finally { process.env.APP_URL = "http://localhost"; await db.$disconnect(); }
+  });
   const file = (name: string) => fileRoute(new Request(origin + `/sitemaps/${name}`), { params: Promise.resolve({ file: name }) });
   it("exports a runtime-origin robots/index and bounded visible-product shards without gaps", async () => {
     expect(robots().sitemap).toBe(origin + "/sitemap.xml");
@@ -71,15 +83,22 @@ import { SITEMAP_PAGE_SIZE } from "@/lib/seo/sitemaps";
     const query = jest.spyOn(db.product, "findFirst").mockRejectedValue(new Error("private database details"));
     try { expect(await generateMetadata({ params: Promise.resolve({ slug: products[0].slug }) })).toMatchObject({ robots: { index: false } }); expect((await productApi(new Request(origin), { params: Promise.resolve({ slug: products[0].slug }) })).status).toBe(503); } finally { query.mockRestore(); }
   });
+  it("temporarily redirects retained editable slugs so restoring an earlier URL cannot create cached permanent loops", async () => {
+    const renamed = `${prefix}-renamed`;
+    await db.category.update({ where: { id: category.id }, data: { slug: renamed, version: { increment: 1 } } });
+    try { await expect(CategoryPage({ params: Promise.resolve({ slug: category.slug }) })).rejects.toThrow(`TEMPORARY_REDIRECT:/categories/${renamed}`); }
+    finally { await db.category.update({ where: { id: category.id }, data: { slug: category.slug, version: { increment: 1 } } }); }
+    await expect(CategoryPage({ params: Promise.resolve({ slug: renamed }) })).rejects.toThrow(`TEMPORARY_REDIRECT:/categories/${category.slug}`);
+  });
   it("keeps legacy unusable slugs on working ID destinations without redirect loops", async () => {
     await db.product.update({ where: { id: products[0].id }, data: { slug: "." } });
-    await db.category.update({ where: { id: category.id }, data: { slug: " " } });
+    await db.category.update({ where: { id: category.id }, data: { slug: " ", version: { increment: 1 } } });
     try {
       expect((await generateMetadata({ params: Promise.resolve({ slug: products[0].id }) })).alternates?.canonical).toBe(`${origin}/products/${products[0].id}`);
       const html = renderToStaticMarkup(await ProductPage({ params: Promise.resolve({ slug: products[0].id }) })); expect(html).toContain(`${origin}/products/${products[0].id}`);
       expect((await categoryMetadata({ params: Promise.resolve({ slug: category.id }) })).alternates?.canonical).toBe(`${origin}/categories/${category.id}`);
       expect((await listingMetadata({ searchParams: Promise.resolve({ categoryId: category.id }) })).alternates?.canonical).toBe(`${origin}/categories/${category.id}`);
       expect(await (await file("categories-0.xml")).text()).toContain(`/categories/${category.id}`);
-    } finally { await db.product.update({ where: { id: products[0].id }, data: { slug: products[0].slug } }); await db.category.update({ where: { id: category.id }, data: { slug: category.slug } }); }
+    } finally { await db.product.update({ where: { id: products[0].id }, data: { slug: products[0].slug } }); await db.category.update({ where: { id: category.id }, data: { slug: category.slug, version: { increment: 1 } } }); }
   });
 });

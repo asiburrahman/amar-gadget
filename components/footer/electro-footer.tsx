@@ -46,12 +46,12 @@ export const ElectroFooter: React.FC = () => {
             Find It Fast
           </h4>
           <ul className="space-y-2 text-xs font-semibold text-gray-600">
-            <li><Link href="/categories/laptops" className="hover:text-black transition-colors">Laptops &amp; Computers</Link></li>
-            <li><Link href="/categories/cameras" className="hover:text-black transition-colors">Cameras, Audio &amp; Video</Link></li>
-            <li><Link href="/categories/mobiles" className="hover:text-black transition-colors">Mobiles &amp; Tablets</Link></li>
-            <li><Link href="/categories/tv-audio" className="hover:text-black transition-colors">TV &amp; Audio</Link></li>
-            <li><Link href="/categories/watches" className="hover:text-black transition-colors">Watches &amp; Eyewear</Link></li>
-            <li><Link href="/categories/accessories" className="hover:text-black transition-colors">Car &amp; Accessories</Link></li>
+            <li><Link href="/categories" className="hover:text-black transition-colors">Browse Categories</Link></li>
+            <li><Link href="/products" className="hover:text-black transition-colors">All Products</Link></li>
+            <li><Link href="/brands" className="hover:text-black transition-colors">Browse Brands</Link></li>
+            <li><Link href="/deals" className="hover:text-black transition-colors">Current Deals</Link></li>
+            <li><Link href="/compare" className="hover:text-black transition-colors">Compare Products</Link></li>
+            <li><Link href="/wishlist" className="hover:text-black transition-colors">Your Wishlist</Link></li>
           </ul>
         </div>
 

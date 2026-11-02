@@ -1,1 +1,8 @@
-export default function Page() { return <div>Admin Categories</div>; }
+import { redirect } from "next/navigation";
+import { getCurrentUserWithRole } from "@/lib/session";
+import { TaxonomyConsole } from "@/components/admin/taxonomy-console";
+export const dynamic = "force-dynamic";
+export default async function Page() {
+  const actor = await getCurrentUserWithRole(["ADMIN"]); if (!actor) redirect("/login");
+  return <main className="mx-auto max-w-6xl space-y-6 p-6"><h1 className="text-3xl font-bold">Admin Categories</h1><TaxonomyConsole ownerId={actor.id} kind="category" /></main>;
+}

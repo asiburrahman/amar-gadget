@@ -7,6 +7,9 @@ import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
 import { ShoppingCart } from "@/components/icons/ShoppingCart";
 import { CompareButton } from "@/components/catalog/compare-button";
+import { categoryLabel, categoryProducts } from "@/lib/catalog-hierarchy";
+import Image from "next/image";
+import { isPublicProductImageUrl, productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 
 export interface ShowcaseProduct {
   id: string;
@@ -27,6 +30,8 @@ export interface ShowcaseCategory {
   id: string;
   name: string;
   slug: string;
+  parentId?: string | null;
+  image?: string | null;
   icon?: string;
   products: ShowcaseProduct[];
 }
@@ -115,15 +120,15 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
   const currentProducts =
     activeSlug === "all"
       ? allProducts
-      : activeCategory?.products || [];
+      : activeCategory ? categoryProducts(activeCategory.id, categories) : [];
 
   // Hero product is the first product
-  const heroProduct = currentProducts[0] || allProducts[0] || null;
+  const heroProduct = currentProducts[0] || null;
   // Other products for left and right columns
   const remainingProducts =
     currentProducts.length > 1
       ? currentProducts.slice(1)
-      : allProducts.filter((p) => p.id !== heroProduct?.id);
+      : [];
 
   // Left Column gets items 0 and 1
   const leftItem1 = remainingProducts[0] || null;
@@ -168,7 +173,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                   : "text-[#77838f] hover:text-[#333e48] border-transparent"
               }`}
             >
-              Best Deals
+              All Products
             </button>
           </li>
 
@@ -191,7 +196,8 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                       : "text-[#77838f] hover:text-[#333e48] border-transparent"
                   }`}
                 >
-                  <span>{cat.name}</span>
+                  {cat.image && isPublicProductImageUrl(cat.image) && <Image src={cat.image} alt="" width={24} height={24} unoptimized={productImageNeedsDirectDelivery(cat.image)} className="inline-block h-6 w-6 object-contain" />}
+                  <span>{categoryLabel(cat, categories)}</span>
                 </button>
               </li>
             );

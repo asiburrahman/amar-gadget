@@ -15,6 +15,10 @@ export const resolveCatalogCategory = cache(async (category: unknown, categoryId
     byValue = await prisma.category.findUnique({ where: { slug: value }, select });
     if (!byValue) byValue = await prisma.category.findUnique({ where: { id: value }, select });
     if (!byValue) {
+      const aliases = await prisma.$queryRaw<CatalogCategory[]>`SELECT c.id,c.name,c.slug FROM "CategoryAlias" a JOIN "Category" c ON c.id=a."categoryId" WHERE lower(a.slug)=lower(${value}) LIMIT 2`;
+      byValue = aliases[0] ?? null;
+    }
+    if (!byValue) {
       const matches = await prisma.$queryRaw<CatalogCategory[]>`SELECT id, name, slug FROM "Category" WHERE lower(slug) = lower(${value}) OR lower(name) = lower(${value}) ORDER BY id LIMIT 2`;
       if (matches.length > 1) return { state: "invalid", message: "This category is ambiguous. Use its category ID." };
       byValue = matches[0] ?? null;

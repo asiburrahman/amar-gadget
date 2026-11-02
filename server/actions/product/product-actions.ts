@@ -3,6 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { publicProductWhere } from "@/lib/catalog-visibility";
+import { categoryLabel } from "@/lib/catalog-hierarchy";
 import { createProductSchema, productQuerySchema } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
@@ -114,7 +115,7 @@ export async function getCategories() {
       orderBy: { name: "asc" },
       include: { _count: { select: { products: { where: publicProductWhere } } } },
     });
-    return { success: true, data: categories };
+    return { success: true, data: categories.map((category) => ({ ...category, pathLabel: categoryLabel(category, categories) })) };
   } catch {
     return { success: false, data: [] };
   }

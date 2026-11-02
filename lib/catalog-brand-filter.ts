@@ -20,6 +20,10 @@ export const resolveCatalogBrand = cache(async (brand: unknown, brandId: unknown
     byValue = await prisma.brand.findUnique({ where: { slug: values.brand }, select });
     if (!byValue) byValue = await prisma.brand.findUnique({ where: { id: values.brand }, select });
     if (!byValue) {
+      const aliases = await prisma.$queryRaw<CatalogBrand[]>`SELECT b.id,b.name,b.slug FROM "BrandAlias" a JOIN "Brand" b ON b.id=a."brandId" WHERE lower(a.slug)=lower(${values.brand}) LIMIT 2`;
+      byValue = aliases[0] ?? null;
+    }
+    if (!byValue) {
       // ILIKE-backed ORM equality treats %/_ as patterns. Case folding must
       // remain literal equality for a brand identifier, with a bound result.
       const matches = await prisma.$queryRaw<CatalogBrand[]>`SELECT id, name, slug FROM "Brand" WHERE lower(slug) = lower(${values.brand}) ORDER BY id LIMIT 2`;

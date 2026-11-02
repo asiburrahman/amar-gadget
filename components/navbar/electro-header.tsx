@@ -14,6 +14,7 @@ import { User } from "@/components/icons/User";
 import { Menu } from "@/components/icons/Menu";
 import { ChevronDown } from "@/components/icons/ChevronDown";
 import { X } from "@/components/icons/X";
+import { useCatalogDepartments } from "@/hooks/use-catalog-departments";
 
 export const ElectroHeader: React.FC = () => {
   const pathname = usePathname();
@@ -35,17 +36,9 @@ function HeaderContent({ pathname }: { pathname: string }) {
   const totalCartPrice = cartItems.reduce((acc, item) => acc + (item.discountPrice ?? item.price) * item.quantity, 0);
   const wishlistCount = wishlistItems.length;
 
-  const categories = [
-    { name: "Value of the Day", href: "/deals", isBold: true, hasSub: false },
-    { name: "Top 100 Offers", href: "/deals", isBold: true, hasSub: false },
-    { name: "Smartphones & Tablets", href: "/categories/smartphones", isBold: false, hasSub: true },
-    { name: "Laptops & Computers", href: "/categories/laptops", isBold: false, hasSub: true },
-    { name: "Audio & Headphones", href: "/categories/audio", isBold: false, hasSub: true },
-    { name: "Smart Watches & Wearables", href: "/categories/smart-watches", isBold: false, hasSub: true },
-    { name: "Accessories", href: "/categories/accessories", isBold: false, hasSub: true },
-    { name: "Electronics", href: "/categories/electronics", isBold: false, hasSub: true },
-    { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
-  ];
+  const departments = useCatalogDepartments(isDepartmentOpen || isMobileMenuOpen);
+  const categories = [...departments.rows.map((row) => ({ name: row.name, href: `/categories/${encodeURIComponent(row.slug)}`, isBold: false, hasSub: false })), { name: "All Categories", href: "/categories", isBold: true, hasSub: false }];
+  const departmentFeedback = <>{departments.busy && <p role="status" className="px-4 py-2 text-xs">Loading departments...</p>}{departments.error && <div className="px-4 py-2 text-xs"><p role="alert">{departments.error}</p><button type="button" onClick={departments.reload} className="underline">Reload departments</button></div>}</>;
 
   return (
     <header className="w-full bg-white text-[#333e48] border-b border-gray-200 z-50 relative lg:sticky lg:top-0 shadow-xs transition-all">
@@ -247,7 +240,8 @@ function HeaderContent({ pathname }: { pathname: string }) {
                 className="absolute top-full left-0 w-full bg-white border border-gray-200 border-t-0 shadow-2xl z-50 py-1 rounded-none"
                 onMouseLeave={() => setIsDepartmentOpen(false)}
               >
-                {categories.map((cat, idx) => (
+              {departmentFeedback}
+              {categories.map((cat, idx) => (
                   <Link
                     key={idx}
                     href={cat.href}
@@ -358,6 +352,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
             {/* Menu List */}
             <div className="flex-1 py-4 px-3 space-y-1">
               <p className="px-3 text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Departments</p>
+              {departmentFeedback}
               {categories.map((cat, idx) => (
                 <Link
                   key={idx}

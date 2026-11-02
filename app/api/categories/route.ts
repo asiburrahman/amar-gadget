@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { categoryLabel } from "@/lib/catalog-hierarchy";
 
 export async function GET() {
   try {
     const categories = await prisma.category.findMany({
-      select: { id: true, name: true, slug: true, image: true },
+      select: { id: true, name: true, slug: true, image: true, parentId: true },
       orderBy: { name: "asc" },
     });
-    return NextResponse.json({ success: true, categories });
+    return NextResponse.json({ success: true, categories: categories.map((category) => ({ ...category, pathLabel: categoryLabel(category, categories) })) });
   } catch (error) {
     console.error("Category listing failed:", error);
     return NextResponse.json({ success: false, message: "Unable to load categories." }, { status: 500 });

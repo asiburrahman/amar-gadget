@@ -47,7 +47,7 @@ const runListing = cache(async (serialized: string, serializedScope: string) => 
     }
     if (brandFilter.state === "missing" || categoryFilter.state === "missing") return empty;
     if (brandFilter.state === "found") predicates.push(Prisma.sql`p."brandId" = ${brandFilter.brand.id}`);
-    if (categoryFilter.state === "found") predicates.push(Prisma.sql`p."categoryId" = ${categoryFilter.category.id}`);
+    if (categoryFilter.state === "found") predicates.push(Prisma.sql`p."categoryId" IN (WITH RECURSIVE descendants AS (SELECT id FROM "Category" WHERE id=${categoryFilter.category.id} UNION SELECT c.id FROM "Category" c JOIN descendants d ON c."parentId"=d.id) SELECT id FROM descendants)`);
     if (query.search) {
       const pattern = searchPattern(query.search);
       predicates.push(Prisma.sql`(p.name ILIKE ${pattern} OR p.description ILIKE ${pattern} OR c.name ILIKE ${pattern})`);

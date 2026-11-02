@@ -1,4 +1,5 @@
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { resolveCatalogCategory } from "@/lib/catalog-category-filter";
 import { createMetadata } from "@/lib/seo/metadata";
 import ProductsPage from "../../products/page";
@@ -14,6 +15,12 @@ export async function generateMetadata({ params }: Props) {
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params; const result = await resolveCatalogCategory(slug, undefined);
   if (result.state !== "found") notFound();
-  if (`/categories/${encodeURIComponent(slug)}` !== categoryPath(result.category)) permanentRedirect(categoryPath(result.category));
+  if (`/categories/${encodeURIComponent(slug)}` !== categoryPath(result.category)) {
+    const aliases = await prisma.$queryRaw<{ id: string }[]>`SELECT "categoryId" AS id FROM "CategoryAlias" WHERE lower(slug)=lower(${slug}) AND "categoryId"=${result.category.id} LIMIT 1`;
+    // Slugs can be restored. A cached permanent A -> B and later B -> A
+    // redirect would loop, so retained editable URLs use a temporary redirect.
+    if (aliases.length) redirect(categoryPath(result.category));
+    permanentRedirect(categoryPath(result.category));
+  }
   return <ProductsPage searchParams={Promise.resolve({ categoryId: result.category.id })} />;
 }

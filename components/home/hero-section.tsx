@@ -20,30 +20,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   featuredProduct,
   categories = [],
 }) => {
-  const defaultCategories = [
+  const categoryList = [
     { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
-    { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
-    { name: "Smartphones", href: "/categories/smartphones", isBold: false, hasSub: true },
-    { name: "Laptops & Computers", href: "/categories/laptops", isBold: false, hasSub: true },
-    { name: "Audio & Headphones", href: "/categories/audio", isBold: false, hasSub: true },
-    { name: "Smart Watches", href: "/categories/smart-watches", isBold: false, hasSub: true },
-    { name: "Accessories", href: "/categories/accessories", isBold: false, hasSub: true },
-    { name: "Electronics", href: "/categories/electronics", isBold: false, hasSub: true },
+    { name: "Current Deals", href: "/deals", isBold: true, hasSub: false },
+    ...categories.map((category) => ({ name: category.name, href: category.slug ? `/categories/${encodeURIComponent(category.slug)}` : "/categories", isBold: false, hasSub: false })),
   ];
-
-  const categoryList =
-    categories.length > 0
-      ? [
-          { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
-          { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
-          ...categories.map((c) => ({
-            name: c.name,
-            href: c.slug ? `/categories/${c.slug}` : `/categories`,
-            isBold: false,
-            hasSub: false,
-          })),
-        ]
-      : defaultCategories;
 
   const targetLink = featuredProduct
     ? `/products/${featuredProduct.slug || featuredProduct.id}`

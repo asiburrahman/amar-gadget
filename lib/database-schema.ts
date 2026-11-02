@@ -1,2 +1,2 @@
 // Advance with each reviewed schema migration. Readiness rejects an older DB.
-export const REQUIRED_SCHEMA_MIGRATION = "20261030150000_refund_ledger";
+export const REQUIRED_SCHEMA_MIGRATION = "20261102090000_catalog_taxonomy";
