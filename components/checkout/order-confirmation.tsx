@@ -10,8 +10,9 @@ import { cartCheckoutSchema } from "@/lib/validations/cart";
 import { CustomerShipments } from "@/components/orders/customer-shipments";
 import type { CustomerFulfillment } from "@/lib/validations/fulfillment";
 import { fulfillmentStatusLabel } from "@/lib/fulfillment-policy";
+import { RefundSummary, type RefundSummaryValue } from "@/components/orders/refund-summary";
 
-export type ConfirmedOrder = {
+export type ConfirmedOrder = RefundSummaryValue & {
   id: string; total: number; status: string; paymentStatus: string; paymentMethod: string;
   trackingNumber: string | null; shippingAddress: string | null; canViewOrders: boolean; needsReview: boolean;
   items: { id: string; quantity: number; price: number; product: { name: string } }[];
@@ -80,8 +81,8 @@ export function OrderConfirmation({ initialOrder }: { initialOrder: ConfirmedOrd
   const cancelled = order.status === "CANCELLED";
   const failed = order.paymentStatus === "FAILED";
   const paid = order.paymentStatus === "PAID";
-  const title = cancelled ? "Order cancelled" : failed ? "Payment failed" : paid ? "Payment confirmed" : order.paymentMethod === "COD" ? "Order received — pay on delivery" : "Awaiting payment confirmation";
-  const amountLabel = cancelled && paid ? "Amount received — refund review" : cancelled || failed ? "Order total" : paid ? "Amount paid" : order.paymentMethod === "COD" ? "Amount due on delivery" : "Amount awaiting payment confirmation";
+  const title = order.refundState === "REFUNDED" ? "Refund confirmed" : cancelled ? "Order cancelled" : failed ? "Payment failed" : paid ? "Payment confirmed" : order.paymentMethod === "COD" ? "Order received — pay on delivery" : "Awaiting payment confirmation";
+  const amountLabel = order.refundState === "REFUNDED" ? "Original amount received" : cancelled && paid ? "Amount received — refund review" : cancelled || failed ? "Order total" : paid ? "Amount paid" : order.paymentMethod === "COD" ? "Amount due on delivery" : "Amount awaiting payment confirmation";
 
   return <section className="mx-auto my-12 max-w-2xl space-y-6 rounded-2xl border bg-card p-6 sm:p-8" aria-live="polite">
     <h1 className="text-2xl font-bold">{title}</h1>
@@ -94,10 +95,11 @@ export function OrderConfirmation({ initialOrder }: { initialOrder: ConfirmedOrd
       {order.shippingAddress && <p>Shipping address: {order.shippingAddress}</p>}
     </div>
     <CustomerShipments shipments={order.fulfillments} items={order.items} />
+    <RefundSummary {...order} />
     {pending && <p>We are waiting for server confirmation. Do not place another order. Your cart is retained until payment is verified.</p>}
-    {cancelled && <p>This order will not be fulfilled. Your cart is retained.</p>}
+    {cancelled && <p>{order.refundedAmount ? "This refunded order will not be fulfilled. Review your cart before placing another order." : "This order will not be fulfilled. Your cart is retained."}</p>}
     {failed && !cancelled && <p>Payment was not completed. Your cart is retained; check the saved checkout before trying again.</p>}
-    {(order.needsReview || (cancelled && paid)) && <p role="status">{paid ? "Payment was received for a closed order. Contact support for refund review." : "Payment requires review. Check the saved checkout or contact support before placing another order."}</p>}
+    {(order.needsReview || (cancelled && paid && order.refundState !== "REFUNDED")) && <p role="status">{cancelled && paid ? "Payment was received for a closed order. Contact support for refund review." : "Payment requires review. Check the saved checkout or contact support before placing another order."}</p>}
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {pending && pollingEnded && <p>Automatic status checks have stopped. You can refresh this order explicitly.</p>}
     <ul className="divide-y border-y">{order.items.map((item) => <li key={item.id} className="flex justify-between gap-4 py-3"><span>{item.product.name} × {item.quantity}</span><span>{formatCurrency(item.price * item.quantity)}</span></li>)}</ul>

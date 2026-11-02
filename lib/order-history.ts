@@ -11,6 +11,7 @@ export function orderHistoryEntry(event: OrderEvent) {
     if (event.kind === "LEGACY_SHIPMENT_SNAPSHOT") step = `${label}: status at history activation (${statusLabels[event.fulfillmentStatus ?? ""] ?? "Unknown"})`;
     else if (event.kind === "VENDOR_COD_COLLECTED") step = `${label}: COD payment collected`;
     else if (event.kind === "VENDOR_SHIPMENT_UPDATED") step = `${label}: tracking details updated`;
+    else if (event.kind === "VENDOR_SHIPMENT_ADJUSTED") step = `${label}: reconciled after refund`;
     else if (event.kind === "VENDOR_SHIPMENT_CREATED") step = `${label}: assigned for fulfillment`;
     else step = `${label}: ${statusLabels[event.fulfillmentStatus ?? ""] ?? "Updated"}`;
   }

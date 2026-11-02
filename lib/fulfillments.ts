@@ -7,11 +7,11 @@ import { isPublicProductImageUrl } from "@/lib/product-media-policy";
 import { reconcileProductReviews } from "@/lib/reviews";
 import { reconcileReservation } from "@/lib/checkout-reservations";
 
-const itemSelect = { id: true, productId: true, quantity: true, price: true, product: { select: { name: true, imageUrl: true } } } satisfies Prisma.OrderItemSelect;
+const itemSelect = { id: true, productId: true, quantity: true, voidedQuantity: true, price: true, product: { select: { name: true, imageUrl: true } } } satisfies Prisma.OrderItemSelect;
 const shipmentSelect = {
   id: true, orderId: true, sellerId: true, status: true, version: true, carrier: true, trackingNumber: true,
   shippedAt: true, deliveredAt: true, legacySnapshot: true, createdAt: true, codCollected: true, codCollectedAt: true,
-  order: { select: { status: true, fulfillmentVersion: true, paymentMethod: true, paymentStatus: true, trackingNumber: true, shippingAddress: true, shippingPhone: true, reservationReviewReason: true } },
+  order: { select: { status: true, fulfillmentVersion: true, paymentMethod: true, paymentStatus: true, refundState: true, financialReviewReason: true, disputeStatus: true, trackingNumber: true, shippingAddress: true, shippingPhone: true, reservationReviewReason: true } },
   items: { orderBy: { id: "asc" }, select: itemSelect },
 } satisfies Prisma.OrderFulfillmentSelect;
 type ShipmentRow = Prisma.OrderFulfillmentGetPayload<{ select: typeof shipmentSelect }>;
@@ -23,7 +23,7 @@ function sellerDto(row: ShipmentRow): SellerFulfillment {
     recipientAddress: row.order.shippingAddress, recipientPhone: row.order.shippingPhone,
     carrier: row.carrier, trackingNumber: row.trackingNumber, shippedAt: row.shippedAt?.toISOString() ?? null, deliveredAt: row.deliveredAt?.toISOString() ?? null,
     legacySnapshot: row.legacySnapshot, createdAt: row.createdAt.toISOString(),
-    items: row.items.map((item) => ({ id: item.id, productId: item.productId, name: item.product.name, imageUrl: item.product.imageUrl && isPublicProductImageUrl(item.product.imageUrl) ? item.product.imageUrl : null, quantity: item.quantity, unitPrice: Number(item.price) })),
+    items: row.items.filter((item) => item.quantity > item.voidedQuantity).map((item) => ({ id: item.id, productId: item.productId, name: item.product.name, imageUrl: item.product.imageUrl && isPublicProductImageUrl(item.product.imageUrl) ? item.product.imageUrl : null, quantity: item.quantity - item.voidedQuantity, unitPrice: Number(item.price) })),
   };
 }
 export const customerShipmentSelect = { id: true, status: true, carrier: true, trackingNumber: true, shippedAt: true, deliveredAt: true, legacySnapshot: true, items: { select: { id: true } } } satisfies Prisma.OrderFulfillmentSelect;
@@ -58,10 +58,11 @@ async function lockShipment(tx: Prisma.TransactionClient, actor: AuthenticatedUs
   return row;
 }
 async function reconcileOrder(tx: Prisma.TransactionClient, orderId: string) {
-  const shipments = await tx.orderFulfillment.findMany({ where: { orderId, items: { some: {} } }, orderBy: { id: "asc" }, select: { status: true, carrier: true, trackingNumber: true, codCollected: true } });
-  const status = aggregateFulfillmentState(shipments.map((row) => row.status));
+  const shipments = await tx.orderFulfillment.findMany({ where: { orderId, items: { some: {} } }, orderBy: { id: "asc" }, select: { status: true, carrier: true, trackingNumber: true, codCollected: true, items: { select: { quantity: true, voidedQuantity: true } } } });
+  const active = shipments.filter((row) => row.items.some((item) => item.quantity > item.voidedQuantity));
+  const status = active.length ? aggregateFulfillmentState(active.map((row) => row.status)) : "CANCELLED";
   const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, select: { paymentMethod: true } });
-  await tx.order.update({ where: { id: orderId }, data: { status, fulfillmentVersion: { increment: 1 }, ...(order.paymentMethod === "COD" ? { paymentStatus: shipments.every((row) => row.status === "DELIVERED" && row.codCollected) ? "PAID" : "UNPAID" } : {}), shippingCarrier: shipments.length === 1 ? shipments[0].carrier : null, shipmentTrackingNumber: shipments.length === 1 ? shipments[0].trackingNumber : null } });
+  await tx.order.update({ where: { id: orderId }, data: { status, fulfillmentVersion: { increment: 1 }, ...(order.paymentMethod === "COD" ? { paymentStatus: active.length > 0 && active.every((row) => row.status === "DELIVERED" && row.codCollected) ? "PAID" : "UNPAID" } : {}), shippingCarrier: shipments.length === 1 ? shipments[0].carrier : null, shipmentTrackingNumber: shipments.length === 1 ? shipments[0].trackingNumber : null } });
 }
 export async function readSellerFulfillments(actor: AuthenticatedUser, input: unknown = {}) {
   const query = fulfillmentQuerySchema.parse(input);
@@ -104,6 +105,7 @@ export async function mutateFulfillment(actor: AuthenticatedUser, input: unknown
   const parsed = fulfillmentMutationSchema.parse(input);
   return transaction(async (tx) => {
     const row = await lockShipment(tx, actor, parsed.fulfillmentId, parsed.version);
+    if (["PENDING", "REVIEW"].includes(row.order.refundState) || row.order.financialReviewReason || ["ACTIVE", "LOST"].includes(row.order.disputeStatus)) throw new FulfillmentError("Resolve the active refund, financial review or payment dispute before changing fulfillment.", "FULFILLMENT_FINANCIAL_HOLD");
     if (parsed.action === "deliver" || parsed.action === "collect-cod") {
       if (actor.role !== "ADMIN") throw new FulfillmentError("Only an administrator can confirm delivery and COD collection.", "FORBIDDEN", 403);
       if (row.order.status === "CANCELLED" || row.order.reservationReviewReason) throw new FulfillmentError("This order requires reconciliation before delivery.", "FULFILLMENT_PAYMENT");
@@ -144,6 +146,7 @@ export async function mutateWholeOrder(actor: AuthenticatedUser, input: unknown)
     const row = await tx.order.findUnique({ where: { id: parsed.orderId }, include: { items: { select: { productId: true, quantity: true } }, fulfillments: { select: { status: true, codCollected: true } } } });
     if (!row || !row.items.length) throw new FulfillmentError("Order not found.", "FULFILLMENT_NOT_FOUND", 404);
     if (row.fulfillmentVersion !== parsed.version) throw new FulfillmentError("This order changed. Reload it before retrying.", "FULFILLMENT_CHANGED");
+    if (["PENDING", "REVIEW"].includes(row.refundState) || row.financialReviewReason || ["ACTIVE", "LOST"].includes(row.disputeStatus)) throw new FulfillmentError("Resolve the active financial operation before changing order state.", "FULFILLMENT_FINANCIAL_HOLD");
     if (!["PENDING", "PROCESSING"].includes(row.status) || row.fulfillments.some((group) => !["PENDING", "PROCESSING"].includes(group.status) || group.codCollected)) throw new FulfillmentError("Dispatched or delivered shipments cannot be cancelled or reset by whole-order controls.", "FULFILLMENT_STATE");
     if (row.reservationReviewReason && row.paymentMethod !== "STRIPE") throw new FulfillmentError("Review this order's reconciliation state first.", "FULFILLMENT_PAYMENT");
     if (parsed.action === "confirm" && (row.status !== "PENDING" || (row.paymentMethod === "STRIPE" && row.paymentStatus !== "PAID"))) throw new FulfillmentError("Only a pending order with eligible payment can be confirmed.", "FULFILLMENT_PAYMENT");

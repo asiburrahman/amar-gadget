@@ -154,6 +154,18 @@ model Order {
   total           Decimal     @db.Decimal(10, 2)
   status          String      @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
   fulfillmentVersion Int @default(1)
+  refundVersion Int @default(1)
+  subtotalCents BigInt?
+  discountCents BigInt?
+  shippingCents BigInt?
+  pricingEvidence String? @db.VarChar(500)
+  pricingReconciledAt DateTime?
+  refundedCents BigInt @default(0)
+  shippingRefundedCents BigInt @default(0)
+  refundState String @default("NONE")
+  financialReviewReason String? @db.VarChar(120)
+  disputeStatus String @default("NONE")
+  disputeAmountCents BigInt @default(0)
   paymentMethod   String      @default("COD") // COD, STRIPE
   paymentStatus   String      @default("UNPAID") // UNPAID, PAID, FAILED
   paymentIntentId String?
@@ -182,6 +194,9 @@ model Order {
   items           OrderItem[]
   events          OrderEvent[]
   fulfillments    OrderFulfillment[]
+  refunds Refund[]
+  financialEvents FinancialEvent[]
+  disputes PaymentDispute[]
 
   @@index([paymentMethod, status, paymentStatus, reservationNextCheckAt], map: "Order_reservation_sweep_idx")
   @@index([userId, createdAt(sort: Desc)], map: "Order_userId_createdAt_idx")
@@ -244,6 +259,16 @@ model OrderItem {
   product   Product  @relation(fields: [productId], references: [id])
   quantity  Int
   price     Decimal  @db.Decimal(10, 2)
+  netCents BigInt?
+  refundedCents BigInt @default(0)
+  refundedQuantity Int @default(0)
+  retainedQuantity Int @default(0)
+  retainedCents BigInt?
+  voidedQuantity Int @default(0)
+  returnedQuantity Int @default(0)
+  financialVersion Int @default(1)
+  refundLines RefundLine[]
+  returns OrderReturn[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   reviews   Review[]
@@ -256,6 +281,102 @@ model OrderItem {
   @@index([productId, orderId, id])
   @@index([orderId, productId])
   @@index([fulfillmentId, id])
+}
+
+model Refund {
+  id String @id @default(uuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  requestId String @unique @db.VarChar(36)
+  requestHash String @db.VarChar(64)
+  createdById String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  kind String
+  status String @default("QUEUED")
+  version Int @default(1)
+  amountCents BigInt
+  shippingCents BigInt @default(0)
+  paymentMethod String
+  providerRefundId String? @unique @db.VarChar(120)
+  providerPaymentIntentId String? @db.VarChar(120)
+  providerStatus String? @db.VarChar(32)
+  providerCreatedAt DateTime?
+  submittedAt DateTime?
+  nextCheckAt DateTime?
+  leaseUntil DateTime?
+  leaseToken String? @db.VarChar(36)
+  errorCode String? @db.VarChar(80)
+  manualMethod String? @db.VarChar(30)
+  manualReference String? @db.VarChar(120)
+  confirmedById String? @db.VarChar(64)
+  confirmedAt DateTime?
+  appliedAt DateTime?
+  allocationConfirmed Boolean @default(true)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @updatedAt
+  lines RefundLine[]
+  @@index([orderId, createdAt, id])
+  @@index([status, nextCheckAt])
+}
+
+model RefundLine {
+  id String @id @default(uuid())
+  refundId String
+  refund Refund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  orderItemId String
+  item OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  quantity Int
+  offset Int
+  amountCents BigInt
+  beforeDispatch Boolean
+  @@unique([refundId, orderItemId])
+  @@index([orderItemId])
+}
+
+model OrderReturn {
+  id String @id @default(uuid())
+  requestId String @unique @db.VarChar(36)
+  orderItemId String
+  item OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  quantity Int
+  acceptedById String @db.VarChar(64)
+  evidence String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([orderItemId, createdAt])
+}
+
+model FinancialEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refundId String? @db.VarChar(64)
+  kind String @db.VarChar(80)
+  status String? @db.VarChar(32)
+  amountCents BigInt?
+  actorId String? @db.VarChar(64)
+  actorRole String? @db.VarChar(16)
+  evidence String? @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([orderId, sequence])
+  @@index([refundId, sequence])
+}
+
+model PaymentDispute {
+  id String @id @db.VarChar(120)
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  status String @db.VarChar(40)
+  amountCents BigInt
+  fundsLostCents BigInt @default(0)
+  updatedAt DateTime @updatedAt
+  @@index([orderId])
+}
+
+model FinancialWebhookReceipt {
+  id String @id @db.VarChar(120)
+  kind String @db.VarChar(80)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
 }
 
 model OrderFulfillment {

@@ -6,7 +6,7 @@ export function CustomerShipments({ shipments, items = [] }: { shipments?: Custo
   const delivered = shipments.filter((row) => row.status === "DELIVERED").length;
   return <section className="space-y-3 rounded-xl border p-4" aria-label="Seller shipments">
     <h2 className="font-bold">Seller shipments</h2>
-    <p className="text-sm">{delivered} of {shipments.length} shipments delivered. Each package has its own status and tracking details.</p>
+    <p className="text-sm">{delivered} of {shipments.filter((row) => row.status !== "CANCELLED").length} active shipments delivered. {shipments.filter((row) => row.status === "CANCELLED").length} cancelled. Each package has its own status and tracking details.</p>
     <div className="grid gap-3 sm:grid-cols-2">{shipments.map((row, index) => <article key={row.id} className="space-y-2 rounded-lg border p-3 text-sm">
       <h3 className="font-semibold">Shipment {index + 1}: {fulfillmentStatusLabel(row.status)}</h3>
       <ul>{row.itemIds.map((id) => { const item = byId.get(id); return item ? <li key={id}>{item.product.name} × {item.quantity}</li> : null; })}</ul>

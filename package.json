@@ -39,7 +39,9 @@
     "cleanup:avatars": "tsx scripts/cleanup-avatars.ts",
     "worker:avatar-cleanup": "node scripts/avatar-cleanup-worker.mjs",
     "smoke:avatars": "node scripts/smoke-avatars.mjs",
-    "smoke:fulfillments": "node scripts/smoke-fulfillments.mjs"
+    "smoke:fulfillments": "node scripts/smoke-fulfillments.mjs",
+    "worker:refunds": "node scripts/refund-reconciliation-worker.mjs",
+    "smoke:refunds": "node scripts/smoke-refunds.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

@@ -38,6 +38,7 @@ export default async function CustomerOrdersPage() {
     status: o.status,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
+    refundState: o.refundState, refundedAmount: Number(o.refundedCents) / 100, disputeStatus: o.disputeStatus, disputeLossAmount: Number(o.disputeAmountCents) / 100,
     shippingAddress: o.shippingAddress,
     trackingNumber: o.trackingNumber,
     fulfillments: o.fulfillments.map(customerShipment),

@@ -17,6 +17,7 @@ import { CartError } from "@/lib/cart";
 import { FulfillmentError } from "@/lib/fulfillment-policy";
 import { invalidateFulfillmentPages } from "@/lib/fulfillment-request";
 import { customerShipmentSelect, customerShipment, readSellerFulfillments, mutateFulfillment, mutateWholeOrder } from "@/lib/fulfillments";
+import { allocateDiscount, cents } from "@/lib/refund-policy";
 
 function hashCheckoutToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -90,6 +91,7 @@ export async function createOrder(input: CheckoutInput) {
 
       if (!user) throw new CheckoutError("Your account is no longer available. Please sign in again.", "ACCOUNT_UNAVAILABLE");
 
+      const allocations = allocateDiscount(quote.items.map((item) => ({ id: item.productId, grossCents: cents(item.lineTotal) })), cents(quote.discountAmount));
       const orderItems = [];
       for (const item of quote.items) {
         const updated = await tx.product.updateMany({
@@ -97,7 +99,7 @@ export async function createOrder(input: CheckoutInput) {
           data: { stock: { decrement: item.quantity } },
         });
         if (updated.count !== 1) throw new CheckoutError("A product is no longer available in the requested quantity.", "OUT_OF_STOCK");
-        orderItems.push({ productId: item.productId, quantity: item.quantity, price: new Prisma.Decimal(item.unitPrice) });
+        orderItems.push({ productId: item.productId, quantity: item.quantity, price: new Prisma.Decimal(item.unitPrice), netCents: BigInt(allocations.find((line) => line.id === item.productId)!.netCents) });
       }
       const total = new Prisma.Decimal(quote.total);
 
@@ -105,6 +107,8 @@ export async function createOrder(input: CheckoutInput) {
         data: {
           userId: user.id,
           total,
+          subtotalCents: BigInt(cents(quote.subtotal)), discountCents: BigInt(cents(quote.discountAmount)), shippingCents: BigInt(cents(quote.shippingFee)),
+          pricingEvidence: "CHECKOUT_QUOTE_V1", pricingReconciledAt: new Date(),
           status: validated.paymentMethod === "COD" ? "PROCESSING" : "PENDING",
           paymentMethod: validated.paymentMethod,
           paymentStatus: "UNPAID",
@@ -230,6 +234,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         status: true,
         paymentMethod: true,
         paymentStatus: true,
+        refundState: true, refundedCents: true, disputeStatus: true, disputeAmountCents: true, financialReviewReason: true,
         shippingAddress: true,
         trackingNumber: true,
         createdAt: true,
@@ -269,11 +274,12 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         status: order.status,
         paymentMethod: order.paymentMethod,
         paymentStatus: order.paymentStatus,
+        refundState: order.refundState, refundedAmount: Number(order.refundedCents) / 100, disputeStatus: order.disputeStatus, disputeLossAmount: Number(order.disputeAmountCents) / 100,
         shippingAddress: order.shippingAddress,
         trackingNumber: order.trackingNumber,
         createdAt: order.createdAt,
         canViewOrders: currentUser?.id === order.userId,
-        needsReview: Boolean(order.reservationReviewReason),
+        needsReview: Boolean(order.reservationReviewReason || order.financialReviewReason || ["ACTIVE", "LOST"].includes(order.disputeStatus)),
         cartSnapshot: order.cartSnapshot,
         fulfillments: order.fulfillments.map(customerShipment),
         items: order.items.map((item) => ({
@@ -317,6 +323,7 @@ export async function getAllOrdersForAdmin() {
         id: true,
         fulfillmentVersion: true,
         total: true,
+        refundedCents: true, disputeAmountCents: true,
         status: true,
         paymentMethod: true,
         paymentStatus: true,
@@ -339,9 +346,10 @@ export async function getAllOrdersForAdmin() {
 
     return {
       success: true,
-      data: orders.map((order) => ({
+      data: orders.map(({ refundedCents, disputeAmountCents, ...order }) => ({
         ...order,
         total: Number(order.total),
+        refundedAmount: Number(refundedCents) / 100, disputeLossAmount: Number(disputeAmountCents) / 100,
         items: order.items.map((item) => ({
           ...item,
           price: Number(item.price),

@@ -37,8 +37,9 @@ export async function GET(req: Request, context: Context) {
     return NextResponse.json({ order: {
       id: order.id, total: Number(order.total), status: order.status, paymentStatus: order.paymentStatus,
       paymentMethod: order.paymentMethod, shippingAddress: order.shippingAddress,
+      refundState: order.refundState, refundedAmount: Number(order.refundedCents) / 100, disputeStatus: order.disputeStatus, disputeLossAmount: Number(order.disputeAmountCents) / 100,
       reservationExpiresAt: order.reservationExpiresAt?.toISOString() ?? null,
-      needsReview: Boolean(order.reservationReviewReason),
+      needsReview: Boolean(order.reservationReviewReason || order.financialReviewReason || ["ACTIVE", "LOST"].includes(order.disputeStatus)),
       cartSnapshot: order.cartSnapshot,
       fulfillments: order.fulfillments.map(customerShipment),
       items: order.items.map((item) => ({ productId: item.productId, name: item.product.name, quantity: item.quantity, price: Number(item.price) })),

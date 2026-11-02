@@ -8,6 +8,7 @@ import { CatalogMutationError, withCurrentAdmin } from "@/lib/catalog-mutations"
 import { Prisma } from "@prisma/client";
 import { isPublicAsset } from "@/lib/public-assets";
 import { enqueueDetachedImages } from "@/lib/product-image-lifecycle";
+import { netCollectedRevenue } from "@/lib/financial-metrics";
 
 function mutationError(error: unknown) {
   if (error instanceof CatalogMutationError) return error.message;
@@ -34,10 +35,7 @@ export async function getAdminStats() {
       prisma.product.count(),
       prisma.product.count({ where: { status: "PENDING_APPROVAL" } }),
       prisma.order.count(),
-      prisma.order.aggregate({
-        _sum: { total: true },
-        where: { paymentStatus: "PAID" },
-      }),
+      netCollectedRevenue(),
     ]);
 
     return {
@@ -47,7 +45,7 @@ export async function getAdminStats() {
         totalProducts,
         pendingProducts,
         totalOrders,
-        totalRevenue: Number(aggregateRevenue._sum.total || 0),
+        totalRevenue: aggregateRevenue,
       },
     };
   } catch (error) {

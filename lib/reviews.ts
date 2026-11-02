@@ -52,7 +52,7 @@ async function lockPurchase(tx: Prisma.TransactionClient, itemId: string) {
   // Payment/refund code uses the same Order-before-User direction. A review
   // never waits for an existing order while holding the product/account lock.
   await tx.$queryRaw`SELECT id FROM "Order" WHERE id=${candidate.orderId} FOR UPDATE`;
-  return tx.orderItem.findUniqueOrThrow({ where: { id: itemId }, include: { fulfillment: { select: { status: true, codCollected: true, sellerId: true } }, order: { select: { userId: true, status: true, paymentStatus: true, paymentMethod: true } } } });
+  return tx.orderItem.findUniqueOrThrow({ where: { id: itemId }, include: { fulfillment: { select: { status: true, codCollected: true, sellerId: true } }, order: { select: { userId: true, status: true, paymentStatus: true, paymentMethod: true, financialReviewReason: true, disputeStatus: true } } } });
 }
 function assertPurchase(item: { productId: string; fulfillment: { status: string; codCollected: boolean; sellerId: string } | null; order: { userId: string; status: string; paymentStatus: string; paymentMethod: string } }, userId: string, productId: string) {
   if (item.productId !== productId || item.order.userId !== userId || item.fulfillment?.sellerId === userId || !isDeliveredPaidItem(item)) throw new ReviewError("A delivered, paid purchase of this product is required.", "REVIEW_INELIGIBLE", 403);
@@ -65,7 +65,7 @@ export async function reconcileProductReviews(tx: Prisma.TransactionClient, prod
     FROM "Review" r JOIN "OrderItem" i ON i.id=r."orderItemId" JOIN "Order" o ON o.id=i."orderId" JOIN "OrderFulfillment" f ON f.id=i."fulfillmentId" JOIN "Product" p ON p.id=r."productId"
     WHERE r."productId"=${productId} AND r.status='PUBLISHED' AND r."isCanonical"
       AND i."productId"=r."productId" AND o."userId"=r."userId" AND p."sellerId"<>r."userId"
-      AND f."sellerId"<>r."userId" AND ${deliveredPaidItemSql}`;
+      AND f."sellerId"<>r."userId" AND ${deliveredPaidItemSql()}`;
   await tx.product.update({ where: { id: productId }, data: { reviewCount: Number(summary.total), rating: summary.rating, reviewVersion: { increment: 1 } } });
 }
 export async function readPublicReviews(productId: string, page = 1): Promise<PublicReviewPage> {
@@ -101,11 +101,11 @@ export async function readEligibleReviews(actor: AuthenticatedUser, page = 1) {
   return transaction(async (tx) => {
     await lockActor(tx, actor);
     const [count] = await tx.$queryRaw<{ total: bigint }[]>`SELECT count(DISTINCT p.id) AS total FROM "Product" p JOIN "OrderItem" i ON i."productId"=p.id JOIN "Order" o ON o.id=i."orderId" JOIN "OrderFulfillment" f ON f.id=i."fulfillmentId"
-      WHERE o."userId"=${actor.id} AND ${deliveredPaidItemSql} AND f."sellerId"<>${actor.id} AND p."sellerId"<>${actor.id}
+      WHERE o."userId"=${actor.id} AND ${deliveredPaidItemSql()} AND f."sellerId"<>${actor.id} AND p."sellerId"<>${actor.id}
       AND NOT EXISTS(SELECT 1 FROM "Review" r WHERE r."productId"=p.id AND r."userId"=${actor.id} AND r."isCanonical")`;
     const total = Number(count.total); checkPage(page, total); const offset = (page - 1) * REVIEW_PAGE_SIZE;
     const products = await tx.$queryRaw<ReviewProduct[]>`SELECT DISTINCT p.id,p.name,p.slug,p."imageUrl" FROM "Product" p JOIN "OrderItem" i ON i."productId"=p.id JOIN "Order" o ON o.id=i."orderId" JOIN "OrderFulfillment" f ON f.id=i."fulfillmentId"
-      WHERE o."userId"=${actor.id} AND ${deliveredPaidItemSql} AND f."sellerId"<>${actor.id} AND p."sellerId"<>${actor.id}
+      WHERE o."userId"=${actor.id} AND ${deliveredPaidItemSql()} AND f."sellerId"<>${actor.id} AND p."sellerId"<>${actor.id}
       AND NOT EXISTS(SELECT 1 FROM "Review" r WHERE r."productId"=p.id AND r."userId"=${actor.id} AND r."isCanonical")
       ORDER BY p.id LIMIT ${REVIEW_PAGE_SIZE} OFFSET ${offset}`;
     return { ownerId: actor.id, products: products.map(productDto), total, page, totalPages: pages(total) };

@@ -58,7 +58,7 @@ export default async function AdminDashboardPage() {
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-2">
-          <span className="text-xs font-semibold text-muted-foreground uppercase">Total Gross Sales</span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase">Net Collected</span>
           <p className="text-2xl font-extrabold text-foreground">{formatCurrency(stats.totalRevenue)}</p>
           <span className="text-[11px] text-emerald-600 font-medium">✓ Verified System Transactions</span>
         </div>

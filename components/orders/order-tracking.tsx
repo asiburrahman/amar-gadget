@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { H1, P } from "@/components/ui/typography";
 import { fulfillmentStatusLabel } from "@/lib/fulfillment-policy";
+import { RefundSummary, type RefundSummaryValue } from "@/components/orders/refund-summary";
 
-type TrackingData = {
+type TrackingData = RefundSummaryValue & {
   id: string;
   status: string;
   carrier: string | null;
@@ -167,6 +168,7 @@ export default function OrderTracking({ initialOrderId = "" }: { initialOrderId?
                 {shipment.legacySnapshot && ((shipment.status === "SHIPPED" && !shipment.shippedAt) || (shipment.status === "DELIVERED" && !shipment.deliveredAt)) && <p>Earlier status retained; its transition time was not recorded.</p>}
               </article>)}</div>
             </section>}
+            <RefundSummary {...orderData} />
             {/* Tracking Progress Bar */}
             <div className="py-4">
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-6">

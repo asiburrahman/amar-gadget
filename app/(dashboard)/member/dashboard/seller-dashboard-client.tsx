@@ -21,6 +21,8 @@ interface OrderItemData {
   orderId: string;
   productId: string;
   quantity: number;
+  refundedQuantity?: number;
+  netAmount?: number | null;
   price: number;
   createdAt: string;
   product: {
@@ -34,6 +36,7 @@ interface OrderItemData {
     status: string;
     paymentMethod: string;
     paymentStatus: string;
+    financialReview?: boolean;
     shippingAddress?: string | null;
     trackingNumber?: string | null;
     createdAt: string;
@@ -66,12 +69,14 @@ export default function SellerDashboardClient({
   const isPending = sellerStatus === "PENDING";
 
   // Financial Analytics Calculations
-  const totalUnitsSold = orderItems.reduce((acc, item) => acc + item.quantity, 0);
-  const totalRevenue = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const totalUnitsSold = orderItems.reduce((acc, item) => acc + item.quantity - (item.refundedQuantity ?? 0), 0);
+  const incompletePricingCount = orderItems.filter((item) => item.netAmount == null || item.order.financialReview).length;
+  const itemValue = (item: OrderItemData) => item.netAmount == null || item.order.financialReview ? 0 : item.netAmount;
+  const totalRevenue = orderItems.reduce((acc, item) => acc + itemValue(item), 0);
 
   const deliveredEarnings = orderItems
-    .filter((item) => item.order.status === "DELIVERED")
-    .reduce((acc, item) => acc + item.price * item.quantity, 0);
+    .filter((item) => item.order.status === "DELIVERED" && item.order.paymentStatus === "PAID")
+    .reduce((acc, item) => acc + itemValue(item), 0);
 
   const pendingDeliveryCount = orderItems.filter(
     (item) => item.order.status !== "DELIVERED" && item.order.status !== "CANCELLED"
@@ -92,11 +97,11 @@ export default function SellerDashboardClient({
       monthlyDataMap[monthKey] = { monthLabel, totalRevenue: 0, deliveredEarnings: 0, ordersCount: 0 };
     }
 
-    const itemTotal = item.price * item.quantity;
+    const itemTotal = itemValue(item);
     monthlyDataMap[monthKey].totalRevenue += itemTotal;
     monthlyDataMap[monthKey].ordersCount += 1;
 
-    if (item.order.status === "DELIVERED") {
+    if (item.order.status === "DELIVERED" && item.order.paymentStatus === "PAID") {
       monthlyDataMap[monthKey].deliveredEarnings += itemTotal;
     }
   });
@@ -184,20 +189,21 @@ export default function SellerDashboardClient({
 
 
       {/* Financial & Sales Performance Stats Cards */}
+      {incompletePricingCount > 0 && <p role="status">{incompletePricingCount} item lines need purchase-pricing or financial reconciliation and are excluded from monetary totals below.</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Delivered Account Earnings */}
         <div className="bg-card border border-emerald-500/30 p-6 rounded-2xl shadow-sm space-y-2 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl -mr-6 -mt-6"></div>
-          <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Delivered Account Earnings</span>
+          <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Delivered Item Value After Refunds</span>
           <p className="text-3xl font-black text-emerald-600">{formatCurrency(deliveredEarnings)}</p>
           <span className="text-[11px] text-muted-foreground font-medium block">
-            Completed & Delivered Orders Total
+            Reconciled paid, delivered item value
           </span>
         </div>
 
         {/* Total Orders Revenue */}
         <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-2">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Sales Volume</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Reconciled Ordered Item Value</span>
           <p className="text-3xl font-black text-foreground">{formatCurrency(totalRevenue)}</p>
           <span className="text-[11px] text-muted-foreground font-medium block">
             Across {totalUnitsSold} item units ordered
@@ -459,7 +465,7 @@ export default function SellerDashboardClient({
                     <th className="p-3 rounded-l-lg">Month Period</th>
                     <th className="p-3">Orders Count</th>
                     <th className="p-3">Gross Sales Volume</th>
-                    <th className="p-3 rounded-r-lg">Delivered Account Earnings</th>
+                    <th className="p-3 rounded-r-lg">Delivered Item Value After Refunds</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">

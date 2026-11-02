@@ -42,7 +42,7 @@ export default async function SellerDashboardPage() {
         },
         orderBy: { createdAt: "desc" },
         include: {
-          order: { select: { id: true, paymentMethod: true, paymentStatus: true, createdAt: true } },
+          order: { select: { id: true, paymentMethod: true, paymentStatus: true, financialReviewReason: true, disputeStatus: true, createdAt: true } },
           fulfillment: { select: { status: true, codCollected: true } },
           product: { select: { id: true, name: true, imageUrl: true, price: true } },
         },
@@ -68,6 +68,8 @@ export default async function SellerDashboardPage() {
     orderId: item.orderId,
     productId: item.productId,
     quantity: item.quantity,
+    refundedQuantity: item.refundedQuantity,
+    netAmount: item.netCents == null || item.retainedCents == null ? null : Number(item.retainedCents) / 100,
     price: Number(item.price),
     createdAt: item.createdAt.toISOString(),
     product: {
@@ -81,6 +83,7 @@ export default async function SellerDashboardPage() {
       status: item.fulfillment!.status,
       paymentMethod: item.order.paymentMethod,
       paymentStatus: item.order.paymentMethod === "COD" ? item.fulfillment!.codCollected ? "PAID" : "UNPAID" : item.order.paymentStatus,
+      financialReview: Boolean(item.order.financialReviewReason || ["ACTIVE", "LOST"].includes(item.order.disputeStatus)),
       createdAt: item.order.createdAt.toISOString(),
     },
   }));

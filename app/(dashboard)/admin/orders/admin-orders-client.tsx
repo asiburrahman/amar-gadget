@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthStore } from "@/stores/auth-store";
 import { AGGREGATE_ORDER_STATES, fulfillmentStatusLabel } from "@/lib/fulfillment-policy";
 import { ShipmentEditor } from "@/components/orders/shipment-editor";
+import { RefundConsole } from "@/components/orders/refund-console";
 
 interface OrderItem {
   id: string;
@@ -27,6 +28,8 @@ interface OrderItem {
 interface Order {
   id: string;
   fulfillmentVersion: number;
+  refundedAmount?: number;
+  disputeLossAmount?: number;
   total: number;
   status: string;
   paymentMethod: string;
@@ -56,11 +59,12 @@ export default function AdminOrdersClient(props: Props) {
   const { user, loading } = useAuth();
   if (loading) return <p role="status">Loading administrator account...</p>;
   if (!user || user.id !== props.ownerId || user.role !== "ADMIN") return <p>Reload the administrator area with the matching account.</p>;
-  return <OwnedAdminOrdersClient key={props.ownerId + props.initialOrders.map((o) => o.id + ":" + o.fulfillmentVersion).join(",")} {...props} />;
+  return <OwnedAdminOrdersClient key={props.ownerId} {...props} />;
 }
 function OwnedAdminOrdersClient({ initialOrders, ownerId }: Props) {
   const router = useRouter();
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const orders = initialOrders;
+  const [financialOrderId, setFinancialOrderId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -80,20 +84,7 @@ function OwnedAdminOrdersClient({ initialOrders, ownerId }: Props) {
       const res = await updateOrderStatusByAdmin(orderId, newStatus, { ownerId, version: order.fulfillmentVersion });
       const actor = useAuthStore.getState().user;
       if (!actor || actor.id !== ownerId || actor.role !== "ADMIN") return;
-      if (res.success) {
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === orderId
-              ? {
-                  ...o,
-                  status: res.data?.status ?? o.status,
-                  paymentStatus: res.data?.paymentStatus ?? o.paymentStatus,
-                  fulfillmentVersion: res.data?.fulfillmentVersion ?? o.fulfillmentVersion,
-                }
-              : o
-          )
-        );
-      } else setStatusError(res.error || "The order could not be updated.");
+      if (!res.success) setStatusError(res.error || "The order could not be updated.");
       router.refresh();
       } catch { if (useAuthStore.getState().user?.id === ownerId) setStatusError("The order change was not confirmed. Reload orders before retrying."); }
       finally { mutation.current = false; setUpdatingId(null); }
@@ -122,7 +113,7 @@ function OwnedAdminOrdersClient({ initialOrders, ownerId }: Props) {
   });
 
   const totalGrossRevenue = orders.reduce(
-    (sum, order) => sum + (order.paymentStatus === "PAID" ? Number(order.total) : 0),
+    (sum, order) => sum + (order.paymentStatus === "PAID" ? Math.max(0, Number(order.total) - (order.refundedAmount ?? 0) - (order.disputeLossAmount ?? 0)) : 0),
     0
   );
   const pendingCount = orders.filter((o) => o.status === "PENDING" || o.status === "PROCESSING").length;
@@ -131,6 +122,7 @@ function OwnedAdminOrdersClient({ initialOrders, ownerId }: Props) {
   return (
     <div className="space-y-6">
       {statusError && <p role="alert" className="text-destructive">{statusError} <button type="button" className="underline" onClick={() => router.refresh()}>Reload orders</button></p>}
+      {financialOrderId && <section className="space-y-3"><div className="flex justify-between gap-3"><h2 className="font-bold">Financial management: {orders.find((order) => order.id === financialOrderId)?.trackingNumber || financialOrderId}</h2><button type="button" className="underline" onClick={() => setFinancialOrderId(null)}>Close financial management</button></div><RefundConsole orderId={financialOrderId} admin /></section>}
       {/* Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-card border border-border p-5 rounded-2xl shadow-xs space-y-1">
@@ -139,7 +131,7 @@ function OwnedAdminOrdersClient({ initialOrders, ownerId }: Props) {
           <span className="text-[11px] text-muted-foreground">Total order transactions</span>
         </div>
         <div className="bg-card border border-border p-5 rounded-2xl shadow-xs space-y-1">
-          <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Sales Revenue</span>
+          <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Net Collected</span>
           <p className="text-2xl font-extrabold text-emerald-600">{formatCurrency(totalGrossRevenue)}</p>
           <span className="text-[11px] text-muted-foreground">Across all platform vendors</span>
         </div>
@@ -316,6 +308,7 @@ function OwnedAdminOrdersClient({ initialOrders, ownerId }: Props) {
 
                       {/* Actions */}
                       <td className="p-4 align-top text-right">
+                        <button type="button" onClick={() => setFinancialOrderId(order.id)} className="mb-2 block text-primary underline">Refunds / returns</button>
                         {order.trackingNumber && (
                           <Link href={`/track-order?id=${encodeURIComponent(order.trackingNumber)}`}>
                             <Button variant="outline" size="sm" className="h-7 text-[11px] font-bold">

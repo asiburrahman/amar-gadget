@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithRole } from "@/lib/session";
+import { netCollectedRevenue } from "@/lib/financial-metrics";
 
 export async function GET() {
   if (!(await getCurrentUserWithRole(["ADMIN"]))) {
@@ -12,10 +13,7 @@ export async function GET() {
       prisma.user.count(),
       prisma.product.count(),
       prisma.order.count(),
-      prisma.order.aggregate({
-        where: { paymentStatus: "PAID" },
-        _sum: { total: true },
-      }),
+      netCollectedRevenue(),
     ]);
     return NextResponse.json({
       success: true,
@@ -23,7 +21,7 @@ export async function GET() {
         users,
         products,
         orders,
-        paidRevenue: Number(revenue._sum.total ?? 0),
+        paidRevenue: revenue,
       },
     });
   } catch (error) {

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { CustomerShipments } from "@/components/orders/customer-shipments";
 import type { CustomerFulfillment } from "@/lib/validations/fulfillment";
 import { useAuth } from "@/hooks/use-auth";
+import { RefundDetails } from "@/components/orders/refund-console";
+import { RefundSummary, type RefundSummaryValue } from "@/components/orders/refund-summary";
 
 interface OrderItem {
   id: string;
@@ -20,7 +22,7 @@ interface OrderItem {
   };
 }
 
-interface Order {
+interface Order extends RefundSummaryValue {
   id: string;
   total: number;
   status: string;
@@ -290,6 +292,8 @@ function OwnedUserOrdersClient({ initialOrders }: Props) {
 
                 {/* Order Footer */}
                 <CustomerShipments shipments={order.fulfillments} items={order.items} />
+                <RefundSummary {...order} />
+                <RefundDetails orderId={order.id} />
                 <div className="p-4 sm:p-5 bg-muted/20 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="text-muted-foreground text-[11px]">
                     {order.shippingAddress && (
