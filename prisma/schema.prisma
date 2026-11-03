@@ -35,8 +35,66 @@ model User {
   vendorFulfillments OrderFulfillment[]
   otpTokens   OtpToken[]
   otpThrottles OtpThrottle[]
+  notifications Notification[]
   @@index([role, createdAt, id])
   @@index([createdAt, id])
+}
+
+model NotificationEvent {
+  id String @id @default(uuid())
+  dedupeKey String @unique @db.VarChar(240)
+  kind String @db.VarChar(40)
+  audience String @db.VarChar(16)
+  recipientGroup String @db.VarChar(24)
+  recipientId String? @db.VarChar(64)
+  subjectType String @db.VarChar(24)
+  subjectId String @db.VarChar(64)
+  data Json
+  state String @default("READY") @db.VarChar(16)
+  version Int @default(1)
+  attempts Int @default(0)
+  claimCount Int @default(0)
+  cursorId String? @db.VarChar(64)
+  nextAttemptAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  leaseToken String? @db.VarChar(36)
+  leaseUntil DateTime?
+  lastErrorCode String? @db.VarChar(80)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  notifications Notification[]
+  retries NotificationRetryEvent[]
+  @@index([state, nextAttemptAt, id])
+  @@index([state, leaseUntil])
+}
+
+model Notification {
+  id String @id @default(uuid())
+  eventId String
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audience String @db.VarChar(16)
+  kind String @db.VarChar(40)
+  title String @db.VarChar(120)
+  body String @db.VarChar(600)
+  href String @db.VarChar(200)
+  occurredAt DateTime
+  readAt DateTime?
+  readVersion Int @default(0)
+  deliveredAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@unique([eventId, userId])
+  @@index([userId, audience, occurredAt, id])
+  @@index([userId, audience, readAt, occurredAt, id])
+}
+
+model NotificationRetryEvent {
+  id String @id @default(uuid())
+  eventId String
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  actorId String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([eventId, createdAt])
 }
 
 model UserAvatarLegacy {

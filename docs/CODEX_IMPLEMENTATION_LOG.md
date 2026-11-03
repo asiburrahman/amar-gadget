@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 41 original tasks plus AUD-050 implemented (42 of 51 tracked tasks); 8 original tasks and external credential revocation for AUD-051 remain open (9 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 42 original tasks plus AUD-050 implemented (43 of 51 tracked tasks); 7 original tasks and external credential revocation for AUD-051 remain open (8 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -679,6 +679,24 @@ Validation: **all 115 Jest suites and 967 tests passed**, including exact calcul
 The prepared standalone `smoke:settlements` passes real login/private scopes, administrator global/override policies, compiled multi-vendor COD checkout with captured policy IDs, immediate partial collection eligibility, competing payout reservations/exact retry, reference/cancellation, late-request server resolution, actual COD refund under old terms, negative debt and explicit historic adoption/offset. Real role pages and revoked cookies are also exercised. Existing native refunds (including real SDK test transport/signed webhook/worker) and fulfillment smokes pass with the new schema.
 
 See the [settlement operator runbook](SELLER_SETTLEMENT_RUNBOOK.md) and [chronological design evidence](SELLER_SETTLEMENT_DESIGN.md). These are local fixtures and automated UI/HTTP checks; interactive-browser and hosted-provider certification remain AUD-044. No real external transfer/email, production deployment/migration or main merge occurred. **Next original task: AUD-033 - notification events and scoped role inboxes.** Remaining originals: AUD-033, 035, 036, 042, 044, 045, 046 and 049; SMTP credential revocation remains AUD-051. The complete remaining-task objective stays active.
+
+## Batch 39 - AUD-033: durable notification delivery and private role inboxes
+
+Date: 3 November 2026 (Asia/Dhaka). Previous settlement step: [f26beea](https://github.com/asiburrahman/amar-gadget/commit/f26beea).
+
+Transactional triggers capture actual seller/account decisions, product review/status, order/payment, captured seller shipments, refunds/disputes, payouts and commercial-policy changes. Immutable source identities deduplicate retries, reject conflicting content and roll back with business changes. Migration 32 adds the outbox, inbox records and append-only administrator retry evidence. Fresh installation and the 31-to-32 upgrade preserve history without broadcasting old events as new messages. Readiness now requires migration 32.
+
+The worker uses SKIP LOCKED, unique 30-second leases and atomic recipient/checkpoint commits, storing at most 100 recipients per transaction. Successful partial pages reset consecutive failures; eight consecutive failures become DEAD. Removed sources/no recipients become explicit SKIPPED. Expired claims recover without duplicate messages. Explicit UTC clock reads correct the installed adapter's host-timezone Date conversion; PostgreSQL epoch assertions verify actual lease/retry timing. The packaged supervised worker requires signed ingress, independent maintenance authentication and the configured database target.
+
+The three role inboxes provide scoped 20-record pages, whole-scope unread counts, filters, exact read/unread revisions and atomic bounded batches. Personal ACCOUNT messages survive role changes; SELLER/ADMIN visibility requires current database authority. Verified blocked/pending sellers can read their own decisions with a current session. Captured recipients and safe internal destinations avoid foreign ownership and sensitive customer/operator fields. Account changes abort requests/remove cached private data; polling preserves filter drafts and unavailable responses never fabricate an empty healthy inbox. Delivery uses the in-app channel, without advertising additional email delivery.
+
+Administrator recovery shows actual queue states, safe errors, retained message counts and checkpoints. Reasoned retries require the saved revision, preserve progress and cannot steal active leases or revive removed sources. Requeueing is distinct from delivery. Real inbox/recovery pages and role navigation use the private APIs.
+
+Validation: **all 124 Jest suites and 1,009 tests passed**, including source capture/rollback/deduplication, no-backfill upgrade, concurrent/expired claims, 111-recipient fan-out, injected PostgreSQL insert failures, terminal retry, immutable evidence, recipient/role/session isolation, stale read decisions, atomic foreign batches, API limits, UI polling/auth changes, recovery and worker authentication. TypeScript passed after build-generated route types settled. Affected-file ESLint has zero errors/warnings. Prisma validation, all 32 local migration status checks and the production build passed.
+
+The prepared standalone notification smoke passes the actual packaged worker and dual authentication, real seller approval/revoked cookies, compiled product moderation and multi-vendor checkout sources, private recipient scopes, exact read/unread state, actual payment-delivery failure/audited recovery, role pages and former-administrator denial. Existing native settlement and refund regressions also pass, including SDK test transport and signed webhook reconciliation. These are isolated local checks; interactive-browser and hosted-provider certification remain AUD-044. No production migration/deployment, real external money/email transfer or main merge occurred.
+
+See the [notification operator runbook](NOTIFICATIONS_RUNBOOK.md) and [chronological foundation notes](NOTIFICATIONS_IMPLEMENTATION_NOTES.md). **Next original task: AUD-035 - actual contact submission.** Remaining originals: AUD-035, 036, 042, 044, 045, 046 and 049; external SMTP credential revocation remains AUD-051. The complete remaining-task objective stays active.
 
 ## Public contribution evidence
 

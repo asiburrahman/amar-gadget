@@ -1,1 +1,3 @@
-export default function Page() { return <div>Admin Notifications</div>; }
+import { renderNotificationInbox } from "@/components/notifications/notification-page";
+export const dynamic = "force-dynamic";
+export default async function AdministratorNotificationsPage() { return renderNotificationInbox("ADMIN"); }

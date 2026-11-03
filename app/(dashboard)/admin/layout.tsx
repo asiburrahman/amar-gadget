@@ -8,5 +8,5 @@ export default async function AdminLayout({
   if (!(await getCurrentUserWithRole(["ADMIN"]))) {
     redirect("/login");
   }
-  return <><nav aria-label="Administrator finance" className="container mx-auto px-4 flex flex-wrap gap-4"><Link href="/admin/settlements">Seller settlement and payouts</Link><Link href="/admin/reports">Order reports</Link></nav>{children}</>;
+  return <><nav aria-label="Administrator operations" className="container mx-auto px-4 flex flex-wrap gap-4"><Link href="/admin/settlements">Seller settlement and payouts</Link><Link href="/admin/reports">Order reports</Link><Link href="/admin/notifications">Notifications</Link></nav>{children}</>;
 }
