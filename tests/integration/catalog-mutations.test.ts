@@ -31,7 +31,7 @@ databaseSuite("catalog mutations use runtime validation and current PostgreSQL a
   it("denies anonymous, customer and seller mutations without changing records", async () => {
     for (const viewer of [null, customer, seller]) {
       actor = viewer;
-      for (const result of [await updateProductStatus(product.id, "APPROVED"), await adminUpdateProductPrice(product.id, 50), await adminDeleteProduct(product.id), await updateSellerStatus(seller.id, "BLOCKED")]) expect(result).toMatchObject({ success: false, error: "Unauthorized" });
+      for (const result of [await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion), await adminUpdateProductPrice(product.id, 50), await adminDeleteProduct(product.id), await updateSellerStatus(seller.id, "BLOCKED")]) expect(result).toMatchObject({ success: false, error: "Unauthorized" });
     }
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).price.toString()).toBe("100");
     expect((await db.user.findUniqueOrThrow({ where: { id: seller.id } })).sellerStatus).toBe("APPROVED");
@@ -40,7 +40,7 @@ databaseSuite("catalog mutations use runtime validation and current PostgreSQL a
     const before = await db.product.findUniqueOrThrow({ where: { id: product.id } });
     for (const price of [NaN, Infinity, -1, 0, 1.001, 100_000_000, "50", {}, null]) expect((await adminUpdateProductPrice(product.id, price)).success).toBe(false);
     for (const discount of [0, 100, 101, 1.001, "50", NaN, Infinity]) expect((await adminUpdateProductPrice(product.id, 100, discount)).success).toBe(false);
-    for (const status of ["PAID", "approved", {}, null, ["APPROVED"]]) expect((await updateProductStatus(product.id, status)).success).toBe(false);
+    for (const status of ["PAID", "approved", {}, null, ["APPROVED"]]) expect((await updateProductStatus(product.id, status, before.catalogVersion)).success).toBe(false);
     for (const id of [null, {}, [], "", "x".repeat(65)]) { expect((await adminDeleteProduct(id)).success).toBe(false); expect((await adminUpdateProductPrice(id, 1)).success).toBe(false); }
     expect(await db.product.findUniqueOrThrow({ where: { id: product.id } })).toEqual(before);
   });
@@ -55,29 +55,29 @@ databaseSuite("catalog mutations use runtime validation and current PostgreSQL a
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).price.toString()).toBe("99999999.99");
   });
   it("approves valid records, quarantines rejected records and refuses invalid legacy approval", async () => {
-    expect((await updateProductStatus(product.id, "APPROVED")).success).toBe(true);
+    expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(true);
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).status).toBe("APPROVED");
-    expect((await updateProductStatus(product.id, "REJECTED")).success).toBe(true);
+    expect((await updateProductStatus(product.id, "REJECTED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(true);
     await db.product.update({ where: { id: product.id }, data: { discountPrice: 150, imageUrl: "javascript:alert(1)" } });
-    expect((await updateProductStatus(product.id, "APPROVED")).success).toBe(false);
-    expect((await updateProductStatus(product.id, "PENDING_APPROVAL")).success).toBe(true);
+    expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(false);
+    expect((await updateProductStatus(product.id, "PENDING_APPROVAL", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(true);
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).status).toBe("PENDING_APPROVAL");
   });
   it("does not approve a suspended seller's listing", async () => {
     await db.user.update({ where: { id: seller.id }, data: { sellerStatus: "BLOCKED" } });
-    try { expect((await updateProductStatus(product.id, "APPROVED")).success).toBe(false); }
+    try { expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(false); }
     finally { seller = await db.user.update({ where: { id: seller.id }, data: { sellerStatus: "APPROVED" } }); }
   });
   it("requires local image references to resolve to actual public assets", async () => {
     await db.product.update({ where: { id: product.id }, data: { imageUrl: "/images/missing-product.png", images: ["/images/missing-product.png"] } });
-    expect((await updateProductStatus(product.id, "APPROVED")).success).toBe(false);
+    expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(false);
     await db.product.update({ where: { id: product.id }, data: { imageUrl: "/file.svg", images: ["/file.svg"] } });
-    expect((await updateProductStatus(product.id, "APPROVED")).success).toBe(true);
+    expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(true);
   });
   it("refuses a stale administrator version and a concurrent role demotion", async () => {
     for (const change of [{ sessionVersion: { increment: 1 } }, { role: "USER" }]) {
       await db.user.update({ where: { id: admin.id }, data: change });
-      try { expect((await adminUpdateProductPrice(product.id, 10)).success).toBe(false); expect((await updateProductStatus(product.id, "APPROVED")).success).toBe(false); }
+      try { expect((await adminUpdateProductPrice(product.id, 10)).success).toBe(false); expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(false); }
       finally { admin = await db.user.update({ where: { id: admin.id }, data: { role: "ADMIN" } }); actor = admin; }
     }
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).price.toString()).toBe("100");

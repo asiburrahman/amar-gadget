@@ -2,6 +2,7 @@
 
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { purchasedProduct } from "@/lib/purchase-product-label";
 import { ZodError } from "zod";
 import { calculateCheckoutQuote, CheckoutQuoteError } from "@/lib/checkout-quote";
 import { prisma } from "@/lib/prisma";
@@ -204,6 +205,7 @@ export async function getUserOrders() {
           select: {
             id: true,
             quantity: true,
+            productName: true, productSlug: true, productSnapshotSource: true,
             price: true,
             product: { select: { id: true, name: true, imageUrl: true, slug: true } },
           },
@@ -216,7 +218,7 @@ export async function getUserOrders() {
       data: orders.map((order) => ({
         ...order,
         total: Number(order.total),
-        items: order.items.map((item) => ({ ...item, price: Number(item.price) })),
+        items: order.items.map((item) => ({ ...item, price: Number(item.price), product: purchasedProduct(item) })),
       })),
     };
   } catch (error) {
@@ -248,6 +250,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
           select: {
             id: true,
             quantity: true,
+            productName: true, productSlug: true, productSnapshotSource: true,
             price: true,
             product: { select: { id: true, name: true, imageUrl: true, slug: true } },
           },
@@ -286,6 +289,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         fulfillments: order.fulfillments.map(customerShipment),
         items: order.items.map((item) => ({
           ...item,
+          product: purchasedProduct(item),
           price: Number(item.price),
         })),
       },
@@ -339,6 +343,7 @@ export async function getAllOrdersForAdmin() {
           select: {
             id: true,
             quantity: true,
+            productName: true, productSlug: true, productSnapshotSource: true,
             price: true,
             product: { select: { id: true, name: true, imageUrl: true, price: true } },
           },
@@ -355,7 +360,7 @@ export async function getAllOrdersForAdmin() {
         items: order.items.map((item) => ({
           ...item,
           price: Number(item.price),
-          product: { ...item.product, price: Number(item.product.price) },
+          product: { ...purchasedProduct(item), price: Number(item.product.price) },
         })),
       })),
     };

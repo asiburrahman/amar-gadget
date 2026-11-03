@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserWithRole } from "@/lib/session";
-import { catalogIdSchema, productStatusUpdateSchema, productPriceUpdateSchema, productApprovalSchema } from "@/lib/validations/product";
+import { catalogIdSchema, productModerationSchema, productPriceUpdateSchema, productApprovalSchema } from "@/lib/validations/product";
 import { CatalogMutationError, withCurrentAdmin } from "@/lib/catalog-mutations";
 import { Prisma } from "@prisma/client";
 import { isPublicAsset } from "@/lib/public-assets";
@@ -56,26 +56,28 @@ export async function getAdminStats() {
   }
 }
 
-export async function updateProductStatus(productId: unknown, status: unknown) {
+export async function updateProductStatus(productId: unknown, status: unknown, version?: unknown) {
   const actor = await getCurrentUserWithRole(["ADMIN"]);
   if (!actor) {
     return { success: false, error: "Unauthorized" };
   }
 
-  const parsed = productStatusUpdateSchema.safeParse({ productId, status });
-  if (!parsed.success) return { success: false, error: "Invalid product identifier or status." };
+  const parsed = productModerationSchema.safeParse({ productId, status, version });
+  if (!parsed.success) return { success: false, error: "Reload the product and submit its current revision with a valid status." };
   try {
     const product = await withCurrentAdmin(actor, async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${parsed.data.productId} FOR UPDATE`;
       const existing = await tx.product.findUnique({ where: { id: parsed.data.productId }, include: { seller: { select: { role: true, sellerStatus: true, isVerified: true } } } });
       if (!existing) throw new CatalogMutationError("Product not found.");
+      if (existing.catalogVersion !== parsed.data.version) throw new CatalogMutationError("The product changed since this review. Reload and review the saved content before moderating it.");
+      if (existing.status === "ARCHIVED" && parsed.data.status !== "ARCHIVED") throw new CatalogMutationError("The owner must resubmit this archived product before moderation.");
       if (parsed.data.status === "APPROVED") {
         const valid = productApprovalSchema.safeParse({ name: existing.name, description: existing.description ?? undefined, specifications: existing.specifications, price: Number(existing.price), discountPrice: existing.discountPrice === null ? null : Number(existing.discountPrice), stock: existing.stock, categoryId: existing.categoryId, brandId: existing.brandId, isFeatured: existing.isFeatured, imageUrl: existing.imageUrl, images: existing.images });
         if (!valid.success) throw new CatalogMutationError("Correct the product fields and cover/gallery before approval.");
         if ([existing.imageUrl, ...existing.images].some((url) => url?.startsWith("/") && !isPublicAsset(url))) throw new CatalogMutationError("Local product images must exist in the public assets.");
         if (!existing.seller.isVerified || !["MEMBER", "ADMIN"].includes(existing.seller.role.toUpperCase()) || (existing.seller.role.toUpperCase() === "MEMBER" && existing.seller.sellerStatus !== "APPROVED")) throw new CatalogMutationError("The seller must be verified and approved before product approval.");
       }
-      return tx.product.update({ where: { id: existing.id }, data: { status: parsed.data.status }, select: { id: true, slug: true, status: true } });
+      return tx.product.update({ where: { id: existing.id }, data: { status: parsed.data.status }, select: { id: true, slug: true, status: true, catalogVersion: true } });
     });
     refreshCatalog(product.slug);
     return { success: true, data: product };

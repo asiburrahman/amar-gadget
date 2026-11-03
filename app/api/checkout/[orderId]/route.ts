@@ -12,6 +12,7 @@ import { readApplicationOrigin } from "@/config/runtime";
 import { acknowledgeGuestCart } from "@/lib/cart-checkout";
 import { CartError } from "@/lib/cart";
 import { customerShipmentSelect, customerShipment } from "@/lib/fulfillments";
+import { purchasedProduct } from "@/lib/purchase-product-label";
 
 type Context = { params: Promise<{ orderId: string }> };
 async function authorizedOrder(req: Request, context: Context) {
@@ -42,7 +43,7 @@ export async function GET(req: Request, context: Context) {
       needsReview: Boolean(order.reservationReviewReason || order.financialReviewReason || ["ACTIVE", "LOST"].includes(order.disputeStatus)),
       cartSnapshot: order.cartSnapshot,
       fulfillments: order.fulfillments.map(customerShipment),
-      items: order.items.map((item) => ({ productId: item.productId, name: item.product.name, quantity: item.quantity, price: Number(item.price) })),
+      items: order.items.map((item) => ({ productId: item.productId, name: purchasedProduct(item).name, labelSource: item.productSnapshotSource, quantity: item.quantity, price: Number(item.price) })),
     } }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ message: "Unable to load checkout. Please retry." }, { status: 503 }); }
 }

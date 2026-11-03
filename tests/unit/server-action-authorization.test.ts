@@ -89,7 +89,7 @@ describe("server action authorization", () => {
     });
     (prisma.product.update as jest.Mock).mockResolvedValue({ id: "product-1" });
 
-    const result = await updateProductStatus("product-1", "PAID");
+    const result = await updateProductStatus("product-1", "PAID", 1);
 
     expect(result.success).toBe(false);
     expect(prisma.product.update).not.toHaveBeenCalled();

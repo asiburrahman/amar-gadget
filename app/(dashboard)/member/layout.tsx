@@ -8,5 +8,5 @@ export default async function MemberLayout({
   if (!(await getCurrentUserWithRole(["MEMBER", "ADMIN"]))) {
     redirect("/login");
   }
-  return <><nav aria-label="Seller management" className="container mx-auto px-4 flex gap-4"><Link href="/member/dashboard">Seller dashboard</Link><Link href="/member/products">Manage product images</Link><Link href="/member/add-product">Add product</Link></nav>{children}</>;
+  return <><nav aria-label="Seller management" className="container mx-auto px-4 flex flex-wrap gap-4"><Link href="/member/dashboard">Seller dashboard</Link><Link href="/member/products">Manage catalog</Link><Link href="/member/orders">My shipments</Link><Link href="/member/add-product">Add product</Link></nav>{children}</>;
 }

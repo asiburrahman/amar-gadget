@@ -46,7 +46,8 @@
     "smoke:taxonomy": "node scripts/smoke-taxonomy.mjs",
     "smoke:coupons": "node scripts/smoke-coupons.mjs",
     "smoke:banners": "node scripts/smoke-banners.mjs",
-    "smoke:admin-management": "node scripts/smoke-admin-management.mjs"
+    "smoke:admin-management": "node scripts/smoke-admin-management.mjs",
+    "smoke:product-maintenance": "node scripts/smoke-product-maintenance.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

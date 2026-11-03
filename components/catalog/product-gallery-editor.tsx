@@ -12,6 +12,7 @@ export function ProductGalleryEditor({ productId, version, urls }: { productId: 
   const [media, setMedia] = useState<ProductImageSelection>({ keys: [], ready: false });
   const [busy, setBusy] = useState(false), [saved, setSaved] = useState(false), [error, setError] = useState("");
   const [changed, setChanged] = useState(false);
+  const [archived, setArchived] = useState(false);
   const router = useRouter(), coverId = useId();
   const items: GalleryItem[] = [...kept.map((url) => ({ source: "existing" as const, url })), ...media.keys.map((key) => ({ source: "upload" as const, key }))];
   const identity = (item: GalleryItem) => item.source === "existing" ? `existing:${item.url}` : `upload:${item.key}`;
@@ -24,7 +25,7 @@ export function ProductGalleryEditor({ productId, version, urls }: { productId: 
     const parsed = replaceGallerySchema.safeParse({ productId, version, items: ordered });
     if (!parsed.success) { setError(parsed.error.issues[0]?.message ?? "Check the gallery."); return; }
     setBusy(true);
-    try { const result = await replaceProductGallery(parsed.data); if (!result.success) { setError(result.error); return; } setChanged(result.data.changed); setSaved(true); router.refresh(); }
+    try { const result = await replaceProductGallery(parsed.data); if (!result.success) { setError(result.error); return; } setChanged(result.data.changed); setArchived(result.data.status === "ARCHIVED"); setSaved(true); router.refresh(); }
     catch { setError("Unable to save gallery. Your selected images are still here; reload before retrying."); }
     finally { setBusy(false); }
   };
@@ -35,6 +36,6 @@ export function ProductGalleryEditor({ productId, version, urls }: { productId: 
       <p>{kept.length + count} of 8 selected images</p>
       <button type="submit" disabled={busy || saved || !ready || items.length === 0 || kept.length + count > 8} className="border rounded px-4 py-2">{busy ? "Saving gallery..." : "Save gallery"}</button>
     </fieldset>
-    {error && <p role="alert">{error}</p>}{saved && <p role="status">{changed ? "Gallery saved. The product is awaiting approval. Reload if the updated gallery has not appeared." : "Gallery unchanged. The existing approval status is preserved."}</p>}
+    {error && <p role="alert">{error}</p>}{saved && <p role="status">{changed ? archived ? "Gallery saved. The product remains archived until you explicitly resubmit it for review." : "Gallery saved. The product is awaiting approval. Reload if the updated gallery has not appeared." : "Gallery unchanged. The existing approval status is preserved."}</p>}
   </form>;
 }

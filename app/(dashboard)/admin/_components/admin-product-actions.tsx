@@ -3,24 +3,32 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { updateProductStatus } from "@/server/actions/admin/admin-actions";
+import { useRouter } from "next/navigation";
 
 interface AdminProductActionsProps {
   productId: string;
+  version: number;
 }
 
-export function AdminProductActions({ productId }: AdminProductActionsProps) {
+export function AdminProductActions({ productId, version }: AdminProductActionsProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [statusState, setStatusState] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   const handleAction = async (status: "APPROVED" | "REJECTED") => {
     setLoading(true);
+    setError("");
     try {
-      const res = await updateProductStatus(productId, status);
+      const res = await updateProductStatus(productId, status, version);
       if (res.success) {
         setStatusState(status);
+        router.refresh();
+      } else {
+        setError(res.error || "The moderation decision was not confirmed. Reload this review.");
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setError("The moderation decision was not confirmed. Reload this review.");
     } finally {
       setLoading(false);
     }
@@ -36,6 +44,7 @@ export function AdminProductActions({ productId }: AdminProductActionsProps) {
 
   return (
     <div className="flex gap-2">
+      {error && <div><p role="alert">{error}</p><button type="button" onClick={() => router.refresh()}>Reload saved review</button></div>}
       <Button
         onClick={() => handleAction("APPROVED")}
         disabled={loading}

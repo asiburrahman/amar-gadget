@@ -56,7 +56,7 @@ export default async function AdminProductsPage() {
                       </span>
                       {product.status === "APPROVED" ? (
                         <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded">APPROVED</span>
-                      ) : product.status === "REJECTED" ? (
+                      ) : product.status === "ARCHIVED" ? <span className="text-xs font-bold">ARCHIVED</span> : product.status === "REJECTED" ? (
                         <span className="text-[10px] font-bold text-red-600 bg-red-500/10 px-2 py-0.5 rounded">REJECTED</span>
                       ) : (
                         <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded">PENDING</span>
@@ -84,6 +84,7 @@ export default async function AdminProductsPage() {
                     currentPrice={numericPrice}
                     currentDiscountPrice={numericDiscountPrice}
                     currentStatus={product.status}
+                    currentVersion={product.catalogVersion}
                   />
                   </div>
                 </div>

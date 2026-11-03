@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import UserOrdersClient from "./user-orders-client";
 import { customerShipment, customerShipmentSelect } from "@/lib/fulfillments";
+import { purchasedProduct } from "@/lib/purchase-product-label";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +50,9 @@ export default async function CustomerOrdersPage() {
       price: Number(i.price),
       product: {
         id: i.product.id,
-        name: i.product.name,
+        name: purchasedProduct(i).name,
         imageUrl: i.product.imageUrl,
-        slug: i.product.slug,
+        slug: purchasedProduct(i).slug!,
       },
     })),
   }));

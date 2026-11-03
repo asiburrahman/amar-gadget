@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { purchasedProduct } from "@/lib/purchase-product-label";
 import { prisma } from "@/lib/prisma";
 import type { AuthenticatedUser } from "@/lib/session";
 import { ACTIVE_REFUND_STATES, RefundError, allocateDiscount, cents, integerCents, refundPlan } from "@/lib/refund-policy";
@@ -58,7 +59,7 @@ export async function readRefundOrder(actor: AuthenticatedUser, orderId: string,
     return { ownerId: actor.id, page, total, totalPages, attempt: admin ? { refund: attemptRefund ? refundDto(attemptRefund, true) : null, returned: attemptReturn } : null, disputes: disputes.map((row) => ({ ...(admin ? { id: row.id } : {}), status: row.status, amountCents: integerCents(row.amountCents), fundsLostCents: integerCents(row.fundsLostCents) })), order: { id: order.id, status: order.status, version: order.refundVersion, totalCents: cents(order.total), refundedCents: integerCents(order.refundedCents), shippingRefundedCents: integerCents(order.shippingRefundedCents), refundState: order.refundState, disputeStatus: order.disputeStatus, disputeAmountCents: integerCents(order.disputeAmountCents), paymentMethod: order.paymentMethod, paymentStatus: order.paymentStatus,
       pricing: order.subtotalCents !== null ? { subtotalCents: integerCents(order.subtotalCents), discountCents: integerCents(order.discountCents!), shippingCents: integerCents(order.shippingCents!) } : null,
       ...(admin ? { reviewReason: order.financialReviewReason, pricingEvidence: order.pricingEvidence } : {}),
-    }, items: order.items.map((item) => ({ id: item.id, name: item.product.name, quantity: item.quantity, refundedQuantity: item.refundedQuantity, returnedQuantity: item.returnedQuantity, voidedQuantity: item.voidedQuantity, version: item.financialVersion, grossCents: cents(item.price.mul(item.quantity)), netCents: item.netCents === null ? null : integerCents(item.netCents), refundedCents: integerCents(item.refundedCents), status: item.fulfillment!.status, codCollected: item.fulfillment!.codCollected })), refunds: rows.map((row) => refundDto(row, admin)),
+    }, items: order.items.map((item) => ({ id: item.id, name: purchasedProduct(item).name, quantity: item.quantity, refundedQuantity: item.refundedQuantity, returnedQuantity: item.returnedQuantity, voidedQuantity: item.voidedQuantity, version: item.financialVersion, grossCents: cents(item.price.mul(item.quantity)), netCents: item.netCents === null ? null : integerCents(item.netCents), refundedCents: integerCents(item.refundedCents), status: item.fulfillment!.status, codCollected: item.fulfillment!.codCollected })), refunds: rows.map((row) => refundDto(row, admin)),
       history: history.slice(0, 50).map((event) => ({ id: event.id, kind: event.kind, status: event.status, amountCents: event.amountCents === null ? null : integerCents(event.amountCents), createdAt: event.createdAt.toISOString(), ...(admin ? { actorId: event.actorId, actorRole: event.actorRole, evidence: event.evidence, refundId: event.refundId } : {}) })), nextCursor: history.length > 50 ? history[49].id : null };
   });
 }

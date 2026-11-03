@@ -37,6 +37,7 @@ export const createProductSchema = createFields.refine(discountValid, discountRu
 export const updateProductSchema = createFields.partial().extend({ id: catalogIdSchema }).strict().refine(discountValid, discountRule);
 export const productPriceUpdateSchema = z.object({ productId: catalogIdSchema, price: productPriceSchema, discountPrice: productPriceSchema.nullable().optional() }).strict().refine(discountValid, discountRule);
 export const productStatusUpdateSchema = z.object({ productId: catalogIdSchema, status: productStatusSchema }).strict();
+export const productModerationSchema = productStatusUpdateSchema.extend({ version: z.number().int().min(1).max(2147483646) });
 export const sellerStatusUpdateSchema = z.object({ sellerId: catalogIdSchema, sellerStatus: sellerStatusSchema }).strict();
 export const productApprovalSchema = z.object({ ...fields, imageUrl: productImageUrlSchema.nullable(), images: imageList }).strict().refine(discountValid, discountRule).refine((data) => Boolean(data.imageUrl) && (!data.images.length || data.images[0] === data.imageUrl), "A valid cover and matching ordered gallery are required before approval.");
 

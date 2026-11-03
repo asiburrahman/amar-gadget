@@ -86,6 +86,13 @@ databaseSuite("durable product gallery lifecycle with PostgreSQL and signed S3 H
     expect((await replace(product.images.map(existing))).success).toBe(false);
     expect(await db.productImageCleanup.count({ where: { ownerId: seller.id } })).toBe(1);
   });
+  it("keeps a changed gallery archived and invalidates a previously observed catalog revision", async () => {
+    const archived = await db.product.update({ where: { id: product.id }, data: { status: "ARCHIVED" } });
+    const image = await upload();
+    expect(await replace([{ source: "upload", key: image.fileKey }])).toMatchObject({ success: true, data: { changed: true, status: "ARCHIVED" } });
+    expect(await db.product.findUniqueOrThrow({ where: { id: product.id } })).toMatchObject({ status: "ARCHIVED", catalogVersion: archived.catalogVersion + 1, inventoryVersion: archived.inventoryVersion, mediaVersion: 2 });
+    expect(await db.productMaintenanceEvent.findFirst({ where: { productId: product.id, reason: "Product gallery updated" } })).toMatchObject({ actorId: seller.id, ownerId: seller.id });
+  });
   it("rejects foreign owners, unapproved/currently revoked sellers and foreign upload keys without storage verification", async () => {
     const spy = jest.spyOn(store, "verify");
     (getCurrentUserWithRole as jest.Mock).mockResolvedValue(other);

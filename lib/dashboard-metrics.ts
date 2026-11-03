@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { purchasedProduct } from "@/lib/purchase-product-label";
 import { prisma } from "@/lib/prisma";
 import type { AuthenticatedUser } from "@/lib/session";
 
@@ -32,10 +33,10 @@ export async function readCustomerDashboard(actor: AuthenticatedUser) {
     const profile = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { name: true, email: true } });
     const recent = await tx.order.findMany({ where: { userId: actor.id }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 10,
       select: { id: true, total: true, status: true, paymentStatus: true, refundState: true, refundedCents: true, disputeStatus: true, disputeAmountCents: true, createdAt: true, _count: { select: { items: true } },
-        items: { take: 3, orderBy: { id: "asc" }, select: { id: true, quantity: true, product: { select: { name: true } } } } } });
+        items: { take: 3, orderBy: { id: "asc" }, select: { id: true, quantity: true, productName: true, product: { select: { name: true } } } } } });
     return { ownerId: actor.id, ownerRole: actor.role, profile,
       metrics: { totalOrders: integer(row.total), activeOrders: integer(row.active), netPaidCents: integer(row.paid), deliveredPaidCents: integer(row.delivered), reviewOrders: integer(row.review), partiallyCollectedCodOrders: integer(row.partialCod) },
-      recent: recent.map(({ total, refundedCents, disputeAmountCents, createdAt, _count, ...order }) => ({ ...order, total: Number(total), refundedAmount: integer(refundedCents) / 100, disputeLossAmount: integer(disputeAmountCents) / 100, createdAt: createdAt.toISOString(), itemLines: _count.items })) };
+      recent: recent.map(({ total, refundedCents, disputeAmountCents, createdAt, _count, ...order }) => ({ ...order, items: order.items.map(({ productName, ...item }) => ({ ...item, product: purchasedProduct({ ...item, productName }) })), total: Number(total), refundedAmount: integer(refundedCents) / 100, disputeLossAmount: integer(disputeAmountCents) / 100, createdAt: createdAt.toISOString(), itemLines: _count.items })) };
   });
 }
 export type CustomerDashboard = Awaited<ReturnType<typeof readCustomerDashboard>>;

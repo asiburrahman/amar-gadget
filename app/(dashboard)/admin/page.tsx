@@ -114,7 +114,7 @@ export default async function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <AdminProductActions productId={product.id} />
+                <AdminProductActions key={`${product.id}:${product.catalogVersion}`} productId={product.id} version={product.catalogVersion} />
               </div>
             ))}
           </div>

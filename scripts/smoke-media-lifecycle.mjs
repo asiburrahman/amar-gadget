@@ -44,8 +44,12 @@ async function main() {
     phase = "owner page save control"; assert.ok(page.includes("Save gallery"));
     phase = "owner page custom media URL"; assert.ok(page.includes(images[0]));
     phase = "owner page custom CDN direct delivery"; assert.ok(!page.includes("/_next/image?url=https%3A%2F%2Fcdn.media"));
-    phase = "paged owner index link";
-    assert.ok((await (await get("/member/products", sellerCookie)).text()).includes(`href="${path}"`));
+    phase = "owner catalog shell and paged private gallery source";
+    const index = await get("/member/products", sellerCookie); assert.equal(index.status, 200); assert.ok((await index.text()).includes("Your product catalog"));
+    // The authenticated client catalog now loads its bounded rows from the real
+    // owner API. UI tests separately assert the resulting gallery-link href.
+    const sourcePath = "/api/member/products?page=1", source = await requestHttp(child.origin + sourcePath, { headers: { Cookie: sellerCookie, "X-Product-Owner": seller.id, ...signature("GET", sourcePath) } });
+    assert.equal(source.status, 200); const sourceData = await source.json(); assert.equal(sourceData.ownerId, seller.id); assert.equal(sourceData.total, 1); assert.equal(sourceData.rows[0].id, product.id);
     const manifest = JSON.parse(await readFile(".next/standalone/.next/server/server-reference-manifest.json", "utf8"));
     const call = async (name, args, cookie, target = path, worker = "app/(dashboard)/member/products/[id]/images/page") => {
       const reference = Object.entries(manifest.node).find(([, value]) => value.exportedName === name && value.workers?.[worker]);

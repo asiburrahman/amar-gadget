@@ -12,7 +12,7 @@ export class CatalogQueryError extends Error {
   constructor(message: string, readonly code = "INVALID_QUERY") { super(message); }
 }
 export class CatalogAccessError extends Error {}
-export type CatalogScope = { kind: "public" } | { kind: "admin" | "seller"; status: "PENDING_APPROVAL" | "REJECTED"; actorId: string; sessionVersion: number };
+export type CatalogScope = { kind: "public" } | { kind: "admin" | "seller"; status: "PENDING_APPROVAL" | "REJECTED" | "ARCHIVED"; actorId: string; sessionVersion: number };
 type Taxonomy = { id: string; name: string; slug: string };
 type CatalogRow = {
   id: string; slug: string; name: string; description: string | null; price: Prisma.Decimal; discountPrice: Prisma.Decimal | null;

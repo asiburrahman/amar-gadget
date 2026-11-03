@@ -150,6 +150,8 @@ model Product {
   imageUrl      String?
   images        String[]    @default([])
   mediaVersion  Int         @default(1)
+  catalogVersion Int        @default(1)
+  inventoryVersion Int      @default(1)
   isFeatured    Boolean     @default(false)
   status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED
   rating        Float       @default(0)
@@ -174,6 +176,28 @@ model Product {
   campaigns     CampaignProduct[]
 
   @@index([sellerId, id])
+  @@index([sellerId, status, createdAt, id])
+}
+
+model ProductMaintenanceRequest {
+  id String @id
+  ownerId String
+  hash String
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+}
+
+model ProductMaintenanceEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  productId String
+  ownerId String
+  actorId String?
+  reason String?
+  before Json
+  after Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  @@index([productId, sequence])
 }
 
 model ProductImageCleanup {
@@ -323,6 +347,9 @@ model OrderItem {
   order     Order    @relation(fields: [orderId], references: [id])
   productId String
   product   Product  @relation(fields: [productId], references: [id])
+  productName String?
+  productSlug String?
+  productSnapshotSource String?
   quantity  Int
   price     Decimal  @db.Decimal(10, 2)
   netCents BigInt?

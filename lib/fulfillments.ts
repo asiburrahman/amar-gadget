@@ -6,8 +6,9 @@ import { fulfillmentMutationSchema, wholeOrderMutationSchema, fulfillmentQuerySc
 import { isPublicProductImageUrl } from "@/lib/product-media-policy";
 import { reconcileProductReviews } from "@/lib/reviews";
 import { reconcileReservation } from "@/lib/checkout-reservations";
+import { purchasedProduct } from "@/lib/purchase-product-label";
 
-const itemSelect = { id: true, productId: true, quantity: true, voidedQuantity: true, price: true, product: { select: { name: true, imageUrl: true } } } satisfies Prisma.OrderItemSelect;
+const itemSelect = { id: true, productId: true, productName: true, quantity: true, voidedQuantity: true, price: true, product: { select: { name: true, imageUrl: true } } } satisfies Prisma.OrderItemSelect;
 const shipmentSelect = {
   id: true, orderId: true, sellerId: true, status: true, version: true, carrier: true, trackingNumber: true,
   shippedAt: true, deliveredAt: true, legacySnapshot: true, createdAt: true, codCollected: true, codCollectedAt: true,
@@ -23,7 +24,7 @@ function sellerDto(row: ShipmentRow): SellerFulfillment {
     recipientAddress: row.order.shippingAddress, recipientPhone: row.order.shippingPhone,
     carrier: row.carrier, trackingNumber: row.trackingNumber, shippedAt: row.shippedAt?.toISOString() ?? null, deliveredAt: row.deliveredAt?.toISOString() ?? null,
     legacySnapshot: row.legacySnapshot, createdAt: row.createdAt.toISOString(),
-    items: row.items.filter((item) => item.quantity > item.voidedQuantity).map((item) => ({ id: item.id, productId: item.productId, name: item.product.name, imageUrl: item.product.imageUrl && isPublicProductImageUrl(item.product.imageUrl) ? item.product.imageUrl : null, quantity: item.quantity - item.voidedQuantity, unitPrice: Number(item.price) })),
+    items: row.items.filter((item) => item.quantity > item.voidedQuantity).map((item) => ({ id: item.id, productId: item.productId, name: purchasedProduct(item).name, imageUrl: item.product.imageUrl && isPublicProductImageUrl(item.product.imageUrl) ? item.product.imageUrl : null, quantity: item.quantity - item.voidedQuantity, unitPrice: Number(item.price) })),
   };
 }
 export const customerShipmentSelect = { id: true, status: true, carrier: true, trackingNumber: true, shippedAt: true, deliveredAt: true, legacySnapshot: true, items: { select: { id: true } } } satisfies Prisma.OrderFulfillmentSelect;

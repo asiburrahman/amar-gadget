@@ -68,7 +68,7 @@ export async function createProduct(input: unknown) {
     const slug = (validated.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "product") + "-" + randomUUID();
 
     const product = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${targetSeller.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${targetSeller.id} FOR NO KEY UPDATE`;
       const current = await tx.user.findUnique({ where: { id: targetSeller.id }, select: { isVerified: true, role: true, sellerStatus: true, sessionVersion: true } });
       if (!current?.isVerified || current.sessionVersion !== targetSeller.sessionVersion || !["MEMBER", "ADMIN"].includes(current.role.toUpperCase()) || (current.role.toUpperCase() === "MEMBER" && current.sellerStatus !== "APPROVED")) throw new ProductMediaError("Your seller access changed. Sign in again before submitting.");
       // The cleanup operator takes the same owner lock: a selected old upload

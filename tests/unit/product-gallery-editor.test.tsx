@@ -37,3 +37,9 @@ it("reports a no-op without claiming that an approved product became pending", a
   fireEvent.click(screen.getByRole("button", { name: "Save gallery" }));
   expect((await screen.findByRole("status")).textContent).toContain("approval status is preserved");
 });
+it("reports that a saved gallery remains archived until explicit resubmission", async () => {
+  (replaceProductGallery as jest.Mock).mockResolvedValue({ success: true, data: { changed: true, status: "ARCHIVED" } });
+  render(<ProductGalleryEditor productId="product" version={1} urls={urls} />);
+  fireEvent.click(screen.getByRole("button", { name: "Save gallery" }));
+  expect((await screen.findByRole("status")).textContent).toContain("remains archived");
+});

@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { updateProductStatus, adminUpdateProductPrice, adminDeleteProduct } from "@/server/actions/admin/admin-actions";
 import { productPriceUpdateSchema, MAX_PRODUCT_PRICE } from "@/lib/validations/product";
 
-type Props = { productId: string; currentPrice: number; currentDiscountPrice?: number | null; currentStatus: string };
-export function AdminProductManageActions({ productId, currentPrice, currentDiscountPrice, currentStatus }: Props) {
+type Props = { productId: string; currentPrice: number; currentDiscountPrice?: number | null; currentStatus: string; currentVersion: number };
+export function AdminProductManageActions({ productId, currentPrice, currentDiscountPrice, currentStatus, currentVersion }: Props) {
   const router = useRouter();
   const priceId = useId(), discountId = useId();
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export function AdminProductManageActions({ productId, currentPrice, currentDisc
   const changeStatus = async (status: "APPROVED" | "REJECTED") => {
     if (loading) return; begin();
     try {
-      const result = await updateProductStatus(productId, status);
+      const result = await updateProductStatus(productId, status, currentVersion);
       if (!result.success) { setError(result.error ?? "Unable to change product status."); return; }
       setMessage(`Product ${status.toLowerCase()}.`); router.refresh();
     } catch { setError("Unable to change product status. Try again."); }
@@ -51,11 +51,12 @@ export function AdminProductManageActions({ productId, currentPrice, currentDisc
   };
   return <div className="flex flex-col gap-2 shrink-0">
     <div className="flex flex-wrap gap-2">
-      {currentStatus !== "APPROVED" && <button type="button" disabled={loading} onClick={() => void changeStatus("APPROVED")} className="px-3 py-1 rounded-md bg-emerald-600 text-white text-xs font-bold">Approve</button>}
-      {currentStatus !== "REJECTED" && <button type="button" disabled={loading} onClick={() => void changeStatus("REJECTED")} className="px-3 py-1 rounded-md bg-amber-600 text-white text-xs font-bold">Reject</button>}
+      {currentStatus !== "APPROVED" && currentStatus !== "ARCHIVED" && <button type="button" disabled={loading} onClick={() => void changeStatus("APPROVED")} className="px-3 py-1 rounded-md bg-emerald-600 text-white text-xs font-bold">Approve</button>}
+      {currentStatus !== "REJECTED" && currentStatus !== "ARCHIVED" && <button type="button" disabled={loading} onClick={() => void changeStatus("REJECTED")} className="px-3 py-1 rounded-md bg-amber-600 text-white text-xs font-bold">Reject</button>}
       <button type="button" disabled={loading} onClick={() => setShowEditPrice(!showEditPrice)} className="px-3 py-1 rounded-md bg-slate-800 text-white text-xs font-bold">Edit Price</button>
       <button type="button" disabled={loading} onClick={() => void remove()} className="px-3 py-1 rounded-md bg-red-600 text-white text-xs font-bold">Delete</button>
     </div>
+    {currentStatus === "ARCHIVED" && <p className="text-xs">Archived by the owner; resubmission is required before review.</p>}
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
     {message && <p role="status" className="text-xs">{message}</p>}
     {showEditPrice && <form onSubmit={savePrice} aria-label="Edit product price" className="p-3 bg-muted/40 border border-border rounded-lg space-y-2 text-xs">

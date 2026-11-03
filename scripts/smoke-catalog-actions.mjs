@@ -68,7 +68,7 @@ async function main() {
     assert.deepEqual((await db.product.findUniqueOrThrow({ where: { id: product.id } })).specifications, [{ label: "Storage", value: "512 GB" }]);
     assert.equal((await call("adminUpdateSpecifications", [{ productId: product.id, specifications: [{ label: "Storage", value: "" }] }])).success, false);
     phase = "valid product approval";
-    assert.equal((await call("updateProductStatus", [product.id, "APPROVED"])).success, true);
+    assert.equal((await call("updateProductStatus", [product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion])).success, true);
     assert.equal((await db.product.findUniqueOrThrow({ where: { id: product.id } })).status, "APPROVED");
     phase = "compiled campaign CRUD and public window enforcement";
     const campaignCall = (name, args) => call(name, args, "/admin/campaigns", "app/(dashboard)/admin/campaigns/page");

@@ -7,7 +7,7 @@ const refresh = jest.fn();
 jest.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 jest.mock("@/server/actions/admin/admin-actions", () => ({ adminUpdateProductPrice: jest.fn(), updateProductStatus: jest.fn(), adminDeleteProduct: jest.fn() }));
 beforeEach(() => { jest.clearAllMocks(); });
-const view = () => render(<AdminProductManageActions productId="product-1" currentPrice={100} currentDiscountPrice={null} currentStatus="PENDING_APPROVAL" />);
+const view = () => render(<AdminProductManageActions productId="product-1" currentPrice={100} currentDiscountPrice={null} currentStatus="PENDING_APPROVAL" currentVersion={1} />);
 
 it("validates discounts locally and keeps backend price failures visible without claiming success", async () => {
   (adminUpdateProductPrice as jest.Mock).mockResolvedValue({ success: false, error: "Administrator access changed. Sign in again." });
@@ -35,9 +35,14 @@ it("surfaces rejected status and protected-delete results without a false succes
   const confirm = jest.spyOn(window, "confirm").mockReturnValue(true);
   try {
     view(); fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(updateProductStatus).toHaveBeenCalledWith("product-1", "APPROVED", 1));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/before approval/));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/cannot be deleted/));
     expect(screen.queryByRole("status")).toBeNull(); expect(refresh).not.toHaveBeenCalled();
   } finally { confirm.mockRestore(); }
+});
+it("keeps archived products withdrawn until the owner resubmits", () => {
+  render(<AdminProductManageActions productId="product-1" currentPrice={100} currentStatus="ARCHIVED" currentVersion={4} />);
+  expect(screen.queryByRole("button", { name: "Approve" })).toBeNull(); expect(screen.queryByRole("button", { name: "Reject" })).toBeNull(); expect(screen.getByText(/resubmission is required/)).toBeTruthy();
 });
