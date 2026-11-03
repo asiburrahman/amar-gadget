@@ -37,7 +37,9 @@ export async function startStandaloneFixture(databaseUrl, redis, overrides = {},
       if (output.includes("Ready")) {
         // This installed Next version prints its banner before loading config.
         // A banner cannot prove that invalid instrumentation was accepted.
-        if (!expectedFailureField) return { origin, stop, rejected: false, diagnostics };
+        // Callers may assert absence of test-owned redaction markers without
+        // exposing the captured server output or real environment secrets.
+        if (!expectedFailureField) return { origin, stop, rejected: false, diagnostics, logContains: (marker) => output.includes(marker) };
       }
       await delay(100);
     }

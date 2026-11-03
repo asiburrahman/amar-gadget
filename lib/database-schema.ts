@@ -1,2 +1,2 @@
 // Advance with each reviewed schema migration. Readiness rejects an older DB.
-export const REQUIRED_SCHEMA_MIGRATION = "20261103120000_notification_outbox";
+export const REQUIRED_SCHEMA_MIGRATION = "20261103150000_support_contact_settings";

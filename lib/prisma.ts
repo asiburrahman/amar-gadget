@@ -17,10 +17,10 @@ const createPrismaClient = () => {
   });
   return new PrismaClient({
     adapter,
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "warn", "error"]
-        : ["error"],
+    // Engine diagnostics can contain SQL parameters, sender text or provider
+    // error details. Request owners emit their own redacted operational logs.
+    // Do not enable automatic query/error output, including in development.
+    log: [],
   });
 };
 

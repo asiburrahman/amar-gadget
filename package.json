@@ -50,7 +50,8 @@
     "smoke:product-maintenance": "node scripts/smoke-product-maintenance.mjs",
     "smoke:settlements": "node scripts/smoke-settlements.mjs",
     "worker:notifications": "node scripts/notification-delivery-worker.mjs",
-    "smoke:notifications": "node scripts/smoke-notifications.mjs"
+    "smoke:notifications": "node scripts/smoke-notifications.mjs",
+    "smoke:support": "node scripts/smoke-support.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

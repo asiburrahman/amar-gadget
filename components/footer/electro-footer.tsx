@@ -1,7 +1,6 @@
-"use client";
-
 import React from "react";
 import Link from "next/link";
+import { PublicContactDetails } from "@/components/support/public-contact-details";
 
 export const ElectroFooter: React.FC = () => {
   return (
@@ -16,15 +15,7 @@ export const ElectroFooter: React.FC = () => {
             </span>
           </Link>
 
-          <div className="space-y-1">
-            <span className="text-xs text-gray-500 font-semibold block">Got Questions? Call us 24/7!</span>
-            <span className="text-lg font-black text-[#333e48] block">(800) 8001-8588, (0123) 4567 89</span>
-          </div>
-
-          <div className="text-xs text-gray-500 space-y-1">
-            <p className="font-semibold text-gray-700">Contact Info</p>
-            <p>17 Princess Road, London, Greater London NW1 8JR, UK</p>
-          </div>
+          <PublicContactDetails compact />
 
           {/* Social Icons */}
           <div className="flex space-x-3 text-gray-600 pt-2">

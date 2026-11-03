@@ -822,6 +822,70 @@ model OtpToken {
   @@index([email, purpose, expiresAt])
 }
 
+model SupportContactSettings {
+  id String @id
+  email String? @db.VarChar(254)
+  phone String? @db.VarChar(32)
+  address String? @db.VarChar(500)
+  hours String? @db.VarChar(300)
+  published Boolean @default(false)
+  version Int
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model SupportContactEvent {
+  id String @id @default(uuid())
+  version Int @unique
+  actorId String
+  before Json?
+  after Json
+  verified Boolean
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model SupportMessage {
+  id String @id
+  contentHash String @db.VarChar(64)
+  name String @db.VarChar(100)
+  email String @db.VarChar(254)
+  topic String @db.VarChar(16)
+  subject String @db.VarChar(160)
+  orderReference String? @db.VarChar(120)
+  message String @db.Text
+  consentAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  status String @default("OPEN") @db.VarChar(16)
+  version Int @default(1)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  events SupportMessageEvent[]
+
+  @@index([status, topic, createdAt, id])
+  @@index([createdAt, id])
+}
+
+model SupportMessageEvent {
+  id String @id @default(uuid())
+  messageId String
+  message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  version Int
+  actorId String
+  beforeStatus String
+  afterStatus String
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+
+  @@unique([messageId, version])
+}
+
+model SupportRequest {
+  id String @id
+  ownerId String
+  contentHash String @db.VarChar(64)
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
 model OtpThrottle {
   userId String
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
