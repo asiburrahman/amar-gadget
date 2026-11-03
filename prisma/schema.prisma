@@ -514,6 +514,110 @@ model FulfillmentEvent {
   @@index([fulfillmentId, sequence])
 }
 
+model SellerSettlementPolicy {
+  id String @id @default(uuid())
+  scopeKey String @db.VarChar(80)
+  version Int
+  commissionBps Int?
+  shippingRecipient String? @db.VarChar(16)
+  createdById String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  snapshots SellerSettlementSnapshot[]
+  @@unique([scopeKey, version])
+}
+
+model SellerSettlementSnapshot {
+  fulfillmentId String @id @db.VarChar(64)
+  // Captured scalar IDs retain provenance even if an unpaid fixture/order is
+  // removed. Later payout ledger postings retain their own financial evidence.
+  orderId String @db.VarChar(64)
+  sellerId String @db.VarChar(64)
+  policyId String?
+  policy SellerSettlementPolicy? @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  origin String @db.VarChar(24)
+  version Int @default(1)
+  adoptedById String? @db.VarChar(64)
+  adoptionReason String? @db.VarChar(500)
+  adoptedAt DateTime?
+  capturedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([sellerId, capturedAt, fulfillmentId])
+  @@index([orderId])
+}
+
+model SellerWallet {
+  sellerId String @id @db.VarChar(64)
+  balanceCents BigInt @default(0)
+  version Int @default(0)
+}
+
+model SellerAccrual {
+  fulfillmentId String @id @db.VarChar(64)
+  orderId String @db.VarChar(64)
+  sellerId String @db.VarChar(64)
+  version Int @default(1)
+  targetCents BigInt
+  projection Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([orderId])
+  @@index([sellerId, createdAt, fulfillmentId])
+}
+
+model SellerLedgerEntry {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  sellerId String @db.VarChar(64)
+  kind String @db.VarChar(24)
+  deltaCents BigInt
+  fulfillmentId String? @db.VarChar(64)
+  accrualVersion Int?
+  payoutId String? @db.VarChar(64)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@unique([fulfillmentId, accrualVersion])
+  @@unique([payoutId, kind])
+  @@index([sellerId, sequence])
+}
+
+model SellerPayout {
+  id String @id @default(uuid())
+  sellerId String @db.VarChar(64)
+  amountCents BigInt
+  method String @db.VarChar(30)
+  status String @default("RESERVED") @db.VarChar(16)
+  version Int @default(1)
+  createdById String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  reference String? @db.VarChar(120)
+  resolvedById String? @db.VarChar(64)
+  resolutionReason String? @db.VarChar(500)
+  moneyNotSent Boolean?
+  resolvedAt DateTime?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([sellerId, createdAt, id])
+  @@index([status, createdAt, id])
+}
+
+model SellerPayoutEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  payoutId String @db.VarChar(64)
+  actorId String @db.VarChar(64)
+  previousStatus String? @db.VarChar(16)
+  status String @db.VarChar(16)
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([payoutId, sequence])
+}
+
+model SellerSettlementRequest {
+  id String @id @db.VarChar(36)
+  actorId String @db.VarChar(64)
+  hash String @db.VarChar(64)
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
 model Review {
   id        String   @id @default(uuid())
   rating    Int

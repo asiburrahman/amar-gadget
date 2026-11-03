@@ -106,6 +106,8 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
         <div className="flex flex-wrap items-center gap-3">
           <Link href="/member/products" className="px-4 py-2 border rounded-lg text-xs font-bold">Edit catalog and inventory</Link>
           <Link href="/member/orders" className="px-4 py-2 border rounded-lg text-xs font-bold">Manage shipments</Link>
+          <Link href="/member/earnings" className="px-4 py-2 border rounded-lg text-xs font-bold">Settlement earnings and holds</Link>
+          <Link href="/member/payouts" className="px-4 py-2 border rounded-lg text-xs font-bold">External payout history</Link>
           <Link
             href="/member/profile"
             className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-lg transition shadow-xs flex items-center gap-1.5"

@@ -1,2 +1,2 @@
 // Advance with each reviewed schema migration. Readiness rejects an older DB.
-export const REQUIRED_SCHEMA_MIGRATION = "20261102130000_seller_catalog_maintenance";
+export const REQUIRED_SCHEMA_MIGRATION = "20261103110000_seller_ledger_payouts";
