@@ -51,7 +51,9 @@
     "smoke:settlements": "node scripts/smoke-settlements.mjs",
     "worker:notifications": "node scripts/notification-delivery-worker.mjs",
     "smoke:notifications": "node scripts/smoke-notifications.mjs",
-    "smoke:support": "node scripts/smoke-support.mjs"
+    "smoke:support": "node scripts/smoke-support.mjs",
+    "worker:newsletter": "node scripts/newsletter-delivery-worker.mjs",
+    "smoke:newsletter": "node scripts/smoke-newsletter.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

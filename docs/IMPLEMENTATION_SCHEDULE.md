@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest implemented step: AUD-035 - durable support inquiries, administrator handling and dashboard-managed public contact details.** Current total: 43 original tasks plus AUD-050 implemented (44 of 51 tracked tasks); 6 original tasks plus AUD-051 external credential revocation remain open (7 total). **Next: AUD-036 - persisted newsletter consent/subscription and unsubscribe.** Remaining originals: AUD-036, 042, 044, 045, 046 and 049. The owner configures and publishes actual contact details through administrator settings; no fixed business contact values are required in source code. SMTP revocation still requires the owner's external provider action. Each task remains a separate implementation and commit/push. See the implementation log and [support runbook](SUPPORT_RUNBOOK.md). The complete remaining-task objective stays active.
+**Latest implemented step: AUD-036 - persisted newsletter preferences, explicit email confirmation/withdrawal and recoverable provider delivery.** Current total: 44 original tasks plus AUD-050 implemented (45 of 51 tracked tasks); 5 original tasks plus AUD-051 external credential revocation remain open (6 total). **Next: AUD-042 - query/error reliability and operational observability**, including the recorded adapter-clock follow-up. Remaining originals: AUD-042, 044, 045, 046 and 049. SMTP revocation still requires the owner's external provider action. Each task remains a separate implementation and commit/push. See the implementation log and [newsletter runbook](NEWSLETTER_RUNBOOK.md). The complete remaining-task objective stays active.
 
 ## Owner-provided introduction
 

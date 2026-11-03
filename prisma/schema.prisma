@@ -822,6 +822,61 @@ model OtpToken {
   @@index([email, purpose, expiresAt])
 }
 
+model NewsletterSubscriber {
+  id String @id @default(uuid())
+  email String @unique @db.VarChar(254)
+  status String @default("PENDING")
+  version Int @default(1)
+  generation Int @default(1)
+  confirmationNonce String
+  confirmationExpiresAt DateTime
+  unsubscribeNonce String
+  consentVersion String
+  consentedAt DateTime
+  confirmedAt DateTime?
+  unsubscribedAt DateTime?
+  lastRequestedAt DateTime
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  requests NewsletterRequest[]
+  events NewsletterEvent[]
+  @@index([status, createdAt, id])
+}
+
+model NewsletterRequest {
+  id String @id
+  contentHash String @db.VarChar(64)
+  subscriberId String
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Restrict)
+  generation Int
+  state String @default("READY")
+  attempts Int @default(0)
+  leaseToken String?
+  leaseUntil DateTime?
+  nextAttemptAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  sentAt DateTime?
+  lastErrorCode String?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([state, nextAttemptAt, createdAt, id])
+  @@index([subscriberId, createdAt])
+}
+
+model NewsletterEvent {
+  id String @id @default(uuid())
+  subscriberId String
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Restrict)
+  version Int
+  generation Int
+  kind String
+  beforeStatus String?
+  afterStatus String
+  sourceRequestId String?
+  consentVersion String
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@unique([subscriberId, version])
+}
+
 model SupportContactSettings {
   id String @id
   email String? @db.VarChar(254)
