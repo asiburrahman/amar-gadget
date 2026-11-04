@@ -36,8 +36,17 @@ async function fixtureDatabase() {
       await expect(db.query(`DELETE FROM "ProductMaintenanceEvent"`)).rejects.toMatchObject({ code: "23514" });
       await db.query(`INSERT INTO "ProductMaintenanceRequest"(id,"ownerId",hash,result) VALUES ($1,'seller',$2,'{"id":"product","version":2}')`, [randomUUID(), "a".repeat(64)]);
       await expect(db.query(`UPDATE "ProductMaintenanceRequest" SET result='{}'`)).rejects.toMatchObject({ code: "23514" });
-      await expect(db.query(`DELETE FROM "Product" WHERE id='product'`)).rejects.toMatchObject({ code: "23001" });
+      // PostgreSQL versions can report an ON DELETE RESTRICT foreign key as
+      // restrict_violation or foreign_key_violation. Both must identify the
+      // purchase relationship, and neither may remove the product or receipts.
+      await expect(db.query(`DELETE FROM "Product" WHERE id='product'`)).rejects.toMatchObject({
+        code: expect.stringMatching(/^(23001|23503)$/), constraint: "OrderItem_productId_fkey",
+      });
+      expect((await db.query(`SELECT name,stock FROM "Product" WHERE id='product'`)).rows[0]).toEqual({ name: "Edited product", stock: 4 });
       expect((await db.query(`SELECT count(*)::integer AS count FROM "OrderItem" WHERE "productId"='product'`)).rows[0].count).toBe(2);
+      expect((await db.query(`SELECT id,"productName" FROM "OrderItem" WHERE "productId"='product' ORDER BY id`)).rows).toEqual([
+        { id: "new-line", productName: "Edited product" }, { id: "old-line", productName: "Original product" },
+      ]);
     } finally { await db.query("ROLLBACK"); await fixture.close(); }
   }, 30_000);
 });

@@ -173,3 +173,22 @@ minutes on this local host. These are observed verification durations, not
 application performance measurements or a remaining-work ETA. Initial failed
 runs above remain part of the engineering record; they are not presented as
 passing evidence. GitHub verification evidence will be appended after push.
+
+## First remote CI run and portability correction
+
+[Run 41833384558](https://github.com/asiburrahman/amar-gadget/actions/runs/41833384558)
+executed the full suite on GitHub's PostgreSQL 16 fixture: 160 suites / 1,189
+tests passed, one purchase-retention migration assertion failed. PostgreSQL 16
+returned `23503` (foreign-key violation) where the PostgreSQL 18 local fixture
+returned `23001` (restrict violation). The assertion had required only the
+latter. Both identify an integrity constraint, not successful deletion.
+
+The corrected regression accepts only those two native codes for the exact
+`OrderItem_productId_fkey` constraint, then independently proves the product,
+stock and both original/captured receipt labels remain intact. The local
+PostgreSQL 18 regression passes. The CI matrix now tests PostgreSQL 16 and 18
+separately, with independent artifacts and fail-fast disabled, so the provider
+variation remains visible rather than narrowing verification to one version.
+No database constraint or migration was loosened or changed. The first lint
+job correctly failed on AUD-045 debt. AUD-044 remains open until the corrected
+remote verification is checked.
