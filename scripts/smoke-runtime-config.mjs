@@ -18,7 +18,7 @@ async function main() {
     }
     const unavailableDatabase = new URL(databaseUrl);
     unavailableDatabase.port = "1"; // Closed local port; never a remote database.
-    child = await startStandaloneFixture(unavailableDatabase.toString(), redis);
+    child = await startStandaloneFixture(unavailableDatabase.toString(), redis, {}, undefined, { readiness: false });
     const live = await fetch(`${child.origin}/api/health`, { signal: AbortSignal.timeout(30_000) });
     const ready = await fetch(`${child.origin}/api/health/ready`, { signal: AbortSignal.timeout(10_000) });
     const result = await ready.json();

@@ -3,7 +3,7 @@ module.exports = {
   testEnvironment: "node",
   setupFiles: ["<rootDir>/tests/setup-env.ts"],
   modulePathIgnorePatterns: ["<rootDir>/.next/"],
-  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/tests/native/"],
+  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/tests/native/", "<rootDir>/tests/browser/"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
   },

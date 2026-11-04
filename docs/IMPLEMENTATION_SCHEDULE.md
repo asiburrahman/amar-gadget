@@ -44,6 +44,18 @@ Administrator products/orders, seller catalog, customer history and taxonomy cho
 Migration 36 implements the conservative UTC OTP transition without changing earlier migrations or financial/account history. All 160 Jest suites and 1,188 tests pass, along with TypeScript, Prisma validation, production/standalone build and the final compiled collection/outage/STARTTLS OTP/refund smokes. Affected code/script lint has zero errors; seven existing image warnings remain for AUD-045. The first full run's five stale form/error expectations were repaired with all original assertions retained, then the full run passed. A parallel smoke startup returned one 503; the diagnostic standalone outage rerun passed without application changes. The runbook documents readiness caching and separate hosted/browser certification.
 
 See [reliability evidence](RELIABILITY_IMPLEMENTATION_NOTES.md) and [rollout/reproduction steps](RELIABILITY_RUNBOOK.md). No production migration/deployment, hosted provider operation or main merge occurred. The next task remains AUD-044; the complete remaining-task objective is unchanged.
+## Active AUD-044 checkpoint
+
+The disposable migration/seed/full-Jest gate, four browser projects and GitHub
+workflow are implemented. Local verification passed 161 suites / 1,190 tests,
+28 browser cases, 11 native cases, TypeScript, Prisma and the production build.
+Browser tests found and fixed the first-input login hydration race and cached-
+profile/server snapshot mismatch. Final compiled collection/outage/OTP/refund
+checks passed. The first remote CI run still needs inspection; AUD-044 remains
+open and the count stays 46 of 51 until that evidence is checked. Full-repository
+lint debt remains AUD-045 (25 errors / 37 warnings); no lint gate is bypassed.
+See [release verification](RELEASE_VERIFICATION.md).
+
 ## Owner-provided introduction
 
 Asibur completed graduation approximately four years before this conversation, is not a student, currently does programming using Codex and other platforms, and has completed several web-development projects. Do not invent an employer, degree subject, audience size, customer metrics or professional title beyond this supplied information.

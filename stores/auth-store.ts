@@ -47,19 +47,11 @@ const dispatchUserUpdate = (user: AuthUser | null) => {
   }
 };
 
-const getInitialUser = (): AuthUser | null => {
-  if (typeof window !== "undefined") {
-    try {
-      const stored = localStorage.getItem("amar_gadget_user");
-      if (stored && stored.length <= 32 * 1024) return safeAuthUser(JSON.parse(stored));
-      if (stored) localStorage.removeItem("amar_gadget_user");
-    } catch { /* A corrupt or unavailable cache never supplies a photo. */ }
-  }
-  return null;
-};
-
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: getInitialUser(),
+  // The first client snapshot must match SSR. A cached browser profile is
+  // neither session authority nor a safe source for the hydration snapshot.
+  // fetchUser publishes the verified current account after mounting.
+  user: null,
   loading: true,
   error: null,
   reference: null,

@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { FormInput } from "@/components/shared/form-input";
 import { H1 } from "@/components/ui/typography";
 import { useAuth } from "@/hooks/use-auth";
+
+const subscribeHydration = () => () => undefined;
 
 function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -50,6 +52,9 @@ function EyeOffIcon({ className = "w-4 h-4" }: { className?: string }) {
 }
 
 export default function LoginPage() {
+  // Controlled inputs must not accept typing before React attaches handlers;
+  // otherwise the first value can disappear during hydration on a slow client.
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const { user } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -77,7 +82,7 @@ export default function LoginPage() {
     if (e && "preventDefault" in e) {
       e.preventDefault();
     }
-    if (isLoading) return;
+    if (!hydrated || isLoading) return;
     setIsLoading(true);
     setErrorMessage("");
     setSuccessMessage("");
@@ -169,7 +174,7 @@ export default function LoginPage() {
         )}
 
         {/* Secure Form Container (Pure AJAX, never appends credentials to URL) */}
-        <div className="space-y-4">
+        <fieldset disabled={!hydrated || isLoading} aria-label="Sign-in credentials" className="space-y-4">
           <FormInput
             label="Email Address"
             type="email"
@@ -229,11 +234,11 @@ export default function LoginPage() {
               "Sign In to Account"
             )}
           </button>
-        </div>
+        </fieldset>
 
         {/* Registration Redirection */}
         <div className="text-center text-xs text-muted-foreground border-t pt-4">
-          Don't have an account yet?{" "}
+          Don&apos;t have an account yet?{" "}
           <Link href="/register" className="text-primary hover:underline font-bold">
             Create an Account
           </Link>

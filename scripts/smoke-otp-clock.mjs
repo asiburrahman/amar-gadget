@@ -53,6 +53,10 @@ async function main() {
     await db.$executeRawUnsafe('ALTER TABLE "OtpToken" DISABLE TRIGGER "OtpToken_utc_clock_guard"');
     try {
       assert.equal((await register(blockedEmail)).status, 503); assert.equal(smtp.messages.length, before);
+      // Startup now probes actual readiness, populating its documented five-
+      // second cache. The mutation endpoint fails immediately; readiness must
+      // observe the disabled guard after that bounded cache expires.
+      await delay(5100);
       assert.equal((await send("/api/health/ready")).status, 503);
     } finally { await db.$executeRawUnsafe('ALTER TABLE "OtpToken" ENABLE TRIGGER "OtpToken_utc_clock_guard"'); }
     assert.equal((await register(blockedEmail)).status, 200); assert.equal(smtp.messages.length, before + 1);

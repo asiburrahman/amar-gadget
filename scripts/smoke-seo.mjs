@@ -61,7 +61,7 @@ async function main() {
     assert.notEqual(origins[0], origins[1]);
     phase = "actual database-outage product metadata and API";
     const unavailable = new URL(url); unavailable.port = "1";
-    child = await startStandaloneFixture(unavailable.toString(), redis, { TRUSTED_PROXY_SECRET: secret });
+    child = await startStandaloneFixture(unavailable.toString(), redis, { TRUSTED_PROXY_SECRET: secret }, undefined, { readiness: false });
     const getUnavailable = (target) => requestHttp(child.origin + target, { headers: { "User-Agent": "Googlebot", ...signIngress({ secret, origin: child.origin, ip: "127.0.0.1", method: "GET", target }) } });
     const outage = await getUnavailable(`/products/${products[0].slug}`); assert.ok([200, 500].includes(outage.status)); const outageHtml = await outage.text(); assert.ok(/name="robots" content="[^"]*noindex/.test(outageHtml)); assert.ok(!outageHtml.includes("ECONNREFUSED")); assert.ok(!outageHtml.includes("postgresql://"));
     assert.equal((await getUnavailable(`/api/products/${products[0].slug}`)).status, 503);

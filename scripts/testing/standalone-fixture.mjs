@@ -3,8 +3,9 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { runtimeFixtureEnvironment } from "./runtime-fixture.mjs";
+import { waitForReadiness } from "./wait-for-readiness.mjs";
 
-export async function startStandaloneFixture(databaseUrl, redis, overrides = {}, expectedFailureField) {
+export async function startStandaloneFixture(databaseUrl, redis, overrides = {}, expectedFailureField, { readiness = true } = {}) {
   const probe = createServer();
   await new Promise((resolveListen, reject) => { probe.once("error", reject); probe.listen(0, "127.0.0.1", resolveListen); });
   const origin = `http://127.0.0.1:${probe.address().port}`;
@@ -39,7 +40,10 @@ export async function startStandaloneFixture(databaseUrl, redis, overrides = {},
         // A banner cannot prove that invalid instrumentation was accepted.
         // Callers may assert absence of test-owned redaction markers without
         // exposing the captured server output or real environment secrets.
-        if (!expectedFailureField) return { origin, stop, rejected: false, diagnostics, logContains: (marker) => output.includes(marker) };
+        if (!expectedFailureField) {
+          if (readiness) await waitForReadiness(origin, { alive: () => !failed && child.exitCode === null && child.signalCode === null });
+          return { origin, stop, rejected: false, diagnostics, logContains: (marker) => output.includes(marker) };
+        }
       }
       await delay(100);
     }

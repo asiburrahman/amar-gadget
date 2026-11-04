@@ -15,6 +15,9 @@
     "postinstall": "patch-package --error-on-fail && prisma generate",
     "lint": "eslint",
     "test": "jest",
+    "test:isolated": "node scripts/verify-isolated-tests.mjs",
+    "test:native": "node --test tests/native/*.test.mjs",
+    "test:browser": "playwright test",
     "bench:passwords": "tsx scripts/benchmark-passwords.ts",
     "audit:password-formats": "tsx scripts/check-passwords.ts",
     "seed:accounts": "tsx scripts/seed-users-credentials.ts",
@@ -82,6 +85,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",

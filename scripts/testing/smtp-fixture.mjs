@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
-async function makeCertificate(directory) {
+export async function makeCertificate(directory) {
   const keyPath = join(directory, "server-key.pem"), caPath = join(directory, "local-ca.pem");
   const candidates = process.platform === "win32" ? ["C:/Program Files/Git/usr/bin/openssl.exe", "openssl"] : ["openssl"];
   for (const executable of candidates) {
