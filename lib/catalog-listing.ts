@@ -7,6 +7,7 @@ import { publicProductMedia } from "@/lib/product-media-policy";
 import { resolveCatalogBrand } from "@/lib/catalog-brand-filter";
 import { resolveCatalogCategory } from "@/lib/catalog-category-filter";
 import { catalogQuerySchema, type CatalogQuery } from "@/lib/validations/catalog-query";
+import { serviceUnavailable } from "@/lib/observability";
 
 export class CatalogQueryError extends Error {
   constructor(message: string, readonly code = "INVALID_QUERY") { super(message); }
@@ -83,7 +84,8 @@ export async function getCatalogListing(input: unknown, scope: CatalogScope = { 
     const code = path.startsWith("brand") ? "INVALID_BRAND" : path.startsWith("category") ? "INVALID_CATEGORY" : "INVALID_QUERY";
     throw new CatalogQueryError(`Invalid ${path}: ${parsed.error.issues[0]?.message ?? "check the catalog filters."}`, code);
   }
-  return runListing(JSON.stringify(parsed.data), JSON.stringify(scope));
+  try { return await runListing(JSON.stringify(parsed.data), JSON.stringify(scope)); }
+  catch (error) { if (error instanceof CatalogQueryError || error instanceof CatalogAccessError) throw error; throw serviceUnavailable("catalog.listing", error); }
 }
 export type CatalogListing = Awaited<ReturnType<typeof getCatalogListing>>;
 export type CatalogProduct = CatalogListing["products"][number];

@@ -19,6 +19,10 @@ import { FulfillmentError } from "@/lib/fulfillment-policy";
 import { invalidateFulfillmentPages } from "@/lib/fulfillment-request";
 import { customerShipmentSelect, customerShipment, readSellerFulfillments, mutateFulfillment, mutateWholeOrder } from "@/lib/fulfillments";
 import { allocateDiscount, cents } from "@/lib/refund-policy";
+import { readCustomerOrders } from "@/lib/customer-orders-read";
+import { readAdminOrders } from "@/lib/admin-orders-read";
+import { ReadAccessError, ReadPageError } from "@/lib/protected-read";
+import { serviceUnavailable } from "@/lib/observability";
 
 function hashCheckoutToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -184,46 +188,27 @@ export async function createOrder(input: CheckoutInput) {
   }
 }
 
-export async function getUserOrders() {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, error: "Unauthorized", data: [] };
-
+export async function getUserOrders(query: unknown = {}) {
   try {
-    const orders = await prisma.order.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        total: true,
-        status: true,
-        paymentMethod: true,
-        paymentStatus: true,
-        shippingAddress: true,
-        trackingNumber: true,
-        createdAt: true,
-        items: {
-          select: {
-            id: true,
-            quantity: true,
-            productName: true, productSlug: true, productSnapshotSource: true,
-            price: true,
-            product: { select: { id: true, name: true, imageUrl: true, slug: true } },
-          },
-        },
-      },
-    });
-
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Unauthorized", data: [] };
+    const { orders, counts, total, page, pageSize, totalPages } = await readCustomerOrders(user, query);
     return {
       success: true,
+      pagination: { total, page, pageSize, totalPages }, counts,
       data: orders.map((order) => ({
-        ...order,
+        id: order.id, status: order.status, paymentMethod: order.paymentMethod, paymentStatus: order.paymentStatus,
+        shippingAddress: order.shippingAddress, trackingNumber: order.trackingNumber, createdAt: order.createdAt,
         total: Number(order.total),
-        items: order.items.map((item) => ({ ...item, price: Number(item.price), product: purchasedProduct(item) })),
+        items: order.items.map((item) => ({ id: item.id, quantity: item.quantity, productName: item.productName, productSlug: item.productSlug, productSnapshotSource: item.productSnapshotSource, price: Number(item.price), product: purchasedProduct(item) })),
       })),
     };
   } catch (error) {
-    console.error("Error fetching customer orders:", error);
-    return { success: false, error: "Failed to fetch orders", data: [] };
+    if (error instanceof ReadAccessError) return { success: false, error: "Unauthorized", data: [] };
+    if (error instanceof ZodError) return { success: false, error: "Invalid order search, status or page.", data: [] };
+    if (error instanceof ReadPageError) return { success: false, error: error.message, data: [] };
+    const unavailable = serviceUnavailable("customer.orders.action", error);
+    return { success: false, error: "Order history is temporarily unavailable. Try again shortly.", reference: unavailable.digest, data: [] };
   }
 }
 
@@ -317,56 +302,18 @@ export async function updateOrderStatusBySeller(fulfillmentId: string, newStatus
   } catch (error) { return { success: false as const, error: error instanceof FulfillmentError ? error.message : "Unable to confirm shipment. Reload before retrying." }; }
 }
 
-export async function getAllOrdersForAdmin() {
-  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
-    return { success: false, error: "Unauthorized", data: [] };
-  }
-
+export async function getAllOrdersForAdmin(query: unknown = {}) {
   try {
-    const orders = await prisma.order.findMany({
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        fulfillmentVersion: true,
-        total: true,
-        refundedCents: true, disputeAmountCents: true,
-        status: true,
-        paymentMethod: true,
-        paymentStatus: true,
-        shippingAddress: true,
-        trackingNumber: true,
-        shippingCarrier: true,
-        shipmentTrackingNumber: true,
-        createdAt: true,
-        user: { select: { id: true, name: true, email: true, phone: true } },
-        items: {
-          select: {
-            id: true,
-            quantity: true,
-            productName: true, productSlug: true, productSnapshotSource: true,
-            price: true,
-            product: { select: { id: true, name: true, imageUrl: true, price: true } },
-          },
-        },
-      },
-    });
-
-    return {
-      success: true,
-      data: orders.map(({ refundedCents, disputeAmountCents, ...order }) => ({
-        ...order,
-        total: Number(order.total),
-        refundedAmount: Number(refundedCents) / 100, disputeLossAmount: Number(disputeAmountCents) / 100,
-        items: order.items.map((item) => ({
-          ...item,
-          price: Number(item.price),
-          product: { ...purchasedProduct(item), price: Number(item.product.price) },
-        })),
-      })),
-    };
+    const actor = await getCurrentUserWithRole(["ADMIN"]);
+    if (!actor) return { success: false, error: "Unauthorized", data: [] };
+    const { orders, ...pageData } = await readAdminOrders(actor, query);
+    return { success: true, data: orders, pageData };
   } catch (error) {
-    console.error("Error fetching admin orders:", error);
-    return { success: false, error: "Failed to fetch orders", data: [] };
+    if (error instanceof ReadAccessError) return { success: false, error: "Unauthorized", data: [] };
+    if (error instanceof ZodError) return { success: false, error: "Invalid order search, status or page.", data: [] };
+    if (error instanceof ReadPageError) return { success: false, error: error.message, data: [] };
+    const unavailable = serviceUnavailable("admin.orders.action", error);
+    return { success: false, error: "Platform orders are temporarily unavailable. Try again shortly.", reference: unavailable.digest, data: [] };
   }
 }
 

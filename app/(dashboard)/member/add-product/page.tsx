@@ -2,21 +2,20 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createProduct, getCategories, getBrands } from "@/server/actions/product/product-actions";
+import { createProduct } from "@/server/actions/product/product-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { ProductImagePicker, type ProductImageSelection } from "@/components/forms/product-image-picker";
 import { createProductSchema, MAX_PRODUCT_PRICE, MAX_PRODUCT_STOCK, MAX_PRODUCT_DESCRIPTION } from "@/lib/validations/product";
 import { SpecificationEditor } from "@/components/catalog/specification-editor";
+import { TaxonomyPicker } from "@/components/catalog/taxonomy-picker";
 import type { Specification } from "@/lib/validations/specifications";
 
 export default function AddProductPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
-  const [categories, setCategories] = useState<{ id: string; name: string; pathLabel?: string }[]>([]);
-  const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -39,15 +38,6 @@ export default function AddProductPage() {
     const timer = setTimeout(() => router.push("/member/dashboard"), 2000);
     return () => clearTimeout(timer);
   }, [successMsg, router]);
-
-  useEffect(() => {
-    async function loadData() {
-      const [catRes, brandRes] = await Promise.all([getCategories(), getBrands()]);
-      if (catRes.success && catRes.data) setCategories(catRes.data);
-      if (brandRes.success && brandRes.data) setBrands(brandRes.data);
-    }
-    loadData();
-  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -193,36 +183,11 @@ export default function AddProductPage() {
           </div>
 
           <div>
-            <label htmlFor="product-category" className="font-bold block mb-1">Category *</label>
-            <select
-              required
-              name="categoryId"
-              id="product-category"
-              value={formData.categoryId}
-              onChange={handleChange}
-              className="w-full h-10 px-3 rounded-md border border-input bg-background text-xs font-semibold"
-            >
-              <option value="">Select Category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.pathLabel || c.name}</option>
-              ))}
-            </select>
+            <TaxonomyPicker kind="category" required value={formData.categoryId} disabled={loading || Boolean(successMsg)} onChange={(categoryId) => setFormData((prior) => ({ ...prior, categoryId }))} />
           </div>
 
           <div>
-            <label htmlFor="product-brand" className="font-bold block mb-1">Brand</label>
-            <select
-              name="brandId"
-              id="product-brand"
-              value={formData.brandId}
-              onChange={handleChange}
-              className="w-full h-10 px-3 rounded-md border border-input bg-background text-xs font-semibold"
-            >
-              <option value="">Select Brand (Optional)</option>
-              {brands.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+            <TaxonomyPicker kind="brand" value={formData.brandId} disabled={loading || Boolean(successMsg)} onChange={(brandId) => setFormData((prior) => ({ ...prior, brandId }))} />
           </div>
         </div>
 

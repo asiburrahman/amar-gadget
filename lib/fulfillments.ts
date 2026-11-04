@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AuthenticatedUser } from "@/lib/session";
-import { FulfillmentError, aggregateFulfillmentState, type FulfillmentState } from "@/lib/fulfillment-policy";
+import { FulfillmentError, AGGREGATE_ORDER_STATES, type FulfillmentState } from "@/lib/fulfillment-policy";
 import { fulfillmentMutationSchema, wholeOrderMutationSchema, fulfillmentQuerySchema, FULFILLMENT_PAGE_SIZE, type SellerFulfillment, type CustomerFulfillment } from "@/lib/validations/fulfillment";
 import { isPublicProductImageUrl } from "@/lib/product-media-policy";
 import { reconcileProductReviews } from "@/lib/reviews";
@@ -59,11 +59,15 @@ async function lockShipment(tx: Prisma.TransactionClient, actor: AuthenticatedUs
   return row;
 }
 async function reconcileOrder(tx: Prisma.TransactionClient, orderId: string) {
-  const shipments = await tx.orderFulfillment.findMany({ where: { orderId, items: { some: {} } }, orderBy: { id: "asc" }, select: { status: true, carrier: true, trackingNumber: true, codCollected: true, items: { select: { quantity: true, voidedQuantity: true } } } });
-  const active = shipments.filter((row) => row.items.some((item) => item.quantity > item.voidedQuantity));
-  const status = active.length ? aggregateFulfillmentState(active.map((row) => row.status)) : "CANCELLED";
+  const [summary] = await tx.$queryRaw<{ status: string; carrier: string | null; trackingNumber: string | null; codPaid: boolean }[]>`
+    SELECT COALESCE(aggregate_order_fulfillments(${orderId}),'CANCELLED') AS status,
+      CASE WHEN count(*)=1 THEN max(f.carrier) ELSE NULL END AS carrier,
+      CASE WHEN count(*)=1 THEN max(f."trackingNumber") ELSE NULL END AS "trackingNumber",
+      COALESCE(bool_and(f.status='DELIVERED' AND f."codCollected") FILTER(WHERE EXISTS(SELECT 1 FROM "OrderItem" i WHERE i."fulfillmentId"=f.id AND i.quantity>i."voidedQuantity")),false) AS "codPaid"
+    FROM "OrderFulfillment" f WHERE f."orderId"=${orderId} AND EXISTS(SELECT 1 FROM "OrderItem" i WHERE i."fulfillmentId"=f.id)`;
+  if (!(AGGREGATE_ORDER_STATES as readonly string[]).includes(summary.status)) throw new FulfillmentError("Mixed cancelled shipments require reconciliation.", "FULFILLMENT_RECONCILIATION", 503);
   const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, select: { paymentMethod: true } });
-  await tx.order.update({ where: { id: orderId }, data: { status, fulfillmentVersion: { increment: 1 }, ...(order.paymentMethod === "COD" ? { paymentStatus: active.length > 0 && active.every((row) => row.status === "DELIVERED" && row.codCollected) ? "PAID" : "UNPAID" } : {}), shippingCarrier: shipments.length === 1 ? shipments[0].carrier : null, shipmentTrackingNumber: shipments.length === 1 ? shipments[0].trackingNumber : null } });
+  await tx.order.update({ where: { id: orderId }, data: { status: summary.status, fulfillmentVersion: { increment: 1 }, ...(order.paymentMethod === "COD" ? { paymentStatus: summary.codPaid ? "PAID" : "UNPAID" } : {}), shippingCarrier: summary.carrier, shipmentTrackingNumber: summary.trackingNumber } });
 }
 export async function readSellerFulfillments(actor: AuthenticatedUser, input: unknown = {}) {
   const query = fulfillmentQuerySchema.parse(input);

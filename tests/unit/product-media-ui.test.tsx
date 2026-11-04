@@ -9,7 +9,7 @@ import { createProduct } from "../../server/actions/product/product-actions";
 const navigation = { push: jest.fn() };
 jest.mock("next/navigation", () => ({ useRouter: () => navigation }));
 jest.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "seller", role: "MEMBER", sellerStatus: "APPROVED" }, loading: false }) }));
-jest.mock("@/server/actions/product/product-actions", () => ({ createProduct: jest.fn(), getCategories: jest.fn().mockResolvedValue({ success: true, data: [{ id: "category", name: "Phones" }] }), getBrands: jest.fn().mockResolvedValue({ success: true, data: [] }) }));
+jest.mock("@/server/actions/product/product-actions", () => ({ createProduct: jest.fn() }));
 
 class UploadXhr {
   static instances: UploadXhr[] = [];
@@ -30,7 +30,11 @@ beforeEach(() => {
   jest.clearAllMocks(); UploadXhr.instances = [];
   global.XMLHttpRequest = UploadXhr as unknown as typeof XMLHttpRequest;
   let sequence = 0;
-  global.fetch = jest.fn().mockImplementation(async () => { const id = ++sequence; return { ok: true, json: async () => ({ success: true, uploadUrl: `https://r2.example.invalid/upload-${id}`, fileKey: key(id), publicUrl: `https://media.example.invalid/${id}.png`, headers: { "Content-Type": "image/png", "If-None-Match": "*" } }) }; });
+  global.fetch = jest.fn().mockImplementation(async (url: string) => {
+    if (url.startsWith("/api/categories?")) return { ok: true, json: async () => ({ success: true, categories: [{ id: "category", name: "Phones", pathLabel: "Phones" }], pagination: { page: 1, limit: 25, total: 1, totalPages: 1, q: "" } }) };
+    if (url.startsWith("/api/brands?")) return { ok: true, json: async () => ({ success: true, brands: [], pagination: { page: 1, limit: 25, total: 0, totalPages: 0, q: "" } }) };
+    const id = ++sequence; return { ok: true, json: async () => ({ success: true, uploadUrl: `https://r2.example.invalid/upload-${id}`, fileKey: key(id), publicUrl: `https://media.example.invalid/${id}.png`, headers: { "Content-Type": "image/png", "If-None-Match": "*" } }) };
+  });
   URL.createObjectURL = jest.fn((file: Blob) => `blob:local/${file.size}/${Math.random()}`);
   URL.revokeObjectURL = jest.fn();
   (createProduct as jest.Mock).mockResolvedValue({ success: false, error: "Submission fixture stopped after inspecting the payload." });

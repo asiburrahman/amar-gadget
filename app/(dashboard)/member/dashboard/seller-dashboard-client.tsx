@@ -2,10 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/formatter";
 import { FulfillmentConsole } from "@/components/orders/fulfillment-console";
 import { useAuth } from "@/hooks/use-auth";
 import type { SellerDashboardMetrics } from "@/lib/dashboard-metrics";
+import type { SellerDashboardCatalogPage } from "@/lib/seller-dashboard-catalog";
 
 interface ProductItem {
   id: string;
@@ -26,8 +28,9 @@ interface SellerDashboardClientProps {
     sellerStatus: string;
   } | null;
   products: ProductItem[];
+  catalogPage: SellerDashboardCatalogPage;
   metrics: SellerDashboardMetrics;
-  initialMainTab: "ORDERS" | "ANALYTICS";
+  initialMainTab: "ORDERS" | "CATALOG" | "ANALYTICS";
 }
 
 export default function SellerDashboardClient(props: SellerDashboardClientProps) {
@@ -36,8 +39,11 @@ export default function SellerDashboardClient(props: SellerDashboardClientProps)
   if (!user || user.id !== props.seller?.id || user.id !== props.metrics.ownerId || user.role !== "MEMBER" || user.sellerStatus !== "APPROVED") return <p>Reload the dashboard with the matching approved seller account.</p>;
   return <OwnedSellerDashboard key={user.id} {...props} />;
 }
-function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: SellerDashboardClientProps) {
-  const [activeTab, setActiveTab] = useState<"ALL" | "APPROVED" | "PENDING">("ALL");
+function OwnedSellerDashboard({ seller, products, metrics, initialMainTab, catalogPage }: SellerDashboardClientProps) {
+  const router = useRouter();
+  const activeTab = catalogPage.status;
+  const catalogHref = (page: number, status = activeTab) => `/member/dashboard?${new URLSearchParams({ year: String(metrics.year), q: catalogPage.q, status, page: String(page) })}`;
+  const setActiveTab = (status: typeof activeTab) => router.push(catalogHref(1, status));
   const [activeMainTab, setActiveMainTab] = useState<"ORDERS" | "CATALOG" | "ANALYTICS">(initialMainTab);
 
   const sellerStatus = seller?.sellerStatus || "PENDING";
@@ -53,16 +59,10 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
   const monthlyAnalytics = metrics.monthly;
 
   // Product counts
-  const totalProducts = products.length;
-  const approvedProducts = products.filter((p) => p.status === "APPROVED");
-  const pendingProducts = products.filter((p) => p.status === "PENDING_APPROVAL");
-
-  const displayedProducts =
-    activeTab === "APPROVED"
-      ? approvedProducts
-      : activeTab === "PENDING"
-      ? pendingProducts
-      : products;
+  const totalProducts = catalogPage.counts.ALL;
+  const approvedProductCount = catalogPage.counts.APPROVED;
+  const pendingProductCount = catalogPage.counts.PENDING;
+  const displayedProducts = products;
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 space-y-8">
@@ -167,7 +167,7 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
         {/* Live Catalog Items */}
         <div className="bg-card border border-border p-6 rounded-2xl shadow-sm space-y-2">
           <span className="text-xs font-bold text-primary uppercase tracking-wider">Store Catalog Items</span>
-          <p className="text-3xl font-black text-foreground">{approvedProducts.length} <span className="text-xs font-semibold text-muted-foreground">/ {totalProducts}</span></p>
+          <p className="text-3xl font-black text-foreground">{approvedProductCount} <span className="text-xs font-semibold text-muted-foreground">/ {totalProducts}</span></p>
           <span className="text-[11px] text-muted-foreground font-medium block">
             Approved & active storefront products
           </span>
@@ -216,6 +216,18 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
       {/* 2. MANAGE STORE CATALOG TAB */}
       {activeMainTab === "CATALOG" && (
         <div className="space-y-6">
+          <form action="/member/dashboard" method="GET" className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="year" value={metrics.year} />
+            <input type="hidden" name="status" value={activeTab} />
+            <label>Product name or exact ID<input name="q" type="search" maxLength={120} defaultValue={catalogPage.q} className="block rounded border px-3 py-2" /></label>
+            <button type="submit" className="rounded border px-3 py-2">Search your catalog</button>
+            <Link href="/member/dashboard?status=ALL" className="underline">Reset catalog filters</Link>
+          </form>
+          <nav aria-label="Seller catalog pages" className="flex flex-wrap items-center gap-4">
+            <p>Page {catalogPage.page} of {catalogPage.totalPages}; {catalogPage.total} matching products, {products.length} shown. Cards count your entire catalog.</p>
+            {catalogPage.page > 1 && <Link href={catalogHref(catalogPage.page - 1)} className="underline">Previous products</Link>}
+            {catalogPage.page < catalogPage.totalPages && <Link href={catalogHref(catalogPage.page + 1)} className="underline">Next products</Link>}
+          </nav>
           {/* Interactive Stat Filter Buttons / Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <button
@@ -248,7 +260,7 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
                 <span className="text-xs font-bold text-emerald-600 uppercase">Approved & Live</span>
                 <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold">Filter</span>
               </div>
-              <p className="text-3xl font-extrabold text-emerald-600">{approvedProducts.length}</p>
+              <p className="text-3xl font-extrabold text-emerald-600">{approvedProductCount}</p>
               <span className="text-[11px] text-emerald-600 font-medium">Click to view live storefront products</span>
             </button>
 
@@ -265,7 +277,7 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
                 <span className="text-xs font-bold text-amber-500 uppercase">Pending Admin Review</span>
                 <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold">Filter</span>
               </div>
-              <p className="text-3xl font-extrabold text-amber-500">{pendingProducts.length}</p>
+              <p className="text-3xl font-extrabold text-amber-500">{pendingProductCount}</p>
               <span className="text-[11px] text-muted-foreground font-medium">Click to view items awaiting admin approval</span>
             </button>
           </div>
@@ -274,14 +286,14 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border pb-4 gap-2">
               <div>
                 <h2 className="text-lg font-bold text-foreground">
-                  {activeTab === "ALL" && `📦 All Storefront Products (${displayedProducts.length})`}
-                  {activeTab === "APPROVED" && `✓ Approved & Live Products (${displayedProducts.length})`}
-                  {activeTab === "PENDING" && `⏳ Pending Admin Approval Products (${displayedProducts.length})`}
+                  {activeTab === "ALL" && `📦 All Storefront Products (${catalogPage.total})`}
+                  {activeTab === "APPROVED" && `✓ Approved & Live Products (${catalogPage.total})`}
+                  {activeTab === "PENDING" && `⏳ Pending Admin Approval Products (${catalogPage.total})`}
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  {activeTab === "ALL" && "Showing all products in your vendor catalog."}
-                  {activeTab === "APPROVED" && "Showing products approved by Admin currently visible to customers."}
-                  {activeTab === "PENDING" && "Showing products submitted recently that are undergoing Admin moderation review."}
+                  {activeTab === "ALL" && "Showing a page of matching products in your vendor catalog."}
+                  {activeTab === "APPROVED" && "Showing a page of matching approved products."}
+                  {activeTab === "PENDING" && "Showing a page of matching products awaiting moderation."}
                 </p>
               </div>
 
@@ -302,7 +314,7 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
                     activeTab === "APPROVED" ? "bg-background text-emerald-600 shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  Live ({approvedProducts.length})
+                  Live ({approvedProductCount})
                 </button>
                 <button
                   type="button"
@@ -311,7 +323,7 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
                     activeTab === "PENDING" ? "bg-background text-amber-500 shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  Pending ({pendingProducts.length})
+                  Pending ({pendingProductCount})
                 </button>
               </div>
             </div>
@@ -319,9 +331,9 @@ function OwnedSellerDashboard({ seller, products, metrics, initialMainTab }: Sel
             {displayedProducts.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground text-xs space-y-3">
                 <p>
-                  {activeTab === "ALL" && "You haven't listed any products yet."}
-                  {activeTab === "APPROVED" && "No approved live products available yet."}
-                  {activeTab === "PENDING" && "No products currently awaiting approval."}
+                  {activeTab === "ALL" && "No catalog products match these filters."}
+                  {activeTab === "APPROVED" && "No approved products match these filters."}
+                  {activeTab === "PENDING" && "No pending products match these filters."}
                 </p>
                 {isApproved && (
                   <Link

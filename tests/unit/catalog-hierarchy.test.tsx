@@ -21,6 +21,14 @@ it("shows descendant products under a parent and keeps an empty category free of
   fireEvent.click(screen.getByRole("tab", { name: "Phones" })); expect(screen.getAllByText("Actual phone case").length).toBeGreaterThan(0); expect(screen.queryByText("Unrelated laptop")).toBeNull();
   fireEvent.click(screen.getByRole("tab", { name: "Phones / Empty" })); expect(screen.queryByText("Actual phone case")).toBeNull(); expect(screen.queryByText("Unrelated laptop")).toBeNull(); expect(screen.getByText(/No products available in Empty/)).toBeTruthy();
 });
+it("uses server-scoped product pages and real category links with full path labels", () => {
+  const selected = { id: "cases", name: "Cases", pathLabel: "Phones / Cases", slug: "cases", parentId: "off-page-parent", products: [] };
+  const product = { id: "scoped", name: "Server scoped case", slug: "scoped", price: 100, stock: 2, imageUrl: null };
+  render(<ElectroCategoryShowcase categories={[selected]} allProducts={[product]} navigation={{ selectedId: selected.id, categoryPage: 2, q: "Phones", total: 47 }} />);
+  const choice = screen.getByRole("link", { name: "Phones / Cases" }); expect(choice.getAttribute("aria-current")).toBe("page"); expect(choice.getAttribute("href")).toBe("/categories?q=Phones&categoryPage=2&categoryId=cases");
+  expect(screen.getByRole("link", { name: "All Products" }).getAttribute("href")).toBe("/categories?q=Phones&categoryPage=2");
+  expect(screen.getByText("47 matching items; 1 on this page")).toBeTruthy(); expect(screen.getAllByText("Server scoped case").length).toBeGreaterThan(0);
+});
 function Departments() { const api = useCatalogDepartments(true); return <><ul>{api.rows.map((row) => <li key={row.id}><a href={`/categories/${encodeURIComponent(row.slug)}`}>{row.name}</a></li>)}</ul>{api.error && <p role="alert">{api.error}</p>}<button onClick={api.reload}>Reload departments</button></>; }
 const response = (categories: unknown[], status = 200) => ({ ok: status === 200, json: async () => ({ success: status === 200, categories }) }) as Response;
 it("loads actual root departments once in StrictMode and refreshes renamed/deleted navigation without seeded fallback", async () => {

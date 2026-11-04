@@ -53,7 +53,10 @@
     "smoke:notifications": "node scripts/smoke-notifications.mjs",
     "smoke:support": "node scripts/smoke-support.mjs",
     "worker:newsletter": "node scripts/newsletter-delivery-worker.mjs",
-    "smoke:newsletter": "node scripts/smoke-newsletter.mjs"
+    "smoke:newsletter": "node scripts/smoke-newsletter.mjs",
+    "smoke:reliability-collections": "node scripts/smoke-reliability-collections.mjs",
+    "smoke:reliability-outages": "node scripts/smoke-reliability-outages.mjs",
+    "smoke:otp-clock": "node scripts/smoke-otp-clock.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

@@ -2,8 +2,9 @@
 
 
 import { prisma } from "@/lib/prisma";
-import { publicProductWhere } from "@/lib/catalog-visibility";
-import { categoryLabel } from "@/lib/catalog-hierarchy";
+import { readTaxonomyOptions } from "@/lib/taxonomy-options";
+import { serviceUnavailable } from "@/lib/observability";
+import { ZodError } from "zod";
 import { createProductSchema, productQuerySchema } from "@/lib/validations/product";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
@@ -109,26 +110,24 @@ export async function createProduct(input: unknown) {
   }
 }
 
-export async function getCategories() {
+export async function getCategories(query: unknown = {}) {
   try {
-    const categories = await prisma.category.findMany({
-      orderBy: { name: "asc" },
-      include: { _count: { select: { products: { where: publicProductWhere } } } },
-    });
-    return { success: true, data: categories.map((category) => ({ ...category, pathLabel: categoryLabel(category, categories) })) };
-  } catch {
-    return { success: false, data: [] };
+    const { items, ...pagination } = await readTaxonomyOptions("category", query);
+    return { success: true, data: items, pagination };
+  } catch (error) {
+    if (error instanceof ZodError) return { success: false, data: [], error: "Invalid category search or page." };
+    const incident = serviceUnavailable("taxonomy.categories.action", error);
+    return { success: false, data: [], error: "Category choices are temporarily unavailable.", reference: incident.digest };
   }
 }
 
-export async function getBrands() {
+export async function getBrands(query: unknown = {}) {
   try {
-    const brands = await prisma.brand.findMany({
-      orderBy: { name: "asc" },
-      include: { _count: { select: { products: { where: publicProductWhere } } } },
-    });
-    return { success: true, data: brands };
-  } catch {
-    return { success: false, data: [] };
+    const { items, ...pagination } = await readTaxonomyOptions("brand", query);
+    return { success: true, data: items, pagination };
+  } catch (error) {
+    if (error instanceof ZodError) return { success: false, data: [], error: "Invalid brand search or page." };
+    const incident = serviceUnavailable("taxonomy.brands.action", error);
+    return { success: false, data: [], error: "Brand choices are temporarily unavailable.", reference: incident.digest };
   }
 }

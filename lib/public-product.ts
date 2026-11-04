@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { publicProductWhere } from "@/lib/catalog-visibility";
 import { publicProductMedia } from "@/lib/product-media-policy";
 import { publishedReviewWhere, reviewDisplayName } from "@/lib/reviews";
-export const getPublicProduct = cache(async (identifier: string) => {
+import { serviceUnavailable } from "@/lib/observability";
+async function lookupPublicProduct(identifier: string) {
   if (!identifier || identifier.length > 512 || /[\u0000-\u001f\u007f]/.test(identifier)) return null;
   const include = { category: true, brand: true, seller: { select: { id: true, name: true } }, reviews: { where: publishedReviewWhere, take: 20, orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }], select: { id: true, rating: true, comment: true, createdAt: true, updatedAt: true, user: { select: { name: true } } } } };
   const exact = await prisma.product.findFirst({ where: { ...publicProductWhere, slug: identifier }, include });
@@ -18,4 +19,8 @@ export const getPublicProduct = cache(async (identifier: string) => {
   if (aliases.length !== 1) return null;
   const product = await prisma.product.findFirst({ where: { ...publicProductWhere, id: aliases[0].id }, include });
   return product ? serialize(product) : null;
+}
+export const getPublicProduct = cache(async (identifier: string) => {
+  try { return await lookupPublicProduct(identifier); }
+  catch (error) { throw serviceUnavailable("catalog.product", error); }
 });

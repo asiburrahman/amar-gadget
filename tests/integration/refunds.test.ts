@@ -163,6 +163,24 @@ import { netCollectedRevenue } from "@/lib/financial-metrics";
     expect(await netCollectedRevenue()).toBe(before - 150); expect(await mockDatabase.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ disputeStatus: "LOST", disputeAmountCents: BigInt(15000) });
     expect((await mockDatabase.product.findUniqueOrThrow({ where: { id: products[0].id } })).stock).toBe(100);
   });
+  it("aggregates every dispute beyond a display-page boundary and preserves lost/active/closed precedence and exact funds", async () => {
+    const closed = await create();
+    await mockDatabase.paymentDispute.createMany({ data: Array.from({ length: 150 }, (_, index) => ({ id: `du_${randomUUID()}`, orderId: closed.id, status: index % 2 ? "won" : "warning_closed", amountCents: BigInt(50), fundsLostCents: BigInt(0) })) });
+    const current = { id: `du_${randomUUID()}`, payment_intent: closed.paymentIntentId, currency: "bdt", amount: 50, status: "needs_response", balance_transactions: [] } as unknown as Stripe.Dispute;
+    provider.disputes.set(current.id, current); await handleDisputeWebhook(current);
+    expect(await mockDatabase.order.findUniqueOrThrow({ where: { id: closed.id } })).toMatchObject({ disputeStatus: "ACTIVE", disputeAmountCents: BigInt(0) });
+    current.status = "won"; await handleDisputeWebhook(current);
+    expect(await mockDatabase.order.findUniqueOrThrow({ where: { id: closed.id } })).toMatchObject({ disputeStatus: "WON", disputeAmountCents: BigInt(0) });
+
+    const lost = await create();
+    await mockDatabase.paymentDispute.createMany({ data: Array.from({ length: 152 }, (_, index) => ({ id: `du_${randomUUID()}`, orderId: lost.id, status: index === 0 || index === 151 ? "lost" : "won", amountCents: BigInt(200), fundsLostCents: BigInt(index === 0 ? 100 : index === 151 ? 200 : 0) })) });
+    const latest = { ...current, id: `du_${randomUUID()}`, payment_intent: lost.paymentIntentId, status: "needs_response" } as Stripe.Dispute;
+    provider.disputes.set(latest.id, latest); await handleDisputeWebhook(latest);
+    expect(await mockDatabase.order.findUniqueOrThrow({ where: { id: lost.id } })).toMatchObject({ disputeStatus: "LOST", disputeAmountCents: BigInt(300) });
+    latest.status = "lost"; latest.balance_transactions = [{ amount: -50 } as Stripe.BalanceTransaction]; await handleDisputeWebhook(latest);
+    expect(await mockDatabase.order.findUniqueOrThrow({ where: { id: lost.id } })).toMatchObject({ disputeStatus: "LOST", disputeAmountCents: BigInt(350) });
+    expect(await mockDatabase.paymentDispute.count({ where: { orderId: lost.id } })).toBe(153);
+  });
   it("rejects reusing a COD receipt for another refund without changing its money or stock", async () => {
     const first = await create("COD"), second = await create("COD"); await dispatch(first.id, true); await dispatch(second.id, true);
     const one = await request(first.id), two = await request(second.id), confirm = (id: string, version: number) => mutateRefundLocally(admin, { action: "confirm-cod", refundId: id, version, moneyReturned: true, method: "BANK", reference: "ONE-ACTUAL-REPAYMENT-REFERENCE" });

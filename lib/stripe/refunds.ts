@@ -247,9 +247,13 @@ export async function handleDisputeWebhook(eventObject: Stripe.Dispute) {
     const balances = dispute.balance_transactions ?? [], withdrawn = balances.length ? Math.max(0, -balances.reduce((sum, row) => sum + row.amount, 0)) : dispute.amount;
     const lost = dispute.status === "lost" ? Math.min(dispute.amount, withdrawn) : 0;
     await tx.paymentDispute.upsert({ where: { id: dispute.id }, create: { id: dispute.id, orderId: order.id, status: dispute.status, amountCents: BigInt(dispute.amount), fundsLostCents: BigInt(lost) }, update: { status: dispute.status, amountCents: BigInt(dispute.amount), fundsLostCents: BigInt(lost) } });
-    const all = await tx.paymentDispute.findMany({ where: { orderId: order.id } });
-    const next = all.some((row) => row.status === "lost") ? "LOST" : all.some((row) => !["won", "warning_closed"].includes(row.status)) ? "ACTIVE" : "WON";
-    await tx.order.update({ where: { id: order.id }, data: { disputeStatus: next, disputeAmountCents: all.reduce((sum, row) => sum + row.fundsLostCents, BigInt(0)), refundVersion: { increment: 1 }, fulfillmentVersion: { increment: 1 } } });
+    const [lostCount, activeCount, amounts] = await Promise.all([
+      tx.paymentDispute.count({ where: { orderId: order.id, status: "lost" } }),
+      tx.paymentDispute.count({ where: { orderId: order.id, status: { notIn: ["won", "warning_closed"] } } }),
+      tx.paymentDispute.aggregate({ where: { orderId: order.id }, _sum: { fundsLostCents: true } }),
+    ]);
+    const next = lostCount ? "LOST" : activeCount ? "ACTIVE" : "WON";
+    await tx.order.update({ where: { id: order.id }, data: { disputeStatus: next, disputeAmountCents: amounts._sum.fundsLostCents ?? BigInt(0), refundVersion: { increment: 1 }, fulfillmentVersion: { increment: 1 } } });
     await financialEvent(tx, order.id, "PAYMENT_DISPUTE_RECONCILED", `Provider dispute ${dispute.id}: ${dispute.status}`, undefined, dispute.amount);
     for (const productId of [...new Set(order.items.map((item) => item.productId))].sort()) {
       await reconcileProductReviews(tx, productId);

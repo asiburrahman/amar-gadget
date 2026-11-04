@@ -124,7 +124,7 @@ export async function mutateAccountCart(actor: AuthenticatedUser, input: CartMut
       }
     } else {
       const products = await tx.product.findMany({ where: { id: { in: input.items.map((item) => item.productId) }, ...publicProductWhere }, select: { id: true, stock: true } });
-      const lines = await tx.cartLine.findMany({ where: { cartUserId: actor.id } });
+      const lines = await tx.cartLine.findMany({ where: { cartUserId: actor.id }, take: MAX_CART_LINES + 1 });
       if (lines.length > MAX_CART_LINES) throw new CartError("This cart needs operator review before merging.", "CART_LIMIT");
       let count = lines.length;
       for (const item of input.items) {

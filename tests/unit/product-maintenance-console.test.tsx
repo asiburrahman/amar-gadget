@@ -10,7 +10,7 @@ const row = { id: "product", name: "Original gadget", slug: "original-gadget", d
 const page = (changes = {}) => ({ success: true, ownerId: owner.id, rows: [row], events: [], total: 1, page: 1, totalPages: 1, attempt: null, attemptedRow: null, ...changes });
 const response = (value: unknown, status = 200) => ({ ok: status < 300, status, json: async () => value }) as Response;
 const posts = () => (fetch as jest.Mock).mock.calls.filter(([, init]) => init?.method === "POST").map(([, init]) => JSON.parse(init.body));
-const initialFetch = async (url: string, init?: RequestInit) => response(url === "/api/categories" ? { success: true, categories: [{ id: "category", name: "Saved category" }] } : url === "/api/brands" ? { success: true, brands: [] } : init?.method === "POST" ? { success: true, ownerId: owner.id, result: { id: row.id, version: 4 }, row: { ...row, catalogVersion: 4, status: "PENDING_APPROVAL" } } : page());
+const initialFetch = async (url: string, init?: RequestInit) => response(url.startsWith("/api/categories?") ? { success: true, categories: [{ id: "category", name: "Saved category" }], pagination: { page: 1, limit: 25, total: 1, totalPages: 1, q: "" } } : url.startsWith("/api/brands?") ? { success: true, brands: [], pagination: { page: 1, limit: 25, total: 0, totalPages: 0, q: "" } } : init?.method === "POST" ? { success: true, ownerId: owner.id, result: { id: row.id, version: 4 }, row: { ...row, catalogVersion: 4, status: "PENDING_APPROVAL" } } : page());
 beforeEach(() => { jest.clearAllMocks(); useAuthStore.setState({ user: owner, loading: false, fetchUser: jest.fn().mockResolvedValue(owner) }); global.fetch = jest.fn().mockImplementation(initialFetch); });
 const view = () => render(<StrictMode><ProductMaintenanceConsole ownerId={owner.id} ownerRole="MEMBER" /></StrictMode>);
 async function choose() { fireEvent.click(await screen.findByRole("button", { name: "Edit Original gadget" })); fireEvent.change(screen.getByLabelText("Operation reason"), { target: { value: "Verified warehouse correction" } }); }
@@ -39,8 +39,8 @@ it("resolves a recorded request from its receipt without sending the mutation ag
   await waitFor(() => expect(screen.queryByRole("button", { name: "Retry original request" })).toBeNull()); expect(posts()).toHaveLength(1); expect(screen.getByLabelText("Product name")).toHaveProperty("value", "Saved title");
 });
 it("does not silently replace invalid legacy specifications or hide a failed taxonomy lookup", async () => {
-  (fetch as jest.Mock).mockImplementation(async (url, init) => url === "/api/categories" ? response({ success: false }, 503) : url.startsWith("/api/member/products") ? response(page({ rows: [{ ...row, specifications: { unsupported: true } }] })) : initialFetch(url, init));
-  view(); await choose(); expect(screen.getByText(/Saved selections remain available/)).toBeTruthy(); expect(screen.getByRole("button", { name: "Save catalog content for review" })).toHaveProperty("disabled", true); expect(screen.getByText(/will not be silently replaced/)).toBeTruthy();
+  (fetch as jest.Mock).mockImplementation(async (url, init) => url.startsWith("/api/categories?") ? response({ success: false }, 503) : url.startsWith("/api/member/products") ? response(page({ rows: [{ ...row, specifications: { unsupported: true } }] })) : initialFetch(url, init));
+  view(); await choose(); expect(await screen.findByText(/Your selection is retained/)).toBeTruthy(); expect(screen.getByRole("button", { name: "Save catalog content for review" })).toHaveProperty("disabled", true); expect(screen.getByText(/will not be silently replaced/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Replace invalid specifications with an empty list" })); expect(screen.getByRole("button", { name: "Save catalog content for review" })).toHaveProperty("disabled", false);
 });
 it("requires explicit resubmission of an archive rather than offering another archive action", async () => {

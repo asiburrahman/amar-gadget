@@ -5,12 +5,14 @@ import SellerDashboardClient from "@/app/(dashboard)/member/dashboard/seller-das
 import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/lib/formatter";
 import type { CustomerDashboard, SellerDashboardMetrics } from "@/lib/dashboard-metrics";
+const mockPush = jest.fn();
+jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock("@/components/orders/fulfillment-console", () => ({ FulfillmentConsole: () => <p>Owned shipment console</p> }));
 const buyer = { id: "buyer", name: "Buyer", email: "buyer@example.invalid", role: "USER", isVerified: true, avatar: null };
 const seller = { ...buyer, id: "seller", role: "MEMBER", sellerStatus: "APPROVED" };
 const customer: CustomerDashboard = { ownerId: buyer.id, ownerRole: buyer.role, profile: { name: "Private Buyer", email: buyer.email }, metrics: { totalOrders: 19, activeOrders: 4, netPaidCents: 25000, deliveredPaidCents: 12000, reviewOrders: 2, partiallyCollectedCodOrders: 1 }, recent: [] };
 const metrics: SellerDashboardMetrics = { ownerId: seller.id, year: 2025, currentYear: 2026, firstYear: 2024, totalOrders: 38, pendingOrders: 3, paidItemCents: 76500, deliveredItemCents: 34200, deliveredUnits: 7, excludedLines: 2, monthly: [{ month: "2025-03", monthLabel: "March 2025", ordersCount: 2, paidItemCents: 4500, deliveredItemCents: 2100, deliveredUnits: 1, excludedLines: 1 }] };
-const sellerProps = { seller, products: [], metrics, initialMainTab: "ANALYTICS" as const };
+const sellerProps = { seller, products: [], metrics, initialMainTab: "ANALYTICS" as const, catalogPage: { q: "Gadget", status: "ALL" as const, page: 2, totalPages: 3, total: 43, counts: { ALL: 73, APPROVED: 41, PENDING: 21 } } };
 beforeEach(() => { jest.clearAllMocks(); useAuthStore.setState({ user: buyer, loading: false, fetchUser: jest.fn().mockResolvedValue(buyer) }); });
 it("renders authoritative all-time customer counts separately from the bounded recent list and explains financial qualifications", () => {
   render(<CustomerDashboardClient snapshot={customer} />);
@@ -40,4 +42,15 @@ it("hides prior seller metrics and catalog after suspension or account switching
   fireEvent.click(screen.getByRole("button", { name: /Incoming Customer Orders/ })); expect(screen.getByText("Owned shipment console")).toBeTruthy();
   act(() => useAuthStore.setState({ user: { ...seller, sellerStatus: "BLOCKED" } })); expect(screen.queryByText("Owned shipment console")).toBeNull(); expect(screen.queryByText(formatCurrency(342))).toBeNull();
   act(() => useAuthStore.setState({ user: { ...seller, id: "another-seller" } })); expect(screen.queryByText("Reconciled Paid Item Value")).toBeNull();
+});
+it("keeps whole-catalog counts and navigates server filters/pages without filtering only the loaded rows", () => {
+  useAuthStore.setState({ user: seller }); render(<SellerDashboardClient {...sellerProps} initialMainTab="CATALOG" />);
+  expect(screen.getByRole("button", { name: /Manage Store Catalog \(73\)/ })).toBeTruthy();
+  expect(screen.getByText(/43 matching products, 0 shown/)).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Next products" }).getAttribute("href")).toBe("/member/dashboard?year=2025&q=Gadget&status=ALL&page=3");
+  fireEvent.click(screen.getByRole("button", { name: "Live (41)" }));
+  expect(mockPush).toHaveBeenCalledWith("/member/dashboard?year=2025&q=Gadget&status=APPROVED&page=1");
+  const search = screen.getByRole("searchbox"); expect(search.getAttribute("name")).toBe("q");
+  expect(search.closest("form")?.getAttribute("method")).toBe("GET");
+  expect(screen.getByText("No catalog products match these filters.")).toBeTruthy();
 });

@@ -1,11 +1,13 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { brandFilterSchema } from "@/lib/validations/catalog-brand";
+import { serviceUnavailable } from "@/lib/observability";
 
 export type CatalogCategory = { id: string; name: string; slug: string };
 export type CategoryFilterResult = { state: "none" } | { state: "found"; category: CatalogCategory } | { state: "missing" } | { state: "invalid"; message: string };
 const select = { id: true, name: true, slug: true } as const;
 export const resolveCatalogCategory = cache(async (category: unknown, categoryId: unknown): Promise<CategoryFilterResult> => {
+  try {
   const parsed = brandFilterSchema.safeParse({ brand: category, brandId: categoryId });
   if (!parsed.success) return { state: "invalid", message: "Invalid category filter. Select one category." };
   const { brand: value, brandId: id } = parsed.data;
@@ -31,4 +33,5 @@ export const resolveCatalogCategory = cache(async (category: unknown, categoryId
   if (byValue && byId && byValue.id !== byId.id) return { state: "invalid", message: "The category and category ID select different categories." };
   const selected = byValue ?? byId;
   return selected ? { state: "found", category: selected } : { state: "missing" };
+  } catch (error) { throw serviceUnavailable("taxonomy.category", error); }
 });

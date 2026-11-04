@@ -11,6 +11,7 @@ import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 interface HeroSectionProps {
   banners?: HomepageBanner[];
   unavailable?: boolean;
+  categoriesUnavailable?: boolean;
   featuredProduct?: {
     id: string;
     slug?: string;
@@ -27,6 +28,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   categories = [],
   banners = [],
   unavailable = false,
+  categoriesUnavailable = false,
 }) => {
   const categoryList = [
     { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
@@ -40,6 +42,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   return (
     <section className="bg-[#f5f5f5] pt-0 pb-0 border-b border-gray-200">
+      {categoriesUnavailable && <p role="alert" className="mx-auto max-w-7xl p-4">Category navigation is temporarily unavailable. <Link href="/categories" className="underline">Reload categories</Link></p>}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
         
         {/* Left Category Sidebar Navigation Bar */}

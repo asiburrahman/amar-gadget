@@ -19,6 +19,7 @@ import { generateOrganizationSchema, generateWebsiteSchema } from "@/lib/seo/sch
 import { serializeJsonLd } from "@/lib/seo/serialize-json-ld";
 import { publicProductMedia } from "@/lib/product-media-policy";
 import { getHomepageBanners } from "@/lib/homepage-banners";
+import { partialServiceFailure } from "@/lib/partial-service-failure";
 
 export const dynamic = "force-dynamic";
 export const metadata = { alternates: { canonical: "/" } };
@@ -31,6 +32,16 @@ export default async function Home() {
     prisma.brand.findMany({ select: { id: true, name: true, slug: true, _count: { select: { products: { where: publicProductWhere } } } }, take: 12, orderBy: [{ name: "asc" }, { id: "asc" }] }),
     getHomepageBanners(),
   ]);
+  const failures = [
+    partialServiceFailure("Featured products", "home.featured", featured),
+    partialServiceFailure("Sale products", "home.sale", sale),
+    partialServiceFailure("Top-rated products", "home.rated", rated),
+    partialServiceFailure("Best-selling products", "home.best", best),
+    partialServiceFailure("Campaigns", "home.campaigns", campaigns),
+    partialServiceFailure("Category navigation", "home.categories", categories),
+    partialServiceFailure("Brands", "home.brands", brands),
+    partialServiceFailure("Banners", "home.banners", banners),
+  ].filter((failure) => failure !== null);
   const featuredProducts: DynamicProductItem[] = featured.status === "fulfilled" ? featured.value.map((product) => ({ ...product, ...publicProductMedia(product), description: product.description ?? undefined, price: Number(product.price), discountPrice: product.discountPrice === null ? null : Number(product.discountPrice), imageUrl: publicProductMedia(product).imageUrl ?? undefined, category: product.category.name })) : [];
   const onSaleProducts = sale.status === "fulfilled" ? sale.value.products.map(card) : [];
   const topRatedProducts = rated.status === "fulfilled" ? rated.value.products.filter((product) => product.reviewCount > 0 && product.rating > 0).map(card) : [];
@@ -39,7 +50,8 @@ export default async function Home() {
   return <SEOGuard><div className="flex-1 flex flex-col bg-white text-slate-900"><main className="flex-1">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(generateOrganizationSchema()) }} />
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(generateWebsiteSchema()) }} />
-    <HeroSection featuredProduct={featuredProducts[0] ?? onSaleProducts[0] ?? null} categories={categories.status === "fulfilled" ? categories.value : []} banners={banners.status === "fulfilled" ? banners.value.HERO : []} unavailable={banners.status === "rejected"} />
+    {failures.length > 0 && <section role="alert" className="mx-auto max-w-7xl space-y-2 border p-4"><h2>Some homepage sections are temporarily unavailable</h2><ul>{failures.map((failure) => <li key={failure.label}>{failure.label}: reference {failure.reference}</li>)}</ul><Link href="/" className="underline">Reload homepage sections</Link></section>}
+    <HeroSection featuredProduct={featuredProducts[0] ?? onSaleProducts[0] ?? null} categories={categories.status === "fulfilled" ? categories.value : []} categoriesUnavailable={categories.status === "rejected"} banners={banners.status === "fulfilled" ? banners.value.HERO : []} unavailable={banners.status === "rejected"} />
     <PromoBanners banners={banners.status === "fulfilled" ? banners.value.PROMO : []} unavailable={banners.status === "rejected"} />
     <section aria-label="Current campaigns" className="max-w-7xl mx-auto p-4 py-8 space-y-4"><h2 className="text-xl font-bold">Current campaigns</h2><Link href="/deals" className="underline">Browse all campaigns</Link>
       {campaigns.status === "rejected" ? <p role="alert">Campaigns are temporarily unavailable.</p> : preview ? <CampaignCard campaign={{ ...preview, products: preview.products.slice(0, 4) }} serverNow={campaigns.value.now} /> : <p>No active campaigns with eligible products right now.</p>}
@@ -48,7 +60,7 @@ export default async function Home() {
     <BestSellersSection products={bestSellerProducts} unavailable={best.status === "rejected"} />
     <BannerAd banners={banners.status === "fulfilled" ? banners.value.AD : []} unavailable={banners.status === "rejected"} /><RecentlyViewed />
     <BrandLogos brands={brands.status === "fulfilled" ? brands.value.map((brand) => ({ id: brand.id, slug: brand.slug, name: brand.name, count: brand._count.products })) : []} unavailable={brands.status === "rejected"} />
-    <BottomWidgets featuredProducts={featuredProducts} onSaleProducts={onSaleProducts} topRatedProducts={topRatedProducts} />
+    <BottomWidgets featuredProducts={featuredProducts} onSaleProducts={onSaleProducts} topRatedProducts={topRatedProducts} unavailable={[...(featured.status === "rejected" ? ["featured" as const] : []), ...(sale.status === "rejected" ? ["onsale" as const] : []), ...(rated.status === "rejected" ? ["toprated" as const] : [])]} />
     <NewsletterBar />
   </main><ElectroFooter /></div></SEOGuard>;
 }

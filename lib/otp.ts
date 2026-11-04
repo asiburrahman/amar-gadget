@@ -1,7 +1,8 @@
 import { createHash, createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
-import type { Prisma, User, OtpToken } from "@prisma/client";
+import { Prisma, type User, type OtpToken } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { readPrivateSecret } from "@/config/runtime";
+import { otpClockGuard } from "@/lib/otp-clock-guard";
 
 export type OtpPurpose = "REGISTRATION" | "PASSWORD_RESET" | "EMAIL_CHANGE";
 const PURPOSES = new Set<OtpPurpose>(["REGISTRATION", "PASSWORD_RESET", "EMAIL_CHANGE"]);
@@ -33,7 +34,9 @@ async function lockUser(tx: Prisma.TransactionClient, userId: string) {
   return tx.user.findUnique({ where: { id: userId } });
 }
 async function databaseNow(tx: Prisma.TransactionClient) {
-  return (await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`)[0].now;
+  const [clock] = await tx.$queryRaw<{ now: Date }[]>(Prisma.sql`SELECT timezone('UTC',clock_timestamp()) AS now WHERE ${otpClockGuard}`);
+  if (!clock) throw new OtpError("Verification is temporarily unavailable. Please retry shortly.", 503);
+  return clock.now;
 }
 async function budget(tx: Prisma.TransactionClient, context: Context, now: Date, kind: "send" | "verify") {
   const where = { userId_purpose: { userId: context.userId, purpose: context.purpose } };
@@ -70,7 +73,7 @@ export async function issueOtp(input: Context, deliver: (code: string) => Promis
   });
   try {
     await deliver(code);
-    const marked = await prisma.$executeRaw`UPDATE "OtpToken" SET "deliveredAt" = clock_timestamp() WHERE id = ${saved.id} AND "deliveredAt" IS NULL`;
+    const marked = await prisma.$executeRaw`UPDATE "OtpToken" SET "deliveredAt" = timezone('UTC',clock_timestamp()) WHERE id = ${saved.id} AND "deliveredAt" IS NULL`;
     if (marked !== 1) throw new OtpError("A newer verification request replaced this code. Use the latest message.", 409);
   } catch (error) {
     // Never delete a newer code or a token for another purpose/account.

@@ -108,9 +108,9 @@ export async function applyRefundInventory(tx: Prisma.TransactionClient, order: 
     if (item.fulfillmentId) changedGroups.add(item.fulfillmentId);
   }
   for (const id of [...changedGroups].sort()) {
-    const items = await tx.orderItem.findMany({ where: { fulfillmentId: id }, select: { quantity: true, voidedQuantity: true } });
+    const [items] = await tx.$queryRaw<{ allVoided: boolean }[]>`SELECT NOT EXISTS(SELECT 1 FROM "OrderItem" WHERE "fulfillmentId"=${id} AND quantity<>"voidedQuantity") AS "allVoided"`;
     const group = await tx.orderFulfillment.findUniqueOrThrow({ where: { id } });
-    await tx.orderFulfillment.update({ where: { id }, data: { version: { increment: 1 }, ...(items.every((x) => x.quantity === x.voidedQuantity) && ["PENDING", "PROCESSING"].includes(group.status) ? { status: "CANCELLED" } : {}) } });
+    await tx.orderFulfillment.update({ where: { id }, data: { version: { increment: 1 }, ...(items.allVoided && ["PENDING", "PROCESSING"].includes(group.status) ? { status: "CANCELLED" } : {}) } });
   }
   const [aggregate] = await tx.$queryRaw<{ status: string }[]>`SELECT aggregate_order_fulfillments(${order.id}) AS status`;
   await tx.order.update({ where: { id: order.id }, data: { status: aggregate.status } });

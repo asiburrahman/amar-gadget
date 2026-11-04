@@ -42,6 +42,8 @@ interface Props {
     email: string;
   };
   initialOrders: Order[];
+  query: { q: string; status: "ALL" | "ACTIVE" | "DELIVERED" | "CANCELLED" };
+  counts: Record<"ALL" | "ACTIVE" | "DELIVERED" | "CANCELLED", number>;
 }
 
 export default function UserOrdersClient(props: Props) {
@@ -50,9 +52,7 @@ export default function UserOrdersClient(props: Props) {
   if (!user || user.id !== props.user.id) return <p>Reload your order history with the matching account.</p>;
   return <OwnedUserOrdersClient key={user.id} {...props} />;
 }
-function OwnedUserOrdersClient({ initialOrders }: Props) {
-  const [filter, setFilter] = useState<"ALL" | "ACTIVE" | "DELIVERED" | "CANCELLED">("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
+function OwnedUserOrdersClient({ initialOrders, query, counts }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const copyTracking = (num: string) => {
@@ -60,28 +60,6 @@ function OwnedUserOrdersClient({ initialOrders }: Props) {
     setCopiedId(num);
     setTimeout(() => setCopiedId(null), 2000);
   };
-
-  const filteredOrders = initialOrders.filter((order) => {
-    // Status filter
-    if (filter === "ACTIVE") {
-      if (order.status === "DELIVERED" || order.status === "CANCELLED") return false;
-    } else if (filter === "DELIVERED") {
-      if (order.status !== "DELIVERED") return false;
-    } else if (filter === "CANCELLED") {
-      if (order.status !== "CANCELLED") return false;
-    }
-
-    // Search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchId = order.id.toLowerCase().includes(q);
-      const matchTracking = order.trackingNumber?.toLowerCase().includes(q);
-      const matchProduct = order.items.some((i) => i.product.name.toLowerCase().includes(q));
-      if (!matchId && !matchTracking && !matchProduct) return false;
-    }
-
-    return true;
-  });
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { label: string; className: string }> = {
@@ -122,79 +100,31 @@ function OwnedUserOrdersClient({ initialOrders }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Search and Filters Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
-        {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          <button
-            type="button"
-            onClick={() => setFilter("ALL")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filter === "ALL"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            All Orders ({initialOrders.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("ACTIVE")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filter === "ACTIVE"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            Active ({initialOrders.filter((o) => o.status !== "DELIVERED" && o.status !== "CANCELLED").length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("DELIVERED")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filter === "DELIVERED"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            Delivered ({initialOrders.filter((o) => o.status === "DELIVERED").length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("CANCELLED")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              filter === "CANCELLED"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            Cancelled ({initialOrders.filter((o) => o.status === "CANCELLED").length})
-          </button>
-        </div>
-
-        {/* Search Input */}
-        <div className="relative min-w-[240px]">
-          <input
-            type="text"
-            placeholder="Search by order ID, item name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-9 pl-8 pr-3 rounded-lg border border-input bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
-            🔍
-          </span>
-        </div>
-      </div>
+      <form action="/user/orders" method="GET" className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4">
+        <label>Search order ID, tracking or purchased item
+          <input type="search" name="q" maxLength={120} defaultValue={query.q} className="block rounded border px-3 py-2" />
+        </label>
+        <label>Order status
+          <select name="status" defaultValue={query.status} className="block rounded border px-3 py-2">
+            <option value="ALL">All orders ({counts.ALL})</option>
+            <option value="ACTIVE">Active ({counts.ACTIVE})</option>
+            <option value="DELIVERED">Delivered ({counts.DELIVERED})</option>
+            <option value="CANCELLED">Cancelled ({counts.CANCELLED})</option>
+          </select>
+        </label>
+        <button type="submit" className="rounded border px-3 py-2">Apply order filters</button>
+        <Link href="/user/orders" className="underline">Reset filters</Link>
+        <p className="w-full text-xs text-muted-foreground">Search and status counts cover your whole matching order history.</p>
+      </form>
 
       {/* Orders List */}
-      {filteredOrders.length === 0 ? (
+      {initialOrders.length === 0 ? (
         <div className="bg-card border border-border rounded-2xl p-12 text-center space-y-3">
           <div className="text-4xl">📦</div>
           <h3 className="font-bold text-foreground text-sm">No orders found</h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            {searchQuery
-              ? `No orders matching "${searchQuery}" in this view.`
+            {query.q
+              ? `No orders matching "${query.q}" in this view.`
               : "You haven't placed any orders in this category yet."}
           </p>
           <div className="pt-2">
@@ -207,7 +137,7 @@ function OwnedUserOrdersClient({ initialOrders }: Props) {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredOrders.map((order) => {
+          {initialOrders.map((order) => {
             const dateStr = new Date(order.createdAt).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",

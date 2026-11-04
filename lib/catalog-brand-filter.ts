@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { brandFilterSchema } from "@/lib/validations/catalog-brand";
+import { serviceUnavailable } from "@/lib/observability";
 
 export type CatalogBrand = { id: string; name: string; slug: string };
 export type BrandFilterResult = { state: "none" } | { state: "found"; brand: CatalogBrand } | { state: "missing" } | { state: "invalid"; message: string };
@@ -9,6 +10,7 @@ const select = { id: true, name: true, slug: true } as const;
 // Primitive arguments let metadata and the page share request-scoped React
 // memoization. There is no persistent negative/brand cache across requests.
 export const resolveCatalogBrand = cache(async (brand: unknown, brandId: unknown): Promise<BrandFilterResult> => {
+  try {
   const parsed = brandFilterSchema.safeParse({ brand, brandId });
   if (!parsed.success) return { state: "invalid", message: "Invalid brand filter. Select one brand." };
   const values = parsed.data;
@@ -36,4 +38,5 @@ export const resolveCatalogBrand = cache(async (brand: unknown, brandId: unknown
   if (byValue && byId && byValue.id !== byId.id) return { state: "invalid", message: "The brand and brand ID select different brands." };
   const selected = byValue ?? byId;
   return selected ? { state: "found", brand: selected } : { state: "missing" };
+  } catch (error) { throw serviceUnavailable("taxonomy.brand", error); }
 });

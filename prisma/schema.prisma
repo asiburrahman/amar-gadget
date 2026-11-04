@@ -816,7 +816,7 @@ model OtpToken {
   attempts Int @default(0)
   deliveredAt DateTime?
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
 
   @@unique([userId, purpose])
   @@index([email, purpose, expiresAt])
@@ -945,9 +945,9 @@ model OtpThrottle {
   userId String
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   purpose String
-  verificationWindowStart DateTime @default(now())
+  verificationWindowStart DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
   verificationAttempts Int @default(0)
-  sendWindowStart DateTime @default(now())
+  sendWindowStart DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
   sendCount Int @default(0)
   lastSentAt DateTime?
 

@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { readApplicationOrigin } from "@/config/runtime";
 import { WishlistSync } from "@/components/account/wishlist-sync";
 import { CartSync } from "@/components/account/cart-sync";
+import { AuthServiceNotice } from "@/components/account/auth-service-notice";
 
 const fontSans = Geist({
   subsets: ["latin"],
@@ -44,6 +45,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-200">
         <WishlistSync />
         <CartSync />
+        <AuthServiceNotice />
         {children}
       </body>
     </html>

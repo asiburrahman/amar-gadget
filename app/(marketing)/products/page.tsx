@@ -9,6 +9,7 @@ import { ProductGrid } from "@/components/shared/product-grid";
 import { createMetadata } from "@/lib/seo/metadata";
 import { brandCollectionHref } from "@/lib/validations/catalog-brand";
 import { categoryPath, categorySelector } from "@/lib/seo/urls";
+import { serviceUnavailable } from "@/lib/observability";
 
 type Params = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 export const dynamic = "force-dynamic";
@@ -29,14 +30,15 @@ export async function generateMetadata({ searchParams }: Params): Promise<Metada
 export default async function ProductsPage({ searchParams }: Params) {
   const input = searchParams ? await searchParams : {};
   let result: Awaited<ReturnType<typeof getCatalogListing>> | undefined;
-  let error = "", code = "";
+  let error = "", code = "", reference = "", optionsReference = "";
   try { result = await getCatalogListing(input); }
-  catch (failure) { if (failure instanceof CatalogQueryError) { error = failure.message; code = failure.code; } else { error = "Products are temporarily unavailable. Please try again shortly."; console.error("Product collection is temporarily unavailable."); } }
+  catch (failure) { if (failure instanceof CatalogQueryError) { error = failure.message; code = failure.code; } else { error = "Products are temporarily unavailable. Please try again shortly."; reference = serviceUnavailable("catalog.products.page", failure).digest; } }
   const brand = result?.brandFilter.state === "found" ? result.brandFilter.brand : undefined;
   const category = result?.categoryFilter.state === "found" ? result.categoryFilter.category : undefined;
   let options: { brands: Awaited<ReturnType<typeof getCatalogOptions>>; categories: Awaited<ReturnType<typeof getCatalogOptions>> } | undefined;
   try { const [brands, categories] = await Promise.all([getCatalogOptions("brand"), getCatalogOptions("category")]); options = { brands, categories }; }
-  catch { console.error("Product filter options are temporarily unavailable."); }
+  catch (failure) { optionsReference = serviceUnavailable("catalog.products.options", failure).digest; }
+  const retryQuery = catalogQuerySchema.safeParse(input), retryHref = retryQuery.success ? catalogHref(retryQuery.data) : "/products";
   const query = result?.query ?? catalogQuerySchema.parse({});
   return <div className="min-h-screen bg-background pb-16">
     <section className="border-b py-10"><div className="container mx-auto px-4 max-w-7xl">
@@ -45,8 +47,8 @@ export default async function ProductsPage({ searchParams }: Params) {
       {(brand || result?.brandFilter.state === "missing" || code === "INVALID_BRAND") && <Link href={withoutBrandFilter(input)} className="inline-block mt-3 text-primary underline">Clear brand filter</Link>}
     </div></section>
     <main className="container mx-auto px-4 py-8 max-w-7xl space-y-6">
-      {options ? <CatalogFilters key={catalogHref(query)} query={query} brands={options.brands} categories={options.categories} brand={brand} category={category} /> : <p role="alert">Filter choices are temporarily unavailable. <Link href="/products" className="underline">Retry filters</Link></p>}
-      {error ? <div role="alert" className="p-6 border rounded-xl"><h2>{code === "INVALID_BRAND" ? "Invalid brand filter" : code ? "Invalid product filters" : "Products are temporarily unavailable"}</h2><p>{error}</p><Link href="/products" className="underline">Reset filters</Link></div>
+      {options ? <CatalogFilters key={catalogHref(query)} query={query} brands={options.brands} categories={options.categories} brand={brand} category={category} /> : <p role="alert">Filter choices are temporarily unavailable. {optionsReference && <span>Reference: {optionsReference}. </span>}<Link href={retryHref} className="underline">Retry filters</Link></p>}
+      {error ? <div role="alert" className="p-6 border rounded-xl"><h2>{code === "INVALID_BRAND" ? "Invalid brand filter" : code ? "Invalid product filters" : "Products are temporarily unavailable"}</h2><p>{error}</p>{reference && <p>Reference: {reference}</p>}{reference && <Link href={retryHref} className="underline">Retry product results</Link>} <Link href="/products" className="underline">Reset filters</Link></div>
         : result && <>
           <p role="status">{result.total === 0 ? "Showing 0 of 0 products" : result.outOfRange ? `No products on page ${result.page}; ${result.total} products match.` : `Showing ${(result.page - 1) * result.limit + 1}–${Math.min(result.page * result.limit, result.total)} of ${result.total} products`}</p>
           {result.brandFilter.state === "missing" ? <div role="status"><h2>Brand not found</h2><p>No products are shown for this brand.</p><Link href="/brands">Browse brands</Link></div>

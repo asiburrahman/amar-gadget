@@ -1,1 +1,2 @@
-"use client"; export default function Error() { return <div>App Error</div>; }
+"use client";
+export { ServiceErrorView as default } from "@/components/shared/service-error";

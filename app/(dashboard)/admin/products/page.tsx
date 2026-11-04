@@ -1,18 +1,32 @@
 import React from "react";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
+import { getCurrentUserWithRole } from "@/lib/session";
+import { readAdminCatalog } from "@/lib/admin-catalog-read";
+import { adminCatalogQuerySchema } from "@/lib/validations/collection-query";
+import { PRODUCT_STATUSES } from "@/lib/catalog-constants";
+import { ReadAccessError, ReadPageError } from "@/lib/protected-read";
+import { serviceUnavailable } from "@/lib/observability";
 import { formatCurrency } from "@/lib/formatter";
 import { AdminProductManageActions } from "../_components/admin-product-manage-actions";
 import { AdminSpecificationEditor } from "@/components/catalog/admin-specification-editor";
 
-export default async function AdminProductsPage() {
-  const products = await prisma.product.findMany({
-    include: {
-      category: { select: { name: true } },
-      seller: { select: { name: true, email: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+export default async function AdminProductsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  let actor;
+  try { actor = await getCurrentUserWithRole(["ADMIN"]); } catch (error) { throw serviceUnavailable("admin.session", error); }
+  if (!actor) redirect("/login");
+  const parsed = adminCatalogQuerySchema.safeParse(searchParams ? await searchParams : {});
+  if (!parsed.success) return <main className="p-6 space-y-3"><h1>Manage Platform Products</h1><p role="alert">Check the product search, status filter and page number.</p><Link href="/admin/products" className="underline">Reset product filters</Link></main>;
+  const query = parsed.data;
+  const pageHref = (page: number) => `/admin/products?${new URLSearchParams({ q: query.q, status: query.status, page: String(page) })}`;
+  let result;
+  try { result = await readAdminCatalog(actor, query); }
+  catch (error) {
+    if (error instanceof ReadAccessError) redirect("/login");
+    if (error instanceof ReadPageError) return <main className="p-6 space-y-3"><h1>Manage Platform Products</h1><p role="alert">{error.message}</p><Link href={pageHref(1)} className="underline">Load the first product page</Link></main>;
+    throw error;
+  }
+  const { products, total, page, totalPages } = result;
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 space-y-8">
@@ -35,11 +49,17 @@ export default async function AdminProductsPage() {
 
       {/* Products List */}
       <div className="bg-card border border-border rounded-2xl shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-bold text-foreground border-b border-border pb-3">All Storefront Products ({products.length})</h2>
+        <h2 className="text-lg font-bold text-foreground border-b border-border pb-3">Matching platform products ({total})</h2>
+        <form method="GET" action="/admin/products" className="flex flex-wrap items-end gap-3">
+          <label>Product name, seller name/email or exact product ID<input name="q" type="search" maxLength={120} defaultValue={query.q} className="block rounded border px-3 py-2" /></label>
+          <label>Status<select name="status" defaultValue={query.status} className="block rounded border px-3 py-2"><option value="ALL">All statuses</option>{PRODUCT_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
+          <button type="submit" className="rounded border px-3 py-2">Apply product filters</button>
+        </form>
+        <p>Page {page} of {totalPages}; {products.length} shown. Search and totals apply to the whole matching catalog.</p>
 
         {products.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground text-xs">
-            No products found in store database.
+            No products match these filters.
           </div>
         ) : (
           <div className="divide-y divide-border">
@@ -92,6 +112,7 @@ export default async function AdminProductsPage() {
             })}
           </div>
         )}
+        <nav aria-label="Platform product pages" className="flex flex-wrap gap-4">{page > 1 && <Link href={pageHref(page - 1)} className="underline">Previous products</Link>}{page < totalPages && <Link href={pageHref(page + 1)} className="underline">Next products</Link>}</nav>
       </div>
     </div>
   );

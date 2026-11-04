@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { avatarKeyFromUrl } from "@/lib/avatar-policy";
+import { isIncidentId } from "@/lib/error-reference";
 
 export interface AuthUser {
   id: string;
@@ -23,6 +24,8 @@ let authRequestEpoch = 0;
 interface AuthState {
   user: AuthUser | null;
   loading: boolean;
+  error: string | null;
+  reference: string | null;
   setUser: (user: AuthUser | null) => void;
   updateUser: (partial: Partial<AuthUser>) => void;
   fetchUser: () => Promise<AuthUser | null>;
@@ -58,12 +61,14 @@ const getInitialUser = (): AuthUser | null => {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: getInitialUser(),
   loading: true,
+  error: null,
+  reference: null,
   setUser: (user) => {
     authRequestEpoch++;
     user = safeAuthUser(user);
     const current = get().user;
     if (user && current?.id === user.id && (current.avatarVersion ?? 0) > (user.avatarVersion ?? 0)) user = { ...user, avatar: current.avatar, avatarVersion: current.avatarVersion };
-    set({ user, loading: false });
+    set({ user, loading: false, error: null, reference: null });
     dispatchUserUpdate(user);
   },
   updateUser: (partial) => {
@@ -78,27 +83,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   fetchUser: async () => {
     const ticket = ++authRequestEpoch;
+    set({ error: null, reference: null });
+    const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 15_000);
+    let reference: string | null = null;
     try {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const res = await fetch("/api/auth/me", { cache: "no-store", signal: controller.signal });
       const data = await res.json();
       if (ticket !== authRequestEpoch) return get().user;
+      if (!res.ok) { reference = isIncidentId(data.reference) ? data.reference : null; throw Error("Session verification unavailable"); }
       if (data.success && data.user) {
         let user = safeAuthUser(data.user);
+        if (!user || !user.isVerified) throw Error("Session response could not be confirmed");
         const current = get().user;
         if (user && current?.id === user.id && (current.avatarVersion ?? 0) > (user.avatarVersion ?? 0)) user = { ...user, avatar: current.avatar, avatarVersion: current.avatarVersion };
-        set({ user, loading: false });
+        set({ user, loading: false, error: null, reference: null });
         dispatchUserUpdate(user);
         return user;
-      } else {
-        set({ user: null, loading: false });
+      } else if (data.success === false && data.user === null) {
+        set({ user: null, loading: false, error: null, reference: null });
         dispatchUserUpdate(null);
         return null;
-      }
+      } else throw Error("Session response could not be confirmed");
     } catch {
       if (ticket !== authRequestEpoch) return get().user;
-      set({ user: null, loading: false });
+      // Unknown authority is not a guest session: hide cached private data and
+      // keep cart/wishlist scopes locked until a successful verification.
+      set({ user: null, loading: true, error: "Your session is temporarily unavailable. Private account data is hidden until verification succeeds.", reference });
+      dispatchUserUpdate(null);
       return null;
-    }
+    } finally { clearTimeout(timeout); }
   },
   logout: async () => {
     authRequestEpoch++;

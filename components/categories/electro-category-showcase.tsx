@@ -34,11 +34,13 @@ export interface ShowcaseCategory {
   image?: string | null;
   icon?: string;
   products: ShowcaseProduct[];
+  pathLabel?: string;
 }
 
 interface ElectroCategoryShowcaseProps {
   categories: ShowcaseCategory[];
   allProducts: ShowcaseProduct[];
+  navigation?: { selectedId: string | null; categoryPage: number; q: string; total: number };
 }
 
 const HeartIcon = ({
@@ -64,8 +66,10 @@ const HeartIcon = ({
 export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = ({
   categories = [],
   allProducts = [],
+  navigation,
 }) => {
-  const [activeSlug, setActiveSlug] = useState<string>("all");
+  const [localSlug, setActiveSlug] = useState<string>("all");
+  const activeSlug = navigation ? categories.find((category) => category.id === navigation.selectedId)?.slug ?? "all" : localSlug;
   const [addedNoticeId, setAddedNoticeId] = useState<string | null>(null);
   const [selectedHeroImage, setSelectedHeroImage] = useState<string | null>(null);
   const addItem = useCartStore((state) => state.addItem);
@@ -116,9 +120,9 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
   };
 
   // Determine current active products based on tab
-  const activeCategory = categories.find((c) => c.slug === activeSlug);
+  const activeCategory = navigation ? categories.find((category) => category.id === navigation.selectedId) : categories.find((c) => c.slug === activeSlug);
   const currentProducts =
-    activeSlug === "all"
+    navigation || activeSlug === "all"
       ? allProducts
       : activeCategory ? categoryProducts(activeCategory.id, categories) : [];
 
@@ -147,11 +151,17 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
     : [];
 
   const displayHeroImage =
-    selectedHeroImage || heroProduct?.imageUrl || "/placeholder-gadget.svg";
+    selectedHeroImage && heroGallery.includes(selectedHeroImage) ? selectedHeroImage : heroProduct?.imageUrl || "/placeholder-gadget.svg";
 
   return (
     <div className="w-full">
       {/* 1. NAV CLASSIC (Tabs header exactly matching Electro template) */}
+      {navigation ? <nav aria-label="Category selection" className="mb-4 flex gap-3 overflow-x-auto border-b pb-3">
+        <Link className="shrink-0 rounded border px-3 py-2" aria-current={!navigation.selectedId ? "page" : undefined} href={`/categories?${new URLSearchParams({ q: navigation.q, categoryPage: String(navigation.categoryPage) })}`}>All Products</Link>
+        {categories.map((category) => <Link key={category.id} className="shrink-0 rounded border px-3 py-2" aria-current={navigation.selectedId === category.id ? "page" : undefined} href={`/categories?${new URLSearchParams({ q: navigation.q, categoryPage: String(navigation.categoryPage), categoryId: category.id })}`}>
+          {category.image && isPublicProductImageUrl(category.image) && <Image src={category.image} alt="" width={24} height={24} unoptimized={productImageNeedsDirectDelivery(category.image)} className="inline-block h-6 w-6 object-contain" />} {category.pathLabel ?? categoryLabel(category, categories)}
+        </Link>)}
+      </nav> : (
       <div className="relative text-center z-10 mb-4">
         <ul
           className="flex items-center justify-start lg:justify-center overflow-x-auto no-scrollbar border-b border-gray-200 pb-0 gap-1 sm:gap-2"
@@ -204,6 +214,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
           })}
         </ul>
       </div>
+      )}
 
       {/* 2. TAB CONTENT (Electro 3-Column Showcase Grid) */}
       <div className="bg-white border border-[#eaeaea] rounded-lg overflow-hidden shadow-xs">
@@ -387,7 +398,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
               <span className="absolute -bottom-[14px] left-0 w-16 h-[3px] bg-[#fed700] rounded-full" />
             </h3>
             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#fed700]/25 text-[#333e48] border border-[#fed700]/40">
-              {currentProducts.length} {currentProducts.length === 1 ? "Item" : "Items"}
+              {navigation ? `${navigation.total} matching items; ${currentProducts.length} on this page` : `${currentProducts.length} ${currentProducts.length === 1 ? "Item" : "Items"}`}
             </span>
           </div>
 
