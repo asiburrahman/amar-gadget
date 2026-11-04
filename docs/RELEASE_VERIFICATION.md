@@ -1,9 +1,9 @@
 # AUD-044 release verification
 
-Status: implementation and local verification passed; initial GitHub CI
-verification pending. AUD-044 stays open until its remote verification is
-checked. This task does not certify a production deployment or hosted Stripe,
-Cloudflare, SMTP or Upstash accounts.
+Status: AUD-044 implemented and verified locally and by both PostgreSQL 16/18
+GitHub verification jobs. The separate repository lint gate remains red under
+AUD-045; the entire release is not yet green. This task does not certify a
+production deployment or hosted Stripe, Cloudflare, SMTP or Upstash accounts.
 
 ## Required evidence
 
@@ -192,3 +192,24 @@ variation remains visible rather than narrowing verification to one version.
 No database constraint or migration was loosened or changed. The first lint
 job correctly failed on AUD-045 debt. AUD-044 remains open until the corrected
 remote verification is checked.
+
+## Remote verification completed
+
+[Corrected run 41834749145](https://github.com/asiburrahman/amar-gadget/actions/runs/41834749145)
+verified commit `8d8ebe213eab4def253dc123b24d8c86dfbe751c`:
+
+| Verification job | Full Jest | Native | Real browser cases | Result |
+| --- | --- | --- | --- | --- |
+| [PostgreSQL 16](https://github.com/asiburrahman/amar-gadget/actions/runs/41834749145/job/126590662803) | 161 suites / 1,190 tests, no skips | 11, no failures | 28 passed | Success |
+| [PostgreSQL 18](https://github.com/asiburrahman/amar-gadget/actions/runs/41834749145/job/126590663223) | 161 suites / 1,190 tests, no skips | 11, no failures | 28 passed | Success |
+
+Both jobs also passed Prisma validation, TypeScript, the production/standalone
+build and all compiled collection/outage/STARTTLS OTP/refund checks. The logs
+were inspected for the actual Jest/native/browser summaries; job success alone
+was not substituted for those counts. The independent lint job failed on
+recorded AUD-045 debt. No failed gate was reclassified as passing.
+
+AUD-044 is now complete within its implementation/testing scope. The tracked
+count is **47 of 51 implemented**; AUD-045, AUD-046, AUD-049 and the owner's
+external AUD-051 credential revocation remain. CI must be fully green after
+lint remediation before claiming overall release verification.
