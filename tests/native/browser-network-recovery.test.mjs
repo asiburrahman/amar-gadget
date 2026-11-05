@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { captureBrowserRead, sameOriginWebKitDiagnostic } from "../../scripts/testing/browser-network-recovery.mjs";
+import { runInNewContext } from "node:vm";
+import { BROWSER_READ_HEADERS, captureBrowserRead, installBrowserReadCapture, sameOriginWebKitDiagnostic } from "../../scripts/testing/browser-network-recovery.mjs";
 
 const origin = "https://127.0.0.1:32100";
 function request(path, method = "GET", body = null, headers = {}) {
@@ -15,6 +16,18 @@ test("network recovery preserves the captured read method/body and RSC headers",
   assert.deepEqual(captureBrowserRead(request("/api/cart/guest", "POST", body, { "content-type": "application/json; charset=utf-8" }), origin), {
     url: origin + "/api/cart/guest", method: "POST", headers: { "Content-Type": "application/json" }, body,
   });
+});
+
+test("protocol and serialized pre-dispatch observers preserve read owner scope without copying credentials", () => {
+  const headers = { "x-wishlist-owner": "local-admin", "x-cart-owner": "local-admin", "x-site-content-owner": "local-admin", cookie: "private-cookie", authorization: "private-bearer", "x-arbitrary": "must-not-copy" };
+  const expected = { "x-cart-owner": "local-admin", "x-site-content-owner": "local-admin", "x-wishlist-owner": "local-admin" };
+  assert.deepEqual(captureBrowserRead(request("/api/wishlist", "GET", null, headers), origin).headers, expected);
+  const records = new Map(), returned = Promise.resolve("native fetch result");
+  const window = { fetch: () => returned };
+  const sessionStorage = { getItem: (key) => records.get(key) ?? null, setItem: (key, value) => records.set(key, value) };
+  runInNewContext(`(${installBrowserReadCapture.toString()})(${JSON.stringify({ key: "reads", readHeaders: BROWSER_READ_HEADERS })})`, { window, sessionStorage, Headers, Request, URL, location: { href: origin + "/admin", origin } });
+  assert.equal(window.fetch(origin + "/api/wishlist", { headers }), returned);
+  assert.deepEqual(JSON.parse(records.get("reads"))[0].headers, expected);
 });
 
 test("network recovery never replays arbitrary mutations or a foreign origin", () => {

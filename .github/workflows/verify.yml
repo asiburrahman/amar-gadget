@@ -78,9 +78,10 @@ jobs:
           npm run smoke:reliability-outages
           npm run smoke:otp-clock
           npm run smoke:refunds
+          npm run smoke:site-content
       - name: Install browser engines
         run: npx playwright install --with-deps chromium firefox webkit
-      - name: Checkout cancellation, upload recovery and navigation in real browsers
+      - name: Checkout, upload recovery, content publication and navigation in real browsers
         run: npm run test:browser
       - name: Retain synthetic test evidence
         if: ${{ !cancelled() }}

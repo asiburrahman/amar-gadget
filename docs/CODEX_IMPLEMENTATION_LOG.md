@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 46 original tasks plus AUD-050 implemented (47 of 51 tracked tasks); 3 original tasks and external credential revocation for AUD-051 remain open (4 open total).** Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 47 original tasks plus AUD-050 implemented (48 of 51 tracked tasks); AUD-046, AUD-049 and external credential revocation for AUD-051 remain open (3 open total).** AUD-045 has fully green CI; AUD-046 is under final verification. Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -850,3 +850,37 @@ compiled integration checks. AUD-045 is implemented and verified; the current
 count is **48/51**. Next: AUD-046, then AUD-049. External SMTP revocation remains
 AUD-051. No production operation or main merge occurred; the entire remaining-
 task objective stays active. Full evidence is in the AUD-045 verification notes.
+
+## AUD-046 - reviewed public content, legacy entries and accurate setup
+
+Local implementation checkpoint, 5 November 2026. Administrator Settings now
+links to fixed information-page and article management. Structured plain-text
+drafts, explicit saved-revision publication, withdrawal, immutable history,
+owner/session checks and exact retry receipts are wired through real APIs and
+PostgreSQL. Public pages, article collection/detail, metadata, FAQ structured
+data, homepage operator summary and sitemaps use retained publications rather
+than later private drafts. Migration 37 is additive and seeds no public content.
+
+Legacy verification/order entries and unauthorized/not-found screens now offer
+actual routes and helpful states. The optional unimplemented Stripe customer
+portal has an explicit 410 contract; no subscription feature is advertised.
+Unsupported warranty, shipping, customer-count and payment-brand claims are
+removed. README documents the actual TCP adapter, environment, private ingress,
+workers, tests and hosted verification boundary. Its former MIT link/badge is
+removed because no license file exists; this work does not grant a license on
+the owner's behalf.
+
+Final local checks passed **172 suites / 1,250 tests with zero skips**, actual
+CLI migrations/twice-idempotent seed, **16 native tests**, **40 real browser
+cases**, TypeScript, Prisma validation, strict lint, production/standalone build,
+compiled content and outage/recovery checks. Initial streaming-status/alert
+assertions and a WebKit recovery observer that dropped a wishlist owner header
+were corrected with all semantic/error checks retained. The observer now
+preserves a closed list of original owner headers and still excludes credentials
+and arbitrary mutations. All four browser projects passed with zero retries.
+
+See [AUD-046 implementation and evidence](SITE_CONTENT_IMPLEMENTATION_NOTES.md).
+Remote CI is pending the implementation push; the tracked count stays 48/51
+until that result is inspected. AUD-049 and the owner's external AUD-051 remain
+open. No production operation, hosted provider certification or main merge
+occurred. The full remaining-task objective stays active.

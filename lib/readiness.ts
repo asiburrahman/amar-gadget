@@ -36,7 +36,9 @@ async function probe(): Promise<ReadinessResult> {
         UNION ALL SELECT "readVersion"::text FROM "Notification" WHERE false
         UNION ALL SELECT version::text FROM "SupportMessage" WHERE false
         UNION ALL SELECT published::text FROM "SupportContactSettings" WHERE false
-        UNION ALL SELECT generation::text FROM "NewsletterSubscriber" WHERE false LIMIT 0`;
+        UNION ALL SELECT generation::text FROM "NewsletterSubscriber" WHERE false
+        UNION ALL SELECT "publishedVersion"::text FROM "SiteContent" WHERE false
+        UNION ALL SELECT action::text FROM "SiteContentRevision" WHERE false LIMIT 0`;
       checks.database = true;
       } catch (error) { failed("database", error); }
     })(),

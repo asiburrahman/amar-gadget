@@ -325,7 +325,7 @@ function HeaderContent({ pathname, className }: { pathname: string; className: s
             </nav>
 
             <div className="hidden xl:block text-xs font-semibold text-gray-600">
-              <span>Free Shipping on Orders $50+</span>
+              <Link href="/contact" className="underline">Ask about delivery options</Link>
             </div>
           </div>
 

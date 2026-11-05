@@ -2,12 +2,22 @@
 // pageerror. Recovery is allowed only for the original captured read request.
 // Never convert a POST to GET or replay an arbitrary state-changing request.
 export const BROWSER_READS_KEY = "__amar_audit_browser_reads_v1";
+export const BROWSER_READ_HEADERS = Object.freeze([
+  "accept", "rsc", "next-router-state-tree", "next-router-prefetch", "next-router-segment-prefetch", "next-url",
+  // Account/resource identifiers are part of the original read's scope. They
+  // are not credentials. Omitting them makes a valid replay fail its owner
+  // check; cookie/authorization and arbitrary headers remain excluded.
+  "x-account-owner", "x-analytics-owner", "x-avatar-owner", "x-banner-owner", "x-cart-owner", "x-coupon-owner",
+  "x-fulfillment-owner", "x-newsletter-owner", "x-notification-owner", "x-product-owner", "x-profile-owner",
+  "x-refund-owner", "x-reports-owner", "x-review-owner", "x-settlement-owner", "x-site-content-owner",
+  "x-support-owner", "x-taxonomy-owner", "x-wishlist-owner",
+]);
 
 /** Serialized by Playwright before application scripts execute. Some aborted
  * WebKit fetches never emit a protocol request event, so preserve safe metadata
  * before dispatch, across same-origin document replacements. Never record a
  * credential/mutation body or change the native fetch promise. */
-export function installBrowserReadCapture({ key }) {
+export function installBrowserReadCapture({ key, readHeaders }) {
   const nativeFetch = window.fetch;
   window.fetch = function (input, init) {
     try {
@@ -17,7 +27,7 @@ export function installBrowserReadCapture({ key }) {
       if (url.origin === location.origin && (method === "GET" || (method === "POST" && url.pathname === "/api/cart/guest" && !url.search))) {
         const original = new Headers(init?.headers ?? request?.headers);
         const headers = {};
-        for (const name of ["accept", "rsc", "next-router-state-tree", "next-router-prefetch", "next-router-segment-prefetch", "next-url", "content-type"]) {
+        for (const name of [...readHeaders, "content-type"]) {
           if (original.has(name)) headers[name] = original.get(name);
         }
         const body = method === "POST" && typeof init?.body === "string" && init.body.length <= 65_536 ? init.body : null;
@@ -38,7 +48,7 @@ export function captureBrowserRead(request, origin) {
   const method = request.method(), original = request.headers();
   const headers = {};
   if (method === "GET") {
-    for (const name of ["accept", "rsc", "next-router-state-tree", "next-router-prefetch", "next-router-segment-prefetch", "next-url"]) {
+    for (const name of BROWSER_READ_HEADERS) {
       if (original[name]) headers[name] = original[name];
     }
     return { url: url.href, method, headers };

@@ -19,7 +19,7 @@ export async function generateMetadata({ searchParams }: Props = {}): Promise<Me
     ...(Object.keys(query).length ? { robots: { index: false, follow: true } } : {}),
     title: "Product Categories | Amar Gadget",
     description:
-      "Browse tech categories: Smartphones, Laptops, Audio, Smart Watches, Accessories, and Electronics organized with official warranty in Bangladesh.",
+      "Browse the marketplace's available product categories and their catalog listings.",
   };
 }
 

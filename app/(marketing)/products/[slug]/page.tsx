@@ -144,7 +144,7 @@ export default async function ProductDetailPage({
 
                 {/* Description */}
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {product.description || "Authentic tech product sourced directly with official manufacturer warranty and fast express shipping across Bangladesh."}
+                  {product.description || "The seller has not supplied a product description. Contact support to clarify product details before ordering."}
                 </p>
               </div>
 

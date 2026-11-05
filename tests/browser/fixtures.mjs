@@ -6,7 +6,7 @@ import { createFinancialSmokeDatabase } from "../../scripts/testing/finance-data
 import { startRedisRestFixture } from "../../scripts/testing/redis-rest-fixture.mjs";
 import { startStandaloneFixture } from "../../scripts/testing/standalone-fixture.mjs";
 import { startHttpsIngressFixture } from "../../scripts/testing/https-ingress-fixture.mjs";
-import { BROWSER_READS_KEY, captureBrowserRead, installBrowserReadCapture, sameOriginWebKitDiagnostic } from "../../scripts/testing/browser-network-recovery.mjs";
+import { BROWSER_READS_KEY, BROWSER_READ_HEADERS, captureBrowserRead, installBrowserReadCapture, sameOriginWebKitDiagnostic } from "../../scripts/testing/browser-network-recovery.mjs";
 
 export const test = base.extend({
   shop: [async ({}, provide) => {
@@ -39,7 +39,7 @@ export const test = base.extend({
     } finally { await ingressServer?.close(); await server?.stop(); await storage?.close(); await redis?.close(); await database.close(); }
   }, { scope: "worker", timeout: 90_000 }],
   context: async ({ context, shop }, provide) => {
-    await context.addInitScript(installBrowserReadCapture, { key: BROWSER_READS_KEY });
+    await context.addInitScript(installBrowserReadCapture, { key: BROWSER_READS_KEY, readHeaders: BROWSER_READ_HEADERS });
     await context.route("**/*", async (route) => {
       const request = route.request(), url = new URL(request.url());
       if (url.origin === shop.origin) {

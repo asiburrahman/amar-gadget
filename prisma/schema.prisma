@@ -941,6 +941,39 @@ model SupportRequest {
   createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
 }
 
+model SiteContent {
+  kind String @db.VarChar(12)
+  slug String @db.VarChar(100)
+  version Int
+  draft Json
+  publishedVersion Int?
+  publishedAt DateTime?
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  publication SiteContentRevision? @relation("SiteContentPublication", fields: [kind, slug, publishedVersion], references: [kind, slug, version], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([kind, slug])
+  @@index([kind, publishedAt(sort: Desc), slug])
+  @@index([kind, updatedAt(sort: Desc), slug])
+}
+
+model SiteContentRevision {
+  kind String @db.VarChar(12)
+  slug String @db.VarChar(100)
+  version Int
+  requestId String @unique @db.Uuid
+  contentHash String @db.VarChar(64)
+  actorId String
+  action String @db.VarChar(16)
+  reason String @db.VarChar(500)
+  reviewed Boolean @default(false)
+  before Json?
+  after Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  publications SiteContent[] @relation("SiteContentPublication")
+
+  @@id([kind, slug, version])
+}
+
 model OtpThrottle {
   userId String
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

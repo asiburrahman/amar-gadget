@@ -69,6 +69,22 @@ passed in [run 42000256039](https://github.com/asiburrahman/amar-gadget/actions/
 with the actual test counts inspected in both PostgreSQL logs. AUD-045 is
 complete and the count is 48/51. See [AUD-045 evidence](LINT_UI_VERIFICATION.md).
 
+## AUD-046 local verification checkpoint
+
+Public pages/articles now use administrator-reviewed retained publications,
+with private drafts, exact decision receipts and revision history. Legacy entry
+routes and missing/error screens are useful, and README/setup/public claims
+match the implemented contracts. The new additive migration preserves existing
+account/catalog/order/event records and seeds no operator publications.
+
+Local verification passed 172 suites / 1,250 tests with no skips, 16 native tests,
+40 browser cases, TypeScript, Prisma, strict lint, production/standalone build,
+compiled content and actual outage/recovery checks. Failed initial assertions
+and the repaired WebKit owner-header capture are documented rather than hidden.
+Remote CI remains pending the separate AUD-046 push, so the count stays 48/51.
+See [content evidence](SITE_CONTENT_IMPLEMENTATION_NOTES.md). AUD-049 remains
+the next separate implementation task; AUD-051 remains external.
+
 ## Owner-provided introduction
 
 Asibur completed graduation approximately four years before this conversation, is not a student, currently does programming using Codex and other platforms, and has completed several web-development projects. Do not invent an employer, degree subject, audience size, customer metrics or professional title beyond this supplied information.

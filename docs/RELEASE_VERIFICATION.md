@@ -1,9 +1,12 @@
-# AUD-044 release verification
+# Marketplace release verification
 
-Status: AUD-044 implemented and verified locally and by both PostgreSQL 16/18
-GitHub verification jobs. The separate repository lint gate remains red under
-AUD-045; the entire release is not yet green. This task does not certify a
-production deployment or hosted Stripe, Cloudflare, SMTP or Upstash accounts.
+Current completed baseline: AUD-045 passed strict lint and both PostgreSQL
+16/18 CI jobs in run 42000256039. AUD-046 has new local content, publication,
+legacy-route and documentation checks under final verification; its own remote
+CI result is not yet available. AUD-049 and the owner's external AUD-051 remain
+open. Historical failed and successful checkpoints below retain their original
+scope. This record does not certify a production deployment or hosted Stripe,
+Cloudflare, SMTP or Upstash accounts.
 
 ## Required evidence
 
