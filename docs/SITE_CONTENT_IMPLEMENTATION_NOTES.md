@@ -1,6 +1,6 @@
 # AUD-046: public content, legacy routes and truthful documentation
 
-**Status: implemented and locally verified; remote CI pending the implementation push.** The tracked total remains 48/51 until that result is inspected and recorded; AUD-049 and the owner's external AUD-051 SMTP revocation also remain open.
+**Status: implemented and verified locally and on PostgreSQL 16/18 CI.** Commit [b72e17d](https://github.com/asiburrahman/amar-gadget/commit/b72e17d02a286172681718940fffe5b8793cc3b9) passed [run 42012901540](https://github.com/asiburrahman/amar-gadget/actions/runs/42012901540), including the separate strict lint job. The tracked total is **49/51**; AUD-049 and the owner's external AUD-051 SMTP revocation remain open.
 
 ## Connected behavior
 
@@ -31,7 +31,7 @@ Local focused evidence on 5 November 2026:
 
 The prior temporary PostgreSQL directory was missing a required system file. It was not repaired, deleted or reused. A new loopback-only, disposable audit PostgreSQL 18 cluster was initialized under the operator's local audit-fixture directory; the test control pointer now targets that cluster. Only synthetic fixture databases are created/dropped by these checks. No production connection, migration or provider action is part of this verification.
 
-## Remaining verification before task closure
+## Verification history and closure
 
 The first prepared production/standalone build passed. The first compiled smoke and all eight new browser cases failed at assertions: the article test expected a pre-stream HTTP 404 despite the parent loading boundary already streaming 200, and the retry test's unscoped alert locator also selected Next's route announcer. The installed `not-found.js` guide documents the streamed status behavior. The corrected checks require actual missing-page UI, noindex metadata and no private article title in either HTTP case; no error or missing-content assertion is skipped. The retry locator identifies the actual application's failure message. The original failed logs and browser JSON were preserved locally.
 
@@ -45,9 +45,9 @@ The mandatory full isolated gate completed successfully: **172 suites / 1,250 te
 
 The complete browser rerun passed **40/40 cases in 4.7 minutes**, with zero retries, including all ten cases on Chromium, Firefox, WebKit and mobile Chromium. The previous WebKit administrator failure is resolved with original owner-header preservation and an unchanged recovered-200 requirement. The compiled outage suite also passed actual table drift/recovery, correlated/redacted error references, TCP database outage/session recovery, bounded stalled connection behavior and Redis outage/liveness separation after readiness advanced to migration 37.
 
-All required local checks are now terminal and successful. The separate implementation commit/push and remote strict-lint/PostgreSQL 16/18 CI results still need to be recorded before closure. No pending remote result is represented as successful.
+All required local checks are terminal and successful. The separate implementation commit was pushed with `Assisted-by: OpenAI Codex`. The strict lint job and both PostgreSQL 16/18 jobs completed successfully in run 42012901540. Actual logs for jobs 127196124757 and 127196125318 show **172 suites / 1,250 tests with no skips, 16 native cases and 40 browser cases each**, plus the nine compiled content-check groups. The existing compiled collection/outage/OTP/refund gates, Prisma, TypeScript and production build also passed in both jobs. Lint job 127196125167 executed `eslint --max-warnings=0` and succeeded.
 
-The task remains open until the complete result is reviewed, recorded and committed/pushed separately with `Assisted-by: OpenAI Codex`. Do not mark it complete based on focused tests alone. There has been no production deployment, hosted provider acceptance, actual money movement, external email delivery, main merge or owner credential revocation.
+AUD-046 is complete within its implementation and verification scope. This conclusion follows the full local and remote gates, not focused tests alone. AUD-049 is the next separate task. There has been no production deployment, hosted provider acceptance, actual money movement, external email delivery, main merge or owner credential revocation. The full remaining-task objective stays active.
 
 ## Reproduction
 

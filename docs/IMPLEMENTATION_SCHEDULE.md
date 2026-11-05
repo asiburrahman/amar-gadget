@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest implemented step: AUD-045 - repository lint, UI lifecycle and browser locks.** Current total: 47 original tasks plus AUD-050 implemented (48 of 51 tracked tasks); 2 original tasks plus AUD-051 external credential revocation remain open (3 total). **Next: AUD-046 - public content, legacy routes and truthful documentation.** Remaining originals: AUD-046 and 049. SMTP revocation still requires the owner's external provider action. Each task remains a separate implementation and commit/push. All three CI jobs passed on 5912e80, including lint and PostgreSQL 16/18 verification. See the implementation log and release verification runbook; the complete remaining-task objective stays active.
+**Latest implemented step: AUD-046 - reviewed public content, legacy routes and truthful documentation.** Current total: 48 original tasks plus AUD-050 implemented (49 of 51 tracked tasks); AUD-049 plus AUD-051 external credential revocation remain open (2 total). **Next: AUD-049 - database invariants and rollout rehearsal.** SMTP revocation still requires the owner's external provider action. Each task remains a separate implementation and commit/push. All three CI jobs passed on b72e17d, including lint and PostgreSQL 16/18 verification, and both database-job logs were inspected. See the implementation log and release verification runbook; the complete remaining-task objective stays active.
 
 ## Completed AUD-042 checkpoint
 
@@ -69,7 +69,7 @@ passed in [run 42000256039](https://github.com/asiburrahman/amar-gadget/actions/
 with the actual test counts inspected in both PostgreSQL logs. AUD-045 is
 complete and the count is 48/51. See [AUD-045 evidence](LINT_UI_VERIFICATION.md).
 
-## AUD-046 local verification checkpoint
+## Completed AUD-046 checkpoint
 
 Public pages/articles now use administrator-reviewed retained publications,
 with private drafts, exact decision receipts and revision history. Legacy entry
@@ -81,9 +81,12 @@ Local verification passed 172 suites / 1,250 tests with no skips, 16 native test
 40 browser cases, TypeScript, Prisma, strict lint, production/standalone build,
 compiled content and actual outage/recovery checks. Failed initial assertions
 and the repaired WebKit owner-header capture are documented rather than hidden.
-Remote CI remains pending the separate AUD-046 push, so the count stays 48/51.
-See [content evidence](SITE_CONTENT_IMPLEMENTATION_NOTES.md). AUD-049 remains
-the next separate implementation task; AUD-051 remains external.
+Commit b72e17d passed all three jobs in
+[run 42012901540](https://github.com/asiburrahman/amar-gadget/actions/runs/42012901540).
+Inspected PostgreSQL 16/18 logs show the same full counts and compiled checks.
+AUD-046 is complete; the current total is **49/51**. See
+[content evidence](SITE_CONTENT_IMPLEMENTATION_NOTES.md). AUD-049 is the next
+separate implementation task; AUD-051 remains external.
 
 ## Owner-provided introduction
 

@@ -1,12 +1,12 @@
 # Marketplace release verification
 
-Current completed baseline: AUD-045 passed strict lint and both PostgreSQL
-16/18 CI jobs in run 42000256039. AUD-046 has new local content, publication,
-legacy-route and documentation checks under final verification; its own remote
-CI result is not yet available. AUD-049 and the owner's external AUD-051 remain
-open. Historical failed and successful checkpoints below retain their original
-scope. This record does not certify a production deployment or hosted Stripe,
-Cloudflare, SMTP or Upstash accounts.
+Current completed baseline: AUD-046 passed strict lint and both PostgreSQL
+16/18 CI jobs in run 42012901540 on b72e17d. Both database-job logs were inspected:
+172 suites / 1,250 tests without skips, 16 native tests and 40 browser cases each,
+plus the compiled content/provider/outage checks. AUD-049 and the owner's
+external AUD-051 remain open. Historical failed and successful checkpoints
+below retain their original scope. This record does not certify a production
+deployment or hosted Stripe, Cloudflare, SMTP or Upstash accounts.
 
 ## Required evidence
 
@@ -248,3 +248,23 @@ current count is 48/51. The remaining public-content/schema tasks and owner's
 external credential revocation are not reclassified as complete by this green
 CI run. No production migration/deployment, hosted provider certification or
 main merge is claimed.
+
+## Fully green AUD-046 revision (5 November 2026)
+
+[Run 42012901540](https://github.com/asiburrahman/amar-gadget/actions/runs/42012901540)
+on [b72e17d](https://github.com/asiburrahman/amar-gadget/commit/b72e17d02a286172681718940fffe5b8793cc3b9)
+passed lint and PostgreSQL 16/18 verification. Inspected logs show 172 suites /
+1,250 tests (no skips), 16 native tests and 40 browser cases on each database
+version. Prisma, TypeScript, production build and the compiled collection,
+outage, local STARTTLS OTP, refund and new content-publication checks passed.
+
+The new browser cases exercise real private article drafts, reviewed
+publication, safe plain-text rendering, withdrawal and exact receipt recovery
+after an applied write's unreadable response. The test-only network observer
+preserves original owner headers while excluding credentials; all recovery
+status/error requirements remain enforced. Earlier failed assertions and the
+39/40 run are recorded in [content evidence](SITE_CONTENT_IMPLEMENTATION_NOTES.md).
+
+AUD-046 is complete and the count is **49/51**. Database invariants/rollout
+rehearsal and external SMTP revocation remain. No production or main operation
+is certified by these local fixtures or CI jobs.

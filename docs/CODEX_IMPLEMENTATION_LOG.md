@@ -4,7 +4,7 @@ Owner: Asibur Rahman. Implementation assisted by OpenAI Codex, at the owner's re
 
 The [original 49-task audit](DEEP_AUDIT_2026-10-28.md) remains the historical baseline. This log tracks implementation against it. A feature is complete only with the relevant code and checks; unit test mocks, local integration tests and external service tests are distinguished below.
 
-**Current checkpoint: 47 original tasks plus AUD-050 implemented (48 of 51 tracked tasks); AUD-046, AUD-049 and external credential revocation for AUD-051 remain open (3 open total).** AUD-045 has fully green CI; AUD-046 is under final verification. Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
+**Current checkpoint: 48 original tasks plus AUD-050 implemented (49 of 51 tracked tasks); AUD-049 and external credential revocation for AUD-051 remain open (2 open total).** AUD-046 has fully green CI with both PostgreSQL job logs inspected. Follow the [complete implementation sequence](IMPLEMENTATION_SCHEDULE.md). Each step keeps its original scope and validation criteria. The standing objective is to finish all remaining tasks, one focused commit/push per task; this checkpoint is not completion of that objective.
 
 ## Batch 1 — Transaction foundation and critical boundaries
 
@@ -880,7 +880,16 @@ preserves a closed list of original owner headers and still excludes credentials
 and arbitrary mutations. All four browser projects passed with zero retries.
 
 See [AUD-046 implementation and evidence](SITE_CONTENT_IMPLEMENTATION_NOTES.md).
-Remote CI is pending the implementation push; the tracked count stays 48/51
-until that result is inspected. AUD-049 and the owner's external AUD-051 remain
-open. No production operation, hosted provider certification or main merge
-occurred. The full remaining-task objective stays active.
+At that local checkpoint remote CI was pending; its observed result is recorded
+below. No production operation, hosted provider certification or main merge
+occurred.
+
+AUD-046 remote closure, 5 November 2026: commit
+[b72e17d](https://github.com/asiburrahman/amar-gadget/commit/b72e17d02a286172681718940fffe5b8793cc3b9)
+passed [run 42012901540](https://github.com/asiburrahman/amar-gadget/actions/runs/42012901540).
+All three jobs succeeded. Actual logs for PostgreSQL 16 and 18 each show
+**172 suites / 1,250 tests without skips, 16 native tests and 40 browser cases**,
+plus the compiled content, collection, outage, local STARTTLS OTP and refund
+checks. The strict lint job also succeeded. AUD-046 is implemented and verified;
+the current count is **49/51**. Next is AUD-049; the owner's external SMTP
+revocation remains AUD-051. The full remaining-task objective stays active.

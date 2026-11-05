@@ -6,7 +6,7 @@ A multi-vendor electronics marketplace with customer, seller and administrator w
 
 [![Verification](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml/badge.svg?branch=codex%2Fdeep-audit-2026-10-28)](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml)
 
-The audit and implementation work lives on [codex/deep-audit-2026-10-28](https://github.com/asiburrahman/amar-gadget/tree/codex/deep-audit-2026-10-28). It has not been merged into main. The current tracked status is **48 of 51 tasks completed**, with AUD-046 in progress, AUD-049 remaining and AUD-051 awaiting the owner's SMTP credential revocation. See the [task schedule](docs/IMPLEMENTATION_SCHEDULE.md) and [implementation log](docs/CODEX_IMPLEMENTATION_LOG.md).
+The audit and implementation work lives on [codex/deep-audit-2026-10-28](https://github.com/asiburrahman/amar-gadget/tree/codex/deep-audit-2026-10-28). It has not been merged into main. The current tracked status is **49 of 51 tasks completed**, with AUD-049 remaining and AUD-051 awaiting the owner's SMTP credential revocation. AUD-046 passed local verification and all three CI jobs. See the [task schedule](docs/IMPLEMENTATION_SCHEDULE.md) and [implementation log](docs/CODEX_IMPLEMENTATION_LOG.md).
 
 The owner-supplied deployment address is [amargadget.gmksolution.com](https://amargadget.gmksolution.com). Its availability and hosted provider behavior have not been certified by the local verification recorded here. This README does not claim production readiness, throughput, customer counts, delivery times, warranty coverage or a successful live payment.
 
@@ -28,7 +28,7 @@ The owner-supplied deployment address is [amargadget.gmksolution.com](https://am
 | Media | Direct R2 product/avatar uploads, validation, finalization and supervised cleanup | R2 permissions, public origin and browser CORS; application code does not promise CDN compression or zero end-to-end egress cost |
 | Support | Persisted inquiries, private support queue, dashboard-managed published contact information | Enter verified public email, phone, address and support hours in `/admin/settings/support`; these fields do not configure SMTP |
 | Newsletter | Consent, confirmation, unsubscribe and delivery/retry records | Configure SMTP and supervise the newsletter worker; a queued message is not reported as delivered |
-| Public content | AUD-046 currently connects reviewed page/article publication, private drafts and retained revision history | `/admin/settings/content`; full task verification is still in progress. No operator policies or sample articles are seeded |
+| Public content | Reviewed page/article publication, private drafts, exact decision receipts and retained revision history | `/admin/settings/content`; publish actual operator information. No operator policies or sample articles are seeded |
 | Reliability | Safe incident references, explicit outage states, bounded queries, liveness and schema/Redis readiness | Monitor readiness and workers; final schema/constraint rehearsal remains AUD-049 |
 | Verification | Real PostgreSQL tests, compiled HTTP checks, four browser projects and GitHub CI | Local provider fixtures prove protocol/application behavior, not hosted Stripe/R2/SMTP account acceptance |
 
@@ -168,18 +168,18 @@ AUD-046 adds `/admin/settings/content` for About, FAQ, Returns, Privacy, Terms a
 
 Enter real operator information and policies before opening the marketplace to customers. Where no operator document is published, the public page identifies that state and provides operational guidance and support links; it does not invent legal terms, delivery promises or a warranty. Unpublished articles return not found. Unpublished information guides are noindex and excluded from sitemaps. The homepage's marketplace summary uses the published About summary; public support contact details remain independently managed in `/admin/settings/support`.
 
-See [content implementation and verification notes](docs/SITE_CONTENT_IMPLEMENTATION_NOTES.md). The task remains in progress until its complete checks and separate commit/push are recorded.
+See [content implementation and verification notes](docs/SITE_CONTENT_IMPLEMENTATION_NOTES.md). AUD-046 is implemented and verified in its separate public commit and CI run; operator-written policy content and hosted deployment remain the operator's configuration responsibility.
 
 ## Verification and public evidence
 
-The latest completed baseline is AUD-045, commit [5912e80](https://github.com/asiburrahman/amar-gadget/commit/5912e80), with a fully successful [GitHub CI run](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039). The inspected logs show:
+The latest completed baseline is AUD-046, commit [b72e17d](https://github.com/asiburrahman/amar-gadget/commit/b72e17d02a286172681718940fffe5b8793cc3b9), with a fully successful [GitHub CI run](https://github.com/asiburrahman/amar-gadget/actions/runs/42012901540). The inspected logs show:
 
-- 167 Jest suites and 1,209 tests, with no skipped tests.
-- 15 native tests and 32 browser cases across Chromium, Firefox, WebKit and mobile Chromium.
+- 172 Jest suites and 1,250 tests, with no skipped tests.
+- 16 native tests and 40 browser cases across Chromium, Firefox, WebKit and mobile Chromium.
 - TypeScript, Prisma validation, production/standalone build and repository lint with zero errors/warnings.
-- Successful PostgreSQL 16 and 18 jobs, including compiled collection, outage, local STARTTLS OTP and refund checks.
+- Successful PostgreSQL 16 and 18 jobs, including compiled collection, outage, local STARTTLS OTP, refund and content-publication checks.
 
-These counts describe that completed commit. AUD-046's subsequent local checkpoint passes **172 suites / 1,250 tests without skips, 16 native tests and 40 browser cases**, plus TypeScript, Prisma validation, strict lint, production/standalone build, compiled content and outage checks. Its PostgreSQL 16/18 remote CI result is still pending. See the implementation notes and log for the exact scope. The overnight AUD-045 Jest elapsed time is not a performance measurement. Earlier failed runs are retained in the audit record rather than presented as successful checks.
+These counts describe that completed commit and agree with the final local checkpoint. Both PostgreSQL job logs were inspected, rather than inferring test coverage from a green badge. See the implementation notes and log for the exact scope. Test elapsed times are not marketplace performance measurements. Earlier failed runs are retained in the audit record rather than presented as successful checks.
 
 For the mandatory full database gate, create a **separate loopback control database** named `audit_*`, with an account permitted to create disposable test databases, and privately set `TEST_DATABASE_URL` to it. The runner creates and drops only its own random database, applies actual migrations, seeds twice, runs the entire Jest suite and rejects skipped tests. It does not reset/migrate the supplied control database.
 
