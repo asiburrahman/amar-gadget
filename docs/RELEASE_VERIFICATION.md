@@ -232,3 +232,16 @@ verification. A deterministic browser conflict/recovery case is added in each
 of the four projects. Final results belong to the new revision; the earlier
 successful CI run above remains historical evidence rather than a guarantee
 that every later run passed. See [AUD-045 verification](LINT_UI_VERIFICATION.md).
+
+## Fully green AUD-045 revision (5 November 2026)
+
+[Run 42000256039](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039)
+on [5912e80](https://github.com/asiburrahman/amar-gadget/commit/5912e80d2c91520618e323ad37e03f068d30a567)
+passed the strict lint job and both PostgreSQL 16/18 verification jobs. Inspected
+logs show 167 suites / 1,209 tests (no skips), 15 native tests and 32 browser cases
+per database version. Prisma, TypeScript, production/standalone build and compiled
+collection/outage/OTP/refund checks also passed. AUD-045 is complete and the
+current count is 48/51. The remaining public-content/schema tasks and owner's
+external credential revocation are not reclassified as complete by this green
+CI run. No production migration/deployment, hosted provider certification or
+main merge is claimed.

@@ -128,9 +128,31 @@ be checked after this correction. The lint command now also fails on warnings
 - `git diff --check` passed. The database schema and all 36 existing migrations
   are unchanged in this task.
 
-Remote CI is pending this task's first push. The task remains active and the
-count stays 47/51 until the new lint/PostgreSQL 16/PostgreSQL 18 results are
-inspected. These local checks do not certify hosted providers or deployment.
+At this local checkpoint remote CI was pending the first push, so the task and
+47/51 count remained open. The remote result is recorded below. Local checks do
+not certify hosted providers or deployment.
+
+## Remote verification and closure (5 November 2026)
+
+Implementation: [5912e80](https://github.com/asiburrahman/amar-gadget/commit/5912e80d2c91520618e323ad37e03f068d30a567).
+[Run 42000256039](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039)
+completed successfully; all three jobs passed:
+
+| Job | Inspected evidence | Result |
+| --- | --- | --- |
+| [Repository lint](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039/job/127153368075) | `eslint --max-warnings=0` | Success |
+| [PostgreSQL 16](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039/job/127153368541) | 167 suites / 1,209 tests, no skips; 15 native tests; 32 browser cases | Success |
+| [PostgreSQL 18](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039/job/127153368558) | 167 suites / 1,209 tests, no skips; 15 native tests; 32 browser cases | Success |
+
+Both database jobs also passed Prisma validation, TypeScript, the production/
+standalone build and compiled collection/outage/OTP/refund checks. The actual
+job logs were inspected, including the no-skipped-tests marker and browser
+summaries; overall job status alone was not substituted for test evidence.
+
+AUD-045 is complete within its recorded scope. The current count is **48/51**;
+AUD-046, AUD-049 and external AUD-051 remain. Earlier failed runs remain above.
+No production migration/deployment, hosted provider operation or main merge
+occurred. The complete remaining-task objective stays active.
 
 Reproduce with an explicitly guarded disposable local `TEST_DATABASE_URL`:
 

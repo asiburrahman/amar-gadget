@@ -35,7 +35,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest implemented step: AUD-044 - disposable database, browser and CI verification.** Current total: 46 original tasks plus AUD-050 implemented (47 of 51 tracked tasks); 3 original tasks plus AUD-051 external credential revocation remain open (4 total). **Next: AUD-045 - repository lint and remaining hook defects.** Remaining originals: AUD-045, 046 and 049. SMTP revocation still requires the owner's external provider action. Each task remains a separate implementation and commit/push. Both PostgreSQL CI verification jobs passed; the separate lint gate remains red under AUD-045. See the implementation log and release verification runbook; the complete remaining-task objective stays active.
+**Latest implemented step: AUD-045 - repository lint, UI lifecycle and browser locks.** Current total: 47 original tasks plus AUD-050 implemented (48 of 51 tracked tasks); 2 original tasks plus AUD-051 external credential revocation remain open (3 total). **Next: AUD-046 - public content, legacy routes and truthful documentation.** Remaining originals: AUD-046 and 049. SMTP revocation still requires the owner's external provider action. Each task remains a separate implementation and commit/push. All three CI jobs passed on 5912e80, including lint and PostgreSQL 16/18 verification. See the implementation log and release verification runbook; the complete remaining-task objective stays active.
 
 ## Completed AUD-042 checkpoint
 
@@ -59,14 +59,15 @@ AUD-045 (25 errors / 37 warnings); its separate CI gate correctly fails and is
 not bypassed. This is not a claim that the entire release is green.
 See [release verification](RELEASE_VERIFICATION.md).
 
-## Active AUD-045 checkpoint
+## Completed AUD-045 checkpoint
 
-AUD-045 is now in active implementation. Full-repository lint is locally clean
-(zero errors/warnings); actual UI lifecycle, pagination and browser-lock defects
-are fixed rather than suppressed. Final local verification passed 167 suites /
-1,209 tests, 15 native tests, 32 browser cases, TypeScript and the production
-build. Remote CI remains pending, so the count stays 47/51. See
-[AUD-045 evidence](LINT_UI_VERIFICATION.md).
+Full-repository lint is clean (zero errors/warnings), with warnings now fatal.
+Actual UI lifecycle, pagination and browser-lock defects are fixed rather than
+suppressed. Local verification passed 167 suites / 1,209 tests, 15 native tests,
+32 browser cases, TypeScript and the production build. All three remote CI jobs
+passed in [run 42000256039](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039),
+with the actual test counts inspected in both PostgreSQL logs. AUD-045 is
+complete and the count is 48/51. See [AUD-045 evidence](LINT_UI_VERIFICATION.md).
 
 ## Owner-provided introduction
 

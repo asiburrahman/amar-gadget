@@ -839,3 +839,14 @@ runs are retained in the verification notes. No source rule suppression,
 application simulation, schema change or production operation was introduced.
 Remote CI is pending the first AUD-045 push, so this is not closure and the
 count stays 47/51.
+
+AUD-045 remote closure, 5 November 2026: implementation
+[5912e80](https://github.com/asiburrahman/amar-gadget/commit/5912e80d2c91520618e323ad37e03f068d30a567)
+passed [run 42000256039](https://github.com/asiburrahman/amar-gadget/actions/runs/42000256039).
+The strict lint job and both PostgreSQL 16/18 jobs succeeded. Inspected logs
+show **167 suites / 1,209 tests with no skips, 15 native tests and 32 browser
+cases on each database version**, plus Prisma, TypeScript, production build and
+compiled integration checks. AUD-045 is implemented and verified; the current
+count is **48/51**. Next: AUD-046, then AUD-049. External SMTP revocation remains
+AUD-051. No production operation or main merge occurred; the entire remaining-
+task objective stays active. Full evidence is in the AUD-045 verification notes.
