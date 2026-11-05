@@ -6,6 +6,7 @@ import { createFinancialSmokeDatabase } from "../../scripts/testing/finance-data
 import { startRedisRestFixture } from "../../scripts/testing/redis-rest-fixture.mjs";
 import { startStandaloneFixture } from "../../scripts/testing/standalone-fixture.mjs";
 import { startHttpsIngressFixture } from "../../scripts/testing/https-ingress-fixture.mjs";
+import { BROWSER_READS_KEY, captureBrowserRead, installBrowserReadCapture, sameOriginWebKitDiagnostic } from "../../scripts/testing/browser-network-recovery.mjs";
 
 export const test = base.extend({
   shop: [async ({}, provide) => {
@@ -38,6 +39,7 @@ export const test = base.extend({
     } finally { await ingressServer?.close(); await server?.stop(); await storage?.close(); await redis?.close(); await database.close(); }
   }, { scope: "worker", timeout: 90_000 }],
   context: async ({ context, shop }, provide) => {
+    await context.addInitScript(installBrowserReadCapture, { key: BROWSER_READS_KEY });
     await context.route("**/*", async (route) => {
       const request = route.request(), url = new URL(request.url());
       if (url.origin === shop.origin) {
@@ -52,28 +54,44 @@ export const test = base.extend({
     await provide(context);
   },
   uncaughtErrors: [async ({ page, shop }, provide) => {
-    const failures = [];
-    page.on("pageerror", (error) => failures.push(error));
-    await provide();
-    const unexpected = [], networkDiagnostics = new Set();
-    for (const error of failures) {
-      // WebKit emits this network diagnostic as pageerror during document
-      // replacement, sometimes before a requestfailed event exists. Do not
-      // discard it: require an actual successful browser fetch to the exact
-      // same-origin URL below. JavaScript errors and external CORS errors fail.
-      const match = error.name === "Fetch API cannot load https" ? error.message.match(/^\/{1,2}(127\.0\.0\.1:\d+\/\S+) due to access control checks\.$/) : null;
-      const target = match ? `https://${match[1]}` : null;
-      if (target && new URL(target).origin === shop.origin) networkDiagnostics.add(target);
-      else unexpected.push(error.name);
-    }
-    for (const url of networkDiagnostics) {
-      const status = await page.evaluate(async (target) => {
-        try { return (await fetch(target, { cache: "no-store", signal: AbortSignal.timeout(5000) })).status; }
-        catch { return 0; }
-      }, url);
-      expect(status, "A WebKit same-origin network diagnostic must have verified browser recovery").toBe(200);
-    }
-    expect(unexpected, "Critical browser flows must not leave uncaught JavaScript errors").toEqual([]);
+    const unexpected = [], networkDiagnostics = new Set(), reads = new Map();
+    const observeRead = (request) => {
+      const read = captureBrowserRead(request, shop.origin);
+      if (read) reads.set(read.url, read);
+    };
+    const observeError = (error) => {
+      const target = sameOriginWebKitDiagnostic(error, shop.origin);
+      if (target) networkDiagnostics.add(target);
+      else unexpected.push({ name: error.name, message: error.message.replace(/\?[^\s"'<>)]*/g, "?[redacted]") });
+    };
+    page.on("request", observeRead); page.on("pageerror", observeError);
+    try {
+      await provide();
+      page.off("request", observeRead);
+      // WebKit may abort before the protocol emits request. The pre-dispatch
+      // observer survives document replacement; validate its snapshots through
+      // the exact same safe-read policy before considering them for replay.
+      const snapshots = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "[]"), BROWSER_READS_KEY);
+      expect(Array.isArray(snapshots), "Browser read metadata must remain valid").toBe(true);
+      for (const snapshot of snapshots) {
+        const read = captureBrowserRead({ url: () => snapshot.url, method: () => snapshot.method, headers: () => snapshot.headers, postData: () => snapshot.body }, shop.origin);
+        if (read && !reads.has(read.url)) reads.set(read.url, read);
+      }
+      // Keep observing errors during recovery too. A native failure, arbitrary
+      // mutation, foreign URL or uncaptured read must never be waived.
+      for (const url of networkDiagnostics) {
+        expect(networkDiagnostics.size, "Network recovery must remain bounded").toBeLessThanOrEqual(128);
+        const original = reads.get(url);
+        expect(original, "Network diagnostics require a captured safe read with its original method/body").toBeTruthy();
+        const status = await page.evaluate(async (read) => {
+          const { url: target, ...init } = read;
+          try { return (await fetch(target, { ...init, cache: "no-store", signal: AbortSignal.timeout(5000) })).status; }
+          catch { return 0; }
+        }, original);
+        expect(status, "A WebKit same-origin network diagnostic must have verified browser recovery").toBe(200);
+      }
+      expect(unexpected, "Critical browser flows must not leave uncaught JavaScript errors").toEqual([]);
+    } finally { page.off("request", observeRead); page.off("pageerror", observeError); }
   }, { auto: true }],
 });
 export { expect };

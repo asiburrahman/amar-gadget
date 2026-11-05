@@ -175,12 +175,12 @@ amar-gadget/
 ├── lib/                        # Shared utilities (prisma, auth, formatters, storage)
 ├── prisma/
 │   ├── schema.prisma           # Relational schema (User, Product, Order, Category, etc.)
-│   └── migrations/             # Database migration history
+│   ├── migrations/             # Database migration history
+│   └── seeds/seed.js           # Idempotent reference categories and brands
 ├── public/                     # Static assets, icons, and SVG illustrations
 ├── stores/                     # Zustand state stores (Cart, Wishlist, Filters)
 ├── types/                      # Global TypeScript definitions
 ├── Dockerfile                  # Production container definition
-├── seed.js                     # Seed script for initial categories, brands, & products
 └── package.json
 ```
 

@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Star } from "@/components/icons/Star";
 import { formatCurrency } from "@/lib/formatter";
 
@@ -43,7 +44,7 @@ export const BottomWidgets: React.FC<BottomWidgetsProps> = ({
             <div key={item.id} className="flex items-center space-x-4 group p-1.5 rounded-xl hover:bg-slate-50 transition-colors">
               <div className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-xl shrink-0 flex items-center justify-center p-1.5 shadow-2xs">
                 {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" />
+                  <Image unoptimized width={80} height={80} src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" />
                 ) : (
                   <div className="text-[10px] text-slate-300">No Image</div>
                 )}
@@ -102,7 +103,7 @@ export const BottomWidgets: React.FC<BottomWidgetsProps> = ({
           </div>
 
           <div className="my-5 w-full h-36 relative flex items-center justify-center">
-            <img
+            <Image unoptimized fill sizes="300px"
               src="https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=300&auto=format&fit=crop&q=80"
               alt="Smart Tech Promo"
               className="max-h-full max-w-full object-contain drop-shadow-xl hover:scale-105 transition-transform duration-500"

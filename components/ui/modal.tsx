@@ -1,6 +1,8 @@
+"use client";
+
 import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
 
-interface ModalProps {
+interface ModalProps extends Pick<React.HTMLAttributes<HTMLDivElement>, "aria-label" | "aria-labelledby" | "aria-describedby"> {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
@@ -18,35 +20,45 @@ export const Modal = ({
   backdropClassName = "",
   closeOnBackdropClick = true,
   closeOnEsc = true,
+  "aria-label": ariaLabel = "Dialog",
+  "aria-labelledby": labelledBy,
+  "aria-describedby": describedBy,
 }: ModalProps) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const [presence, setPresence] = useState({ open: isOpen, mounted: isOpen });
+  // Opening is derived from the current prop during render; only delayed
+  // removal needs an effect so the closing animation can finish.
+  if (presence.open !== isOpen) setPresence({ open: isOpen, mounted: isOpen || presence.mounted });
+  const mounted = isOpen || presence.mounted;
 
   useEffect(() => {
-    let timer: NodeJS.Timeout | undefined;
-    if (isOpen) {
-      setMounted(true);
-    } else {
-      timer = setTimeout(() => setMounted(false), 300);
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
+    if (isOpen) return;
+    const timer = setTimeout(() => setPresence((current) => current.open ? current : { ...current, mounted: false }), 300);
+    return () => clearTimeout(timer);
   }, [isOpen]);
 
   useLayoutEffect(() => {
-    let cleanup: (() => void) | undefined;
+    if (!isOpen || !mounted) return;
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    modalRef.current?.focus({ preventScroll: true });
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = originalOverflow; };
+  }, [isOpen, mounted]);
 
-    if (isOpen && mounted) {
-      // Save the previously focused element
-      const previouslyFocusedElement = document.activeElement as HTMLElement | null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const target = returnFocus.current;
+    // Restore after DOM mutation/selection restoration. Layout cleanup alone
+    // can be overwritten while the outgoing animated dialog is still mounted.
+    return () => { if (target?.isConnected) target.focus({ preventScroll: true }); };
+  }, [isOpen]);
 
-      // Focus the modal when it opens
-      modalRef.current?.focus({ preventScroll: true });
-
-      // Trap focus inside the modal
-      const handleKeyDown = (e: KeyboardEvent) => {
+  useEffect(() => {
+    if (!isOpen || !mounted) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
         if (closeOnEsc && e.key === "Escape") {
           onClose();
           return;
@@ -54,13 +66,13 @@ export const Modal = ({
 
         if (e.key === "Tab") {
           const focusableElements = getFocusableElements(modalRef.current!);
-          if (focusableElements.length === 0) return;
+          if (focusableElements.length === 0) { e.preventDefault(); modalRef.current?.focus(); return; }
 
           const first = focusableElements[0];
           const last = focusableElements[focusableElements.length - 1];
 
           if (e.shiftKey) {
-            if (document.activeElement === first) {
+            if (document.activeElement === first || document.activeElement === modalRef.current) {
               e.preventDefault();
               last.focus();
             }
@@ -71,29 +83,13 @@ export const Modal = ({
             }
           }
         }
-      };
-
-      document.addEventListener("keydown", handleKeyDown);
-
-      // Prevent scroll when modal is open
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-
-      cleanup = () => {
-        document.removeEventListener("keydown", handleKeyDown);
-        document.body.style.overflow = originalOverflow;
-        // Return focus to the previously focused element
-        if (previouslyFocusedElement) {
-          previouslyFocusedElement.focus();
-        }
-      };
-    }
-
-    return cleanup;
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, mounted, closeOnEsc, onClose]);
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && closeOnBackdropClick) {
+    if (isOpen && e.target === e.currentTarget && closeOnBackdropClick) {
       onClose();
     }
   };
@@ -106,17 +102,24 @@ export const Modal = ({
     <>
       <div
         ref={backdropRef}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
         className={`fixed inset-0 z-50 flex items-center justify-center
           bg-black/50 backdrop-blur-sm
           ${backdropClassName}
           opacity-0 transition-opacity duration-200
           ${isOpen ? "opacity-100" : "opacity-0"}
-          pointer-events-${isOpen ? "auto" : "none"}
+          ${isOpen ? "pointer-events-auto" : "pointer-events-none"}
         `}
         onClick={handleBackdropClick}
       >
         <div
           ref={modalRef}
+          role="dialog"
+          aria-modal={isOpen || undefined}
+          aria-label={labelledBy ? undefined : ariaLabel}
+          aria-labelledby={labelledBy}
+          aria-describedby={describedBy}
           tabIndex={-1}
           className={`relative z-50 max-w-2xl w-full mx-4
             rounded-xl bg-background shadow-lg

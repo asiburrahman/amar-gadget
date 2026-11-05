@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+"use client";
+
+import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 
 interface ToastProps {
   id: string;
@@ -13,77 +15,58 @@ interface ToastProps {
 
 type ToastVariant = "default" | "destructive" | "success" | "warning";
 
-interface ToastContainerProps {
-  className?: string;
+function useToastController() {
+  const [toasts, setToasts] = useState<ToastProps[]>([]);
+  const prefix = useId(), sequence = useRef(0);
+  const records = useRef(new Map<string, ToastProps>());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const dismiss = useCallback((id: string) => {
+    const record = records.current.get(id);
+    if (!record) return;
+    records.current.delete(id);
+    const timer = timers.current.get(id);
+    if (timer !== undefined) clearTimeout(timer);
+    timers.current.delete(id);
+    setToasts((previous) => previous.filter((entry) => entry.id !== id));
+    record.onClose?.();
+  }, []);
+  const toast = useCallback((props: Omit<ToastProps, "id">) => {
+    const replaced = [...records.current.values()];
+    for (const timer of timers.current.values()) clearTimeout(timer);
+    timers.current.clear(); records.current.clear();
+    const id = `${prefix}-${++sequence.current}`, record = { ...props, id };
+    records.current.set(id, record); setToasts([record]);
+    if (typeof props.duration === "number" && Number.isFinite(props.duration)) {
+      timers.current.set(id, setTimeout(() => dismiss(id), Math.min(2_147_483_647, Math.max(0, props.duration))));
+    }
+    // Publish the replacement first: an onClose callback may itself emit a
+    // newer notification, which must remain the last visible notification.
+    for (const entry of replaced) entry.onClose?.();
+    return { id, dismiss: () => dismiss(id) };
+  }, [dismiss, prefix]);
+  useEffect(() => {
+    const activeTimers = timers.current, activeRecords = records.current;
+    return () => { for (const timer of activeTimers.values()) clearTimeout(timer); activeTimers.clear(); activeRecords.clear(); };
+  }, []);
+  return { toast, toasts, dismiss };
 }
 
-const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
-
-type ToasterState = {
-  [id: string]: ToastProps & {
-    duration: number | null;
-  };
-};
-
-const listenerState: {
-  [id: string]: {
-    resolve: (value: ToastProps) => void;
-    reject: (reason: any) => void;
-  };
-} = {};
-
-function delay(duration: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, duration);
-  });
-}
+const ToastContext = createContext<ReturnType<typeof useToastController> | null>(null);
 
 export const useToast = () => {
-  const [toasts, setToasts] = useState<ToastProps[]>([]);
-
-  const toast = (props: Omit<ToastProps, "id">) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    const newToast = {
-      id,
-      ...props,
-    };
-
-    setToasts((prev) => {
-      // Remove oldest toast if we exceed limit
-      const next = [newToast, ...prev];
-      if (next.length > TOAST_LIMIT) {
-        next.pop();
-      }
-      return next;
-    });
-
-    // Auto-dismiss after duration
-    if (props.duration !== null && props.duration !== undefined) {
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, props.duration);
-    }
-
-    return {
-      id,
-      dismiss: () => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      },
-    };
-  };
-
-  return { toast, toasts };
+  const controller = useContext(ToastContext);
+  if (!controller) throw new Error("useToast requires a ToastProvider.");
+  return controller;
 };
 
 export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
-  const { toast, toasts } = useToast();
+  const controller = useToastController();
 
   return (
-    <>
+    <ToastContext.Provider value={controller}>
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col-reverse space-y-4 pointer-events-none">
-        {toasts.map((toast) => (
+        {controller.toasts.map((toast) => (
           <Toast
             key={toast.id}
             id={toast.id}
@@ -92,12 +75,12 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
             variant={toast.variant}
             duration={toast.duration}
             action={toast.action}
-            onClose={toast.onClose}
+            onClose={() => controller.dismiss(toast.id)}
             className="pointer-events-auto"
           />
         ))}
       </div>
-    </>
+    </ToastContext.Provider>
   );
 };
 
@@ -106,7 +89,6 @@ export const Toast = ({
   title,
   description,
   variant = "default",
-  duration,
   action,
   onClose,
   className = "",
@@ -143,7 +125,8 @@ export const Toast = ({
 
   return (
     <div
-      className={`flex w-full max-w-xs p-4 mb-4
+      id={`toast-${id}`}
+      className={`relative flex w-full max-w-xs p-4 mb-4
         ${config.bg} ${config.text} ${config.border}
         rounded-lg shadow-lg
         flex-col items-start gap-3
@@ -187,7 +170,8 @@ export const Toast = ({
           {action}
         </div>
       )}
-      <button
+      {onClose && <button
+        type="button"
         onClick={onClose}
         className="absolute right-2 top-2 rounded-sm hover:bg-muted/50 p-1"
         aria-label="Dismiss"
@@ -195,7 +179,7 @@ export const Toast = ({
         <svg className="h-4 w-4" stroke="currentColor" fill="none" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
-      </button>
+      </button>}
     </div>
   );
 };

@@ -3,12 +3,13 @@ type GAEventParams = {
   category?: string;
   label?: string;
   value?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 export function sendGAEvent({ action, ...params }: GAEventParams) {
-  if (typeof window !== "undefined" && (window as any).dataLayer) {
-    (window as any).dataLayer.push({
+  const layer = typeof window === "undefined" ? undefined : (window as Window & { dataLayer?: unknown }).dataLayer;
+  if (Array.isArray(layer)) {
+    layer.push({
       event: action,
       ...params,
     });

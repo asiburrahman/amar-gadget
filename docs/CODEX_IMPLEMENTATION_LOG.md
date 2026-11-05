@@ -776,3 +776,66 @@ No production migration/deployment, hosted provider action or main merge occurre
 AUD-044 first remote run follow-up: [41833384558](https://github.com/asiburrahman/amar-gadget/actions/runs/41833384558) passed 160 suites / 1,189 tests and failed one migration test because PostgreSQL 16 reports `23503` for the purchase-product foreign key while local PostgreSQL 18 reported `23001`. The test now accepts only those two constraint codes for the exact `OrderItem_productId_fkey`, and additionally verifies the product, stock and both receipt labels survived the denied deletion. The local regression passes; CI now covers PostgreSQL 16 and 18 with separate artifacts. No application constraint/migration changed. AUD-044 and the 46/51 count remain pending corrected remote verification; the lint gate correctly exposes AUD-045 debt.
 
 AUD-044 remote verification completed: [run 41834749145](https://github.com/asiburrahman/amar-gadget/actions/runs/41834749145) on [8d8ebe2](https://github.com/asiburrahman/amar-gadget/commit/8d8ebe2) passed the complete PostgreSQL 16 and 18 verification jobs. Actual logs show **161 suites / 1,190 tests with no skips, 11 native tests and 28 browser cases on each version**. Both also passed Prisma, TypeScript, production/standalone build and compiled collection/outage/OTP/refund checks. Main implementation: [be7e3d2](https://github.com/asiburrahman/amar-gadget/commit/be7e3d2). The separate lint gate correctly remains failed under AUD-045. **AUD-044 is implemented and verified; current count 47/51.** Next: AUD-045, then AUD-046 and AUD-049; external SMTP revocation remains AUD-051. No production migration/deployment, hosted provider action or main merge occurred. The entire remaining-task objective stays active.
+
+## Batch 44 - AUD-045: lint, actual UI lifecycle and native browser locks
+
+Date: 4 November 2026 (Asia/Dhaka). Status: implementation and local verification
+in progress; remote verification has not yet run for this change. The count
+remains 47/51 until all gates are inspected.
+
+Repository lint now has zero errors and zero warnings without new rule disables
+or application-source ignores. Typed errors/analytics/button attributes replace
+unsafe types. Complete static Tailwind tokens fix hover/pointer classes. Native
+image dimensions and navbar class forwarding retain current CDN behavior.
+Login validates its returned principal, removes stale redirect timers and keeps
+the deliberate full-document replacement on identity changes so another
+principal cannot inherit private client/router state.
+
+Pagination restores omitted middle pages and clamps stale inputs. Dialogs retain
+their inert closing animation while restoring focus/scroll and canceling old
+timers on reopening. Toast consumers share the provider's actual controller and
+own their timers/dismissal callbacks. Tabs now have exported composition,
+selection, linked panels and disabled-aware keyboard navigation. Dropdowns have
+native keyboard triggers, focus/outside/Escape handling and real measured
+alignment/collision/offset behavior. These generic primitives had no application
+consumers; their unit tests are component evidence, not an invented application
+feature. Unused empty types and obsolete manual scripts that could seed fake
+catalog data, change an arbitrary seller or remove purchase/review data were
+removed after verifying there were no callers. The canonical idempotent Prisma
+reference seed remains supported.
+
+The later documentation-only AUD-044 CI run 41836918368 failed its Firefox
+cancellation case in both database jobs. Its retained PostgreSQL 18 trace names
+a caught stale guest-cart revision from a native Web Locks callback. A minimal
+local browser experiment reproduced Firefox emitting pageerror even though the
+request rejection was caught; Chromium/WebKit emitted none. Cart/wishlist now
+return a fulfilled envelope from the native callback, then rethrow the exact
+original error outside that callback. Existing lock ownership, conflict checks
+and retry/fallback policy remain intact. The uncaught-error gate is retained,
+with redacted diagnostic messages. A deterministic real-browser stale-write
+case verifies visible failure, preserved quantity and refresh/retry/reload.
+
+The first local full run passed 166 suites / 1,205 tests with zero skips, plus
+the production build and 28 original browser cases. These preceded the native
+lock correction. Its five-suite targeted run passed 68 lock/cart/guest/legacy/
+wishlist tests. Final local and remote results will be recorded separately;
+no pending gate is represented as green. See [verification details and commands](LINT_UI_VERIFICATION.md).
+
+No database schema/migration change, production operation, hosted provider
+operation or main merge occurred. AUD-046 and AUD-049 remain subsequent separate
+tasks; SMTP revocation remains the owner's external AUD-051 action. The complete
+remaining-task objective stays active.
+
+AUD-045 final local checkpoint, 5 November 2026: **167 suites / 1,209 tests
+passed**, zero skips; strict repository lint, TypeScript, production/standalone
+build and diff checks pass. All **15 native tests** and the final **32 browser
+cases** pass. The native-lock correction is included. A WebKit recovery probe
+first used GET for a read-only POST (405), then a stricter probe found missing
+protocol events for pre-dispatch aborts. The final test-only observer retains
+bounded safe read metadata across documents, validates it through the same
+replay policy and retries the original method/body; it records no credential or
+mutation body. Error checks remain enabled during recovery. Failed and timed-out
+runs are retained in the verification notes. No source rule suppression,
+application simulation, schema change or production operation was introduced.
+Remote CI is pending the first AUD-045 push, so this is not closure and the
+count stays 47/51.

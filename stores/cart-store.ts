@@ -1,5 +1,6 @@
 import { createCartController } from "@/lib/client/cart-controller";
 import { useAuthStore } from "@/stores/auth-store";
+import { withBrowserLock } from "@/lib/client/browser-lock";
 export type { CartItem } from "@/lib/client/cart-controller";
 export function currentCartScope() {
   const { user, loading } = useAuthStore.getState();
@@ -9,7 +10,7 @@ export const useCartStore = createCartController({
   fetcher: (...args) => fetch(...args),
   storage: () => { try { return typeof window === "undefined" ? undefined : window.localStorage; } catch { return undefined; } },
   scopeNow: currentCartScope,
-  lock: async (work) => typeof navigator !== "undefined" && navigator.locks ? await navigator.locks.request("amar-gadget-guest-cart-v3", work) : await work(),
+  lock: (work) => withBrowserLock("amar-gadget-guest-cart-v3", work),
   accountChanged: () => { void useAuthStore.getState().fetchUser(); },
   notify: (ownerId) => {
     if (typeof BroadcastChannel !== "undefined") {

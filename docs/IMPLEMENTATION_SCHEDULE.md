@@ -59,6 +59,15 @@ AUD-045 (25 errors / 37 warnings); its separate CI gate correctly fails and is
 not bypassed. This is not a claim that the entire release is green.
 See [release verification](RELEASE_VERIFICATION.md).
 
+## Active AUD-045 checkpoint
+
+AUD-045 is now in active implementation. Full-repository lint is locally clean
+(zero errors/warnings); actual UI lifecycle, pagination and browser-lock defects
+are fixed rather than suppressed. Final local verification passed 167 suites /
+1,209 tests, 15 native tests, 32 browser cases, TypeScript and the production
+build. Remote CI remains pending, so the count stays 47/51. See
+[AUD-045 evidence](LINT_UI_VERIFICATION.md).
+
 ## Owner-provided introduction
 
 Asibur completed graduation approximately four years before this conversation, is not a student, currently does programming using Codex and other platforms, and has completed several web-development projects. Do not invent an employer, degree subject, audience size, customer metrics or professional title beyond this supplied information.

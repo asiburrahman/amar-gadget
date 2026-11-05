@@ -38,10 +38,10 @@ export default function ForgotPasswordPage() {
           text: data.message || "Failed to send reset code.",
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setMessage({
         type: "error",
-        text: err.message || "An error occurred. Please try again.",
+        text: err instanceof Error ? err.message : "An error occurred. Please try again.",
       });
     } finally {
       setLoading(false);

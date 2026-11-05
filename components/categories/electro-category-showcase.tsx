@@ -266,7 +266,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                       href={`/products/${heroProduct.slug || heroProduct.id}`}
                       className="block w-full h-full relative flex items-center justify-center"
                     >
-                      <img
+                      <Image unoptimized fill sizes="(max-width: 640px) 100vw, 400px"
                         src={displayHeroImage}
                         alt={heroProduct.name}
                         className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
@@ -291,8 +291,8 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                         }`}
                         title="Click to view image"
                       >
-                        <img
-                          src={thumb}
+                        <Image unoptimized
+                          src={thumb} width={40} height={40}
                           alt="Gallery thumbnail"
                           className="w-full h-full object-contain"
                         />
@@ -492,7 +492,7 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
             href={`/products/${product.slug || product.id}`}
             className="block w-full h-full relative flex items-center justify-center"
           >
-            <img
+            <Image unoptimized fill sizes="(max-width: 640px) 100vw, 400px"
               src={product.imageUrl || "/placeholder-gadget.svg"}
               alt={product.name}
               className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"

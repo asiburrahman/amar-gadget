@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { formatCurrency } from "@/lib/formatter";
 import { Button } from "@/components/ui/button";
 import { CustomerShipments } from "@/components/orders/customer-shipments";
@@ -188,7 +189,7 @@ function OwnedUserOrdersClient({ initialOrders, query, counts }: Props) {
                     <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-4 text-xs">
                       <div className="flex items-center gap-3.5">
                         {item.product.imageUrl ? (
-                          <img
+                          <Image unoptimized width={48} height={48}
                             src={item.product.imageUrl}
                             alt={item.product.name}
                             className="w-12 h-12 rounded-xl object-cover border border-border shrink-0 bg-muted"

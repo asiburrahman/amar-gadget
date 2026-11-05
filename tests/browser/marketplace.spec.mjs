@@ -62,6 +62,41 @@ test("customer coupon quote and COD checkout persist the reviewed server total",
   await expect(page.getByRole("heading", { name: /Order received/ })).toBeVisible();
 });
 
+test("a competing browser cart write is recoverable without an uncaught lock rejection", async ({ page, shop }) => {
+  await addToCart(page, shop);
+  const increase = page.getByRole("button", { name: `Increase ${shop.product.name} quantity` });
+  await expect(increase).toBeEnabled();
+  await page.evaluate(() => {
+    window.__auditLockResult = navigator.locks.request("amar-gadget-guest-cart-v3", () => new Promise((release) => {
+      window.__auditReleaseLock = release;
+      window.__auditLockHeld = true;
+    }));
+  });
+  try {
+    await expect.poll(() => page.evaluate(() => window.__auditLockHeld)).toBe(true);
+    await increase.click();
+    await expect.poll(() => page.evaluate(async () => (await navigator.locks.query()).pending.filter((lock) => lock.name === "amar-gadget-guest-cart-v3").length)).toBeGreaterThan(0);
+    // Simulate another holder's committed revision after the UI captured its
+    // expected snapshot. Keep the actual item/line identity and quantity intact.
+    await page.evaluate(() => {
+      const key = "amar-gadget-cart-guest-v3", cart = JSON.parse(localStorage.getItem(key));
+      cart.revision++;
+      localStorage.setItem(key, JSON.stringify(cart));
+    });
+  } finally {
+    await page.evaluate(async () => { window.__auditReleaseLock?.(); await window.__auditLockResult; });
+  }
+  await expect(page.getByText("Guest cart changed in another tab. Refresh before changing it.", { exact: false }).first()).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("amar-gadget-cart-guest-v3")).lines[0].quantity)).toBe(1);
+  await page.getByRole("button", { name: "Refresh cart", exact: true }).click();
+  await expect(increase).toBeEnabled();
+  await increase.click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("amar-gadget-cart-guest-v3")).lines[0].quantity)).toBe(2);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Proceed to Checkout" })).toBeEnabled();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("amar-gadget-cart-guest-v3")).lines[0].quantity)).toBe(2);
+});
+
 test("card reservation cancellation restores stock once and retains the guest cart", async ({ page, shop }) => {
   const stock = (await shop.db.product.findUniqueOrThrow({ where: { id: shop.product.id } })).stock;
   await addToCart(page, shop);

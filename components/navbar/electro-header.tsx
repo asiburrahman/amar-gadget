@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
@@ -16,12 +17,12 @@ import { ChevronDown } from "@/components/icons/ChevronDown";
 import { X } from "@/components/icons/X";
 import { useCatalogDepartments } from "@/hooks/use-catalog-departments";
 
-export const ElectroHeader: React.FC = () => {
+export const ElectroHeader: React.FC<{ className?: string }> = ({ className = "" }) => {
   const pathname = usePathname();
-  return <HeaderContent key={pathname} pathname={pathname} />;
+  return <HeaderContent key={pathname} pathname={pathname} className={className} />;
 };
 
-function HeaderContent({ pathname }: { pathname: string }) {
+function HeaderContent({ pathname, className }: { pathname: string; className: string }) {
   const { user, logout } = useAuth();
   const displayUser = user;
   const [isDepartmentOpen, setIsDepartmentOpen] = useState(false);
@@ -41,7 +42,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
   const departmentFeedback = <>{departments.busy && <p role="status" className="px-4 py-2 text-xs">Loading departments...</p>}{departments.error && <div className="px-4 py-2 text-xs"><p role="alert">{departments.error}</p><button type="button" onClick={departments.reload} className="underline">Reload departments</button></div>}</>;
 
   return (
-    <header className="w-full bg-white text-[#333e48] border-b border-gray-200 z-50 relative lg:sticky lg:top-0 shadow-xs transition-all">
+    <header className={`w-full bg-white text-[#333e48] border-b border-gray-200 z-50 relative lg:sticky lg:top-0 shadow-xs transition-all ${className}`}>
       {/* 1. TOPBAR - Spacious Padding & Larger Readable Typography */}
       <div className="hidden lg:block bg-slate-50/80 border-b border-gray-200/80 text-xs text-slate-600 py-2.5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -82,7 +83,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
                 >
                   <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden relative shadow-xs">
                     {displayUser.avatar ? (
-                      <img src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
+                      <Image unoptimized width={40} height={40} src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
                     ) : (
                       (displayUser.name || displayUser.email).charAt(0).toUpperCase()
                     )}
@@ -372,7 +373,7 @@ function HeaderContent({ pathname }: { pathname: string }) {
                     <div className="px-3 py-2 bg-slate-50 rounded-xl flex items-center gap-2.5">
                       <div className="h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden shrink-0">
                         {displayUser.avatar ? (
-                          <img src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
+                          <Image unoptimized width={40} height={40} src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
                         ) : (
                           (displayUser.name || displayUser.email).charAt(0).toUpperCase()
                         )}

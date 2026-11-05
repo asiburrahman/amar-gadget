@@ -38,68 +38,20 @@ export const Pagination = ({
   previousLabel = "Previous",
   nextLabel = "Next",
 }: PaginationProps) => {
-  if (totalPages <= 1) return null;
-
-  const range = (start: number, end: number) => {
-    const length = end - start + 1;
-    return Array.from({ length }, (_, i) => start + i);
-  };
-
-  const siblingLeft = Math.max(
-    Math.min(currentPage - siblingCount, totalPages - boundaryCount * 2 - siblingCount * 2),
-    boundaryCount + 2
-  );
-
-  const siblingRight = Math.min(
-    Math.max(currentPage + siblingCount, boundaryCount * 2 + siblingCount * 2 + 2),
-    totalPages - boundaryCount - 1
-  );
-
-  const showLeftEllipsis = siblingLeft > boundaryCount + 2;
-  const showRightEllipsis = siblingRight < totalPages - boundaryCount - 1;
-
-  const pages = [];
-
-  // First boundary
-  for (let i = 1; i <= boundaryCount; i++) {
-    pages.push({
-      type: "page",
-      value: i,
-    });
-  }
-
-  // Left ellipsis
-  if (showLeftEllipsis) {
-    pages.push({
-      type: "ellipsis",
-    });
-  }
-
-  // Siblings
-  for (let i = siblingLeft; i <= siblingRight; i++) {
-    pages.push({
-      type: "page",
-      value: i,
-    });
-  }
-
-  // Right ellipsis
-  if (showRightEllipsis) {
-    pages.push({
-      type: "ellipsis",
-    });
-  }
-
-  // Second boundary
-  for (
-    let i = totalPages - boundaryCount + 1;
-    i <= totalPages;
-    i++
-  ) {
-    pages.push({
-      type: "page",
-      value: i,
-    });
+  const total = Number.isFinite(totalPages) ? Math.max(0, Math.trunc(totalPages)) : 0;
+  if (total <= 1) return null;
+  const activePage = Math.min(total, Math.max(1, Number.isFinite(currentPage) ? Math.trunc(currentPage) : 1));
+  const boundaries = Number.isFinite(boundaryCount) ? Math.min(total, Math.max(0, Math.trunc(boundaryCount))) : 1;
+  const siblings = Number.isFinite(siblingCount) ? Math.min(total, Math.max(0, Math.trunc(siblingCount))) : 1;
+  const selected = new Set<number>();
+  for (let index = 1; index <= boundaries; index++) { selected.add(index); selected.add(total - index + 1); }
+  for (let index = Math.max(1, activePage - siblings); index <= Math.min(total, activePage + siblings); index++) selected.add(index);
+  const pages: ({ type: "page"; value: number } | { type: "ellipsis" })[] = [];
+  let previous: number | undefined;
+  for (const value of [...selected].sort((left, right) => left - right)) {
+    if (previous !== undefined && value - previous === 2) pages.push({ type: "page", value: previous + 1 });
+    else if (previous !== undefined && value - previous > 2) pages.push({ type: "ellipsis" });
+    pages.push({ type: "page", value }); previous = value;
   }
 
   return (
@@ -113,8 +65,8 @@ export const Pagination = ({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
-        disabled={currentPage === 1}
+        onClick={() => onPageChange(Math.max(activePage - 1, 1))}
+        disabled={activePage === 1}
       >
         {previousLabel}
       </Button>
@@ -123,13 +75,14 @@ export const Pagination = ({
       <div className="flex space-x-1">
         {pages.map((page, index) => {
           if (page.type === "page") {
-            const isCurrent = page.value === currentPage;
+            const isCurrent = page.value === activePage;
             return (
               <Button
                 key={index}
                 variant={isCurrent ? "default" : "outline"}
                 size="sm"
-                onClick={() => onPageChange(page.value as number)}
+                onClick={() => onPageChange(page.value)}
+                aria-current={isCurrent ? "page" : undefined}
                 disabled={isCurrent}
               >
                 {page.value}
@@ -155,8 +108,8 @@ export const Pagination = ({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
-        disabled={currentPage === totalPages}
+        onClick={() => onPageChange(Math.min(activePage + 1, total))}
+        disabled={activePage === total}
       >
         {nextLabel}
       </Button>

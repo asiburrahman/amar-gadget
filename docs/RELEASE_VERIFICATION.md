@@ -213,3 +213,22 @@ AUD-044 is now complete within its implementation/testing scope. The tracked
 count is **47 of 51 implemented**; AUD-045, AUD-046, AUD-049 and the owner's
 external AUD-051 credential revocation remain. CI must be fully green after
 lint remediation before claiming overall release verification.
+
+## Later CI regression investigated under AUD-045
+
+The documentation-only run
+[41836918368](https://github.com/asiburrahman/amar-gadget/actions/runs/41836918368)
+passed its database/type/build/compiled checks but failed the Firefox
+cancellation browser case in both PostgreSQL jobs (27 browser cases passed per
+job). Its PostgreSQL 18 trace identifies a stale guest-cart revision rejection
+from the native Web Locks callback. A standalone local HTTP/browser experiment
+reproduced a Firefox pageerror for a callback rejection even when the request
+promise was explicitly caught. Chromium and WebKit did not report it.
+
+AUD-045 corrects the application boundary by returning a fulfilled result
+envelope from the native callback and rethrowing its exact failure afterwards.
+It does not filter out the error, weaken revision checks or disable browser
+verification. A deterministic browser conflict/recovery case is added in each
+of the four projects. Final results belong to the new revision; the earlier
+successful CI run above remains historical evidence rather than a guarantee
+that every later run passed. See [AUD-045 verification](LINT_UI_VERIFICATION.md).

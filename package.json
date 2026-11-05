@@ -13,7 +13,7 @@
     "tunnel:local": "cloudflared tunnel run",
     "start:gateway": "node scripts/ingress-gateway.mjs",
     "postinstall": "patch-package --error-on-fail && prisma generate",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings=0",
     "test": "jest",
     "test:isolated": "node scripts/verify-isolated-tests.mjs",
     "test:native": "node --test tests/native/*.test.mjs",
