@@ -1,0 +1,71 @@
+import type { PrismaClient } from "@prisma/client";
+let mockDatabase: PrismaClient;
+jest.mock("@/lib/prisma", () => ({ get prisma() { return mockDatabase; } }));
+import { PrismaClient as DatabaseClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { createFinanceDatabase } from "@/tests/helpers/finance-database";
+import { issueOtp, prepareOtpAttempt, consumeVerifiedOtp, otpAccountFingerprint, otpCodeHash } from "@/lib/otp";
+const migration = "20261104100000_otp_utc_clock_guard";
+(process.env.TEST_DATABASE_URL ? describe : describe.skip)("OTP UTC clock and conservative old-token transition", () => {
+  let fixture: Awaited<ReturnType<typeof createFinanceDatabase>>, timezoneClient: PrismaClient | undefined;
+  beforeEach(() => { process.env.OTP_SECRET = "isolated-otp-clock-transition-key-at-least-32-characters"; });
+  afterEach(async () => { await timezoneClient?.$disconnect(); timezoneClient = undefined; await fixture?.close(); });
+  it("invalidates only old ephemeral credentials, preserves spent budgets/accounts/orders, and safely starts a new UTC window", async () => {
+    fixture = await createFinanceDatabase(migration); mockDatabase = fixture.db;
+    const user = await mockDatabase.user.create({ data: { email: `${randomUUID()}@clock.example.invalid`, password: "retained-private-password-hash", isVerified: false } });
+    const owner = await mockDatabase.user.create({ data: { email: `${randomUUID()}@clock.example.invalid`, role: "MEMBER", sellerStatus: "APPROVED", isVerified: true } });
+    const category = await mockDatabase.category.create({ data: { name: "Retained purchase category", slug: randomUUID() } });
+    const product = await mockDatabase.product.create({ data: { name: "Retained purchase product", slug: randomUUID(), sellerId: owner.id, categoryId: category.id, price: 100, stock: 5 } });
+    const order = await mockDatabase.order.create({ data: { userId: user.id, total: 100, items: { create: { productId: product.id, quantity: 1, price: 100 } } }, include: { items: true, fulfillments: true } });
+    const [old] = await mockDatabase.$queryRaw<{ now: Date }[]>`SELECT timezone('UTC',clock_timestamp()) + interval '6 hours' AS now`;
+    const token = { id: randomUUID(), userId: user.id, email: user.email, purpose: "REGISTRATION", accountFingerprint: otpAccountFingerprint(user) };
+    await mockDatabase.otpToken.create({ data: { ...token, codeHash: otpCodeHash(token, "123456"), attempts: 3, createdAt: old.now, deliveredAt: old.now, expiresAt: new Date(old.now.getTime() + 600_000) } });
+    await mockDatabase.otpThrottle.create({ data: { userId: user.id, purpose: token.purpose, sendCount: 3, verificationAttempts: 5, sendWindowStart: old.now, verificationWindowStart: old.now, lastSentAt: old.now } });
+    const reset = { ...token, id: randomUUID(), purpose: "PASSWORD_RESET" };
+    await mockDatabase.otpToken.create({ data: { ...reset, codeHash: otpCodeHash(reset, "654321"), createdAt: new Date(), deliveredAt: new Date(), expiresAt: new Date(Date.now() + 600_000) } });
+    expect(await mockDatabase.otpToken.count()).toBe(2);
+    const beforeDelivery = jest.fn(); await expect(issueOtp({ userId: user.id, email: user.email, purpose: "REGISTRATION" }, beforeDelivery)).rejects.toMatchObject({ status: 503 }); expect(beforeDelivery).not.toHaveBeenCalled();
+    await expect(prepareOtpAttempt({ userId: user.id, email: user.email, purpose: "PASSWORD_RESET" }, "654321")).rejects.toMatchObject({ status: 503 });
+    expect((await mockDatabase.otpThrottle.findFirstOrThrow({ where: { userId: user.id } })).sendCount).toBe(3);
+    await mockDatabase.$executeRawUnsafe(await readFile(join(process.cwd(), "prisma/migrations", migration, "migration.sql"), "utf8"));
+    expect(await mockDatabase.otpToken.count()).toBe(0); expect(await mockDatabase.user.findUniqueOrThrow({ where: { id: user.id } })).toEqual(user);
+    expect(await mockDatabase.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true, fulfillments: true } })).toEqual(order);
+    const budget = await mockDatabase.otpThrottle.findUniqueOrThrow({ where: { userId_purpose: { userId: user.id, purpose: token.purpose } } });
+    expect(budget).toMatchObject({ sendCount: 3, verificationAttempts: 5 });
+    expect(Math.abs(budget.sendWindowStart.getTime() - Date.now())).toBeLessThan(3000); expect(Math.abs(budget.verificationWindowStart.getTime() - Date.now())).toBeLessThan(3000);
+    await expect(prepareOtpAttempt({ userId: user.id, email: user.email, purpose: "REGISTRATION" }, "123456")).rejects.toMatchObject({ status: 429 });
+    const delivery = jest.fn(); await expect(issueOtp({ userId: user.id, email: user.email, purpose: "REGISTRATION" }, delivery)).rejects.toMatchObject({ status: 429 }); expect(delivery).not.toHaveBeenCalled();
+    // Model the full conservative window elapsing without resetting its spent
+    // counters or waiting ten real minutes in the test runner.
+    await mockDatabase.$executeRaw`UPDATE "OtpThrottle" SET "sendWindowStart"=timezone('UTC',clock_timestamp())-interval '601 seconds',"verificationWindowStart"=timezone('UTC',clock_timestamp())-interval '601 seconds',"lastSentAt"=timezone('UTC',clock_timestamp())-interval '61 seconds' WHERE "userId"=${user.id}`;
+    let code = ""; await issueOtp({ userId: user.id, email: user.email, purpose: "REGISTRATION" }, async (value) => { code = value; });
+    const fresh = await mockDatabase.otpToken.findFirstOrThrow({ where: { userId: user.id } }); expect(fresh.expiresAt.getTime() - fresh.createdAt.getTime()).toBe(600_000);
+    expect((await mockDatabase.otpThrottle.findFirstOrThrow({ where: { userId: user.id, purpose: "REGISTRATION" } })).sendCount).toBe(1);
+    const ticket = await prepareOtpAttempt({ userId: user.id, email: user.email, purpose: "REGISTRATION" }, code); expect(ticket).not.toBeNull();
+    expect(await consumeVerifiedOtp(ticket!, async (_tx, account) => account.id)).toBe(user.id); expect(await consumeVerifiedOtp(ticket!, async () => "replayed")).toBeNull();
+  }, 30_000);
+  it.each(["UTC", "Asia/Dhaka", "America/New_York"])("issues, delivers and expires a ten-minute token under database session zone %s", async (zone) => {
+    fixture = await createFinanceDatabase(); timezoneClient = new DatabaseClient({ adapter: new PrismaPg({ connectionString: fixture.url, max: 1, options: `-c timezone=${zone}` }), log: [] }); mockDatabase = timezoneClient;
+    const user = await mockDatabase.user.create({ data: { email: `${randomUUID()}@clock.example.invalid`, isVerified: false } });
+    const context = { userId: user.id, email: user.email, purpose: "REGISTRATION" as const }; let code = "";
+    await issueOtp(context, async (value) => { code = value; });
+    const stored = await mockDatabase.otpToken.findFirstOrThrow({ where: { userId: user.id } });
+    const [clock] = await mockDatabase.$queryRaw<{ epoch: number }[]>`SELECT extract(epoch FROM clock_timestamp())::double precision AS epoch`;
+    expect(Math.abs(stored.createdAt.getTime() - clock.epoch * 1000)).toBeLessThan(3000); expect(Math.abs(stored.deliveredAt!.getTime() - clock.epoch * 1000)).toBeLessThan(3000);
+    expect(stored.expiresAt.getTime() - stored.createdAt.getTime()).toBe(600_000); expect(await prepareOtpAttempt(context, code)).not.toBeNull();
+    await expect(issueOtp(context, async () => undefined)).rejects.toMatchObject({ status: 429 });
+    await mockDatabase.otpToken.update({ where: { id: stored.id }, data: { expiresAt: new Date(0) } }); expect(await prepareOtpAttempt(context, code)).toBeNull();
+  }, 30_000);
+  it("refuses old future-dated token/delivery/throttle writes after migration", async () => {
+    fixture = await createFinanceDatabase(); mockDatabase = fixture.db;
+    const user = await mockDatabase.user.create({ data: { email: `${randomUUID()}@clock.example.invalid`, isVerified: false } });
+    const context = { userId: user.id, email: user.email, purpose: "REGISTRATION" as const };
+    await issueOtp(context, async () => undefined); const token = await mockDatabase.otpToken.findFirstOrThrow({ where: { userId: user.id } }), future = new Date(Date.now() + 21_600_000);
+    for (const data of [{ createdAt: future }, { deliveredAt: future }, { expiresAt: future }]) await expect(mockDatabase.otpToken.update({ where: { id: token.id }, data })).rejects.toThrow();
+    for (const data of [{ sendWindowStart: future }, { verificationWindowStart: future }, { lastSentAt: future }]) await expect(mockDatabase.otpThrottle.update({ where: { userId_purpose: { userId: user.id, purpose: context.purpose } }, data })).rejects.toThrow();
+    expect(await mockDatabase.otpToken.findUniqueOrThrow({ where: { id: token.id } })).toEqual(token);
+  }, 30_000);
+});

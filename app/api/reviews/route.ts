@@ -1,34 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { catalogIdSchema } from "@/lib/validations/product";
+import { reviewPageSchema } from "@/lib/validations/review";
+import { readPublicReviews } from "@/lib/reviews";
+import { limitAccountIp } from "@/lib/account-request";
+import { reviewFailure, reviewPrivateHeaders, reviewQuery } from "@/lib/review-request";
 
 export async function GET(req: Request) {
-  const productId = new URL(req.url).searchParams.get("productId");
-  if (!productId) {
-    return NextResponse.json(
-      { success: false, message: "A product ID is required." },
-      { status: 400 }
-    );
-  }
-
   try {
-    const reviews = await prisma.review.findMany({
-      where: {
-        productId,
-        product: { status: "APPROVED", seller: { sellerStatus: "APPROVED" } },
-      },
-      select: {
-        id: true,
-        rating: true,
-        comment: true,
-        createdAt: true,
-        user: { select: { name: true, avatar: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
-    return NextResponse.json({ success: true, reviews });
-  } catch (error) {
-    console.error("Review listing failed:", error);
-    return NextResponse.json({ success: false, message: "Unable to load reviews." }, { status: 500 });
-  }
+    await limitAccountIp(req, "public-reviews", 120);
+    const input = z.object({ productId: catalogIdSchema, page: reviewPageSchema }).strict().parse(reviewQuery(req));
+    return NextResponse.json({ success: true, ...await readPublicReviews(input.productId, input.page) }, { headers: reviewPrivateHeaders });
+  } catch (error) { return reviewFailure(error); }
 }

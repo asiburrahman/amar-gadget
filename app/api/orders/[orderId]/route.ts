@@ -1,78 +1,41 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { orderHistoryEntry } from "@/lib/order-history";
+import { fulfillmentStatusLabel } from "@/lib/fulfillment-policy";
 
-const milestones = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"] as const;
-
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ orderId: string }> }
-) {
-  const limit = await rateLimit(getClientIp(req.headers), 10, 60, "order-tracking");
-  if (!limit.success) {
-    return NextResponse.json(
-      { success: false, message: "Too many tracking attempts. Try again shortly." },
-      { status: 429 }
-    );
-  }
-
-  const { orderId } = await params;
-  const phone = new URL(req.url).searchParams.get("phone")?.replace(/\D/g, "");
-  if (!orderId || !phone) {
-    return NextResponse.json(
-      { success: false, message: "Order ID and registered phone number are required." },
-      { status: 400 }
-    );
-  }
-
+export async function GET(req: Request, { params }: { params: Promise<{ orderId: string }> }) {
+  const headers = { "Cache-Control": "private, no-store" };
   try {
+    const limit = await rateLimit(getClientIp(req.headers), 10, 60, "order-tracking");
+    if (!limit.success) return NextResponse.json({ success: false, message: "Too many tracking attempts. Try again shortly." }, { status: 429, headers });
+    const { orderId } = await params;
+    const query = new URL(req.url).searchParams;
+    const phone = query.get("phone")?.replace(/\D/g, "") ?? "";
+    const cursor = query.get("cursor");
+    if (!orderId || orderId.length > 120 || !/^\d{10,15}$/.test(phone) || (cursor && !z.string().uuid().safeParse(cursor).success)) {
+      return NextResponse.json({ success: false, message: "Enter an order ID/tracking code and the phone number used at checkout." }, { status: 400, headers });
+    }
     const order = await prisma.order.findFirst({
       where: { OR: [{ id: orderId }, { trackingNumber: orderId }] },
-      select: {
-        id: true,
-        status: true,
-        createdAt: true,
-        total: true,
-        shippingPhone: true,
-        items: { select: { quantity: true } },
-      },
+      select: { id: true, status: true, paymentStatus: true, refundState: true, refundedCents: true, disputeStatus: true, disputeAmountCents: true, createdAt: true, total: true, shippingPhone: true, shippingCarrier: true, shipmentTrackingNumber: true, items: { select: { quantity: true } }, fulfillments: { where: { items: { some: {} } }, orderBy: { id: "asc" }, select: { id: true, status: true, carrier: true, trackingNumber: true, shippedAt: true, deliveredAt: true, legacySnapshot: true, items: { select: { quantity: true } } } } },
     });
-
-    if (!order || order.shippingPhone?.replace(/\D/g, "") !== phone) {
-      return NextResponse.json(
-        { success: false, message: "No order matched those details." },
-        { status: 404 }
-      );
-    }
-
-    const status = order.status.toUpperCase();
-    const activeIndex = milestones.indexOf(status as (typeof milestones)[number]);
-    const timeline = milestones.map((step, index) => ({
-      step: step === "PENDING" ? "Order Placed" : step.charAt(0) + step.slice(1).toLowerCase(),
-      date: index === 0 ? order.createdAt.toISOString() : "Not updated",
-      done: activeIndex >= index,
-      current: activeIndex === index,
-    }));
-
-    return NextResponse.json({
-      success: true,
-      order: {
-        id: order.id,
-        status: order.status,
-        createdAt: order.createdAt.toISOString(),
-        total: Number(order.total),
-        itemsCount: order.items.reduce((count, item) => count + item.quantity, 0),
-        timeline:
-          status === "CANCELLED"
-            ? [{ step: "Order Cancelled", date: order.createdAt.toISOString(), done: true, current: true }]
-            : timeline,
-      },
-    });
-  } catch (error) {
-    console.error("Order tracking lookup failed:", error);
-    return NextResponse.json(
-      { success: false, message: "Unable to retrieve tracking details right now." },
-      { status: 500 }
-    );
+    if (!order || order.shippingPhone?.replace(/\D/g, "") !== phone) return NextResponse.json({ success: false, message: "No order matched those details." }, { status: 404, headers });
+    if (cursor && !(await prisma.orderEvent.findFirst({ where: { id: cursor, orderId: order.id }, select: { id: true } }))) return NextResponse.json({ success: false, message: "History position not found. Refresh tracking." }, { status: 404, headers });
+    const events = await prisma.orderEvent.findMany({ where: { orderId: order.id }, orderBy: { sequence: "asc" }, take: 51, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+    const page = events.slice(0, 50);
+    const nextCursor = events.length > 50 ? page[page.length - 1].id : null;
+    return NextResponse.json({ success: true, order: {
+      id: order.id, status: order.status, paymentStatus: order.paymentStatus, createdAt: order.createdAt.toISOString(), total: Number(order.total),
+      carrier: order.shippingCarrier, shipmentTrackingNumber: order.shipmentTrackingNumber,
+      statusLabel: fulfillmentStatusLabel(order.status),
+      refundState: order.refundState, refundedAmount: Number(order.refundedCents) / 100, disputeStatus: order.disputeStatus, disputeLossAmount: Number(order.disputeAmountCents) / 100,
+      shipments: order.fulfillments.map((row) => ({ id: row.id, status: row.status, statusLabel: fulfillmentStatusLabel(row.status), carrier: row.carrier, trackingNumber: row.trackingNumber, shippedAt: row.shippedAt?.toISOString() ?? null, deliveredAt: row.deliveredAt?.toISOString() ?? null, legacySnapshot: row.legacySnapshot, itemsCount: row.items.reduce((sum, item) => sum + item.quantity, 0) })),
+      itemsCount: order.items.reduce((count, item) => count + item.quantity, 0),
+      timeline: page.map((event, index) => ({ ...orderHistoryEntry(event), done: true, current: !nextCursor && index === page.length - 1 })), nextCursor,
+    } }, { headers });
+  } catch {
+    return NextResponse.json({ success: false, message: "Unable to retrieve tracking details right now." }, { status: 503, headers });
   }
 }

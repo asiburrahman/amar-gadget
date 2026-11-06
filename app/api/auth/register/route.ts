@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validations/auth";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, PasswordWorkloadBusy } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
-import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { otpDeliveryFailure } from "@/lib/otp-response";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
 
 export async function POST(req: Request) {
   try {
-    const limit = await rateLimit(getClientIp(req.headers), 5, 60, "auth-register");
-    if (!limit.success) {
-      return NextResponse.json({ success: false, message: "Too many registration attempts. Try again shortly." }, { status: 429 });
-    }
+    await limitAccountIp(req, "auth-register", 5);
 
-    const body = await req.json();
+    const body = await readAccountJson(req);
     const validated = registerSchema.safeParse(body);
 
     if (!validated.success) {
@@ -26,7 +24,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, password, confirmPassword, role, avatar } = validated.data;
+    const { name, email, password, confirmPassword, role } = validated.data;
+    await limitAccountIdentity(email, "auth-register", 3, 600);
 
     if (confirmPassword && confirmPassword !== password) {
       return NextResponse.json(
@@ -56,24 +55,21 @@ export async function POST(req: Request) {
 
       // User registered previously but did not verify OTP!
       // Update user details, reset password hash, and dispatch a fresh OTP code
-      const hashedPassword = hashPassword(password);
-      await prisma.user.update({
-        where: { id: existingUser.id },
+      const hashedPassword = await hashPassword(password);
+      const updated = await prisma.user.updateMany({
+        where: { id: existingUser.id, isVerified: false, password: existingUser.password },
         data: {
           name,
           password: hashedPassword,
-          avatar: avatar || existingUser.avatar,
           role: existingUser.role,
         },
       });
+      if (updated.count !== 1) return NextResponse.json({ success: false, message: "The account changed. Please sign in or retry registration." }, { status: 409 });
 
       // Dispatch fresh OTP verification email
-      const otpResult = await sendOtpEmail(existingUser.email);
+      const otpResult = await sendOtpEmail({ userId: existingUser.id, email: existingUser.email, purpose: "REGISTRATION" });
       if (!otpResult.success) {
-        return NextResponse.json(
-          { success: false, message: "Unable to send a verification code right now." },
-          { status: 503 }
-        );
+        return otpDeliveryFailure(otpResult);
       }
 
       return NextResponse.json({
@@ -85,13 +81,12 @@ export async function POST(req: Request) {
     }
 
     // 2. Hash password and create user in database
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = await hashPassword(password);
     const newUser = await prisma.user.create({
       data: {
         name,
         email: email.toLowerCase(),
         password: hashedPassword,
-        avatar: avatar || null,
         role: role || "USER",
         sellerStatus: role === "MEMBER" ? "PENDING" : "APPROVED",
         isVerified: false,
@@ -99,12 +94,9 @@ export async function POST(req: Request) {
     });
 
     // 3. Generate and send OTP verification code to email
-    const otpResult = await sendOtpEmail(newUser.email);
+    const otpResult = await sendOtpEmail({ userId: newUser.id, email: newUser.email, purpose: "REGISTRATION" });
     if (!otpResult.success) {
-      return NextResponse.json(
-        { success: false, message: "Unable to send a verification code right now." },
-        { status: 503 }
-      );
+      return otpDeliveryFailure(otpResult);
     }
 
     return NextResponse.json({
@@ -113,15 +105,8 @@ export async function POST(req: Request) {
       email: newUser.email,
       message: "Account created! A 6-digit OTP code has been sent to your email.",
     });
-  } catch (error: any) {
-    console.error("Registration error:", error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        message: "Internal server error during registration.",
-        detail: error?.message || String(error)
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
+    return accountErrorResponse(error);
   }
 }

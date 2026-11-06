@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { Navbar } from "@/components/navbar/navbar";
-import "@/config/env"; // Enforce environment validation on bootstrap
 import "@/styles/globals.css";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Amar Gadget | Dashboard",
+  robots: { index: false, follow: false },
   description: "Manage your Amar Gadget account",
 };
 

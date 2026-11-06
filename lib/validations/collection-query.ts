@@ -1,0 +1,11 @@
+import { z } from "zod";
+import { PRODUCT_STATUSES } from "@/lib/catalog-constants";
+import { AGGREGATE_ORDER_STATES } from "@/lib/fulfillment-policy";
+export const collectionPageSchema = z.coerce.number().int().min(1).max(1_000_000).default(1);
+export const collectionSearchSchema = z.string().trim().max(120).refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Use a single-line search.").default("");
+export const adminCatalogQuerySchema = z.object({ page: collectionPageSchema, q: collectionSearchSchema, status: z.enum(["ALL", ...PRODUCT_STATUSES]).default("ALL") }).strict();
+export const customerOrdersQuerySchema = z.object({ page: collectionPageSchema, q: collectionSearchSchema, status: z.enum(["ALL", "ACTIVE", "DELIVERED", "CANCELLED"]).default("ALL") }).strict();
+export const sellerDashboardCatalogQuerySchema = z.object({ page: collectionPageSchema, q: collectionSearchSchema, status: z.enum(["ALL", "APPROVED", "PENDING"]).default("ALL") }).strict();
+export const adminOrdersQuerySchema = z.object({ page: collectionPageSchema, q: collectionSearchSchema, status: z.enum(["ALL", ...AGGREGATE_ORDER_STATES]).default("ALL") }).strict();
+export const publicTaxonomyQuerySchema = z.object({ page: collectionPageSchema, q: collectionSearchSchema }).strict();
+export const categoryShowcaseQuerySchema = z.object({ page: collectionPageSchema, categoryPage: collectionPageSchema, q: collectionSearchSchema, categoryId: z.string().regex(/^[A-Za-z0-9-]{1,64}$/).optional() }).strict();

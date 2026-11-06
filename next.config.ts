@@ -2,32 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: [
-    "bedding-card-verification-viewed.trycloudflare.com",
-    "tables-webmaster-blond-die.trycloudflare.com",
-    "*.trycloudflare.com",
-    "trycloudflare.com",
-    "amargadget.gmksolution.com",
-    "*.gmksolution.com",
-    "gmksolution.com",
-
-  ],
-  experimental: {
-    serverActions: {
-      allowedOrigins: [
-        "bedding-card-verification-viewed.trycloudflare.com",
-        "amargadget.gmksolution.com",
-        "*.gmksolution.com",
-        "gmksolution.com",
-        "*.trycloudflare.com",
-        "trycloudflare.com",
-        "localhost:3000",
-        "127.0.0.1:3000",
-        "192.168.50.210:3000",
-
-      ],
-    },
+  // Native addon dependencies (DLL/.so/.dylib) are not inferred from the
+  // binding itself. Include only the installed Sharp platform libraries.
+  outputFileTracingIncludes: {
+    "/*": ["node_modules/@img/sharp-*/lib/**/*", "node_modules/@img/sharp-libvips-*/lib/**/*"],
   },
+  skipProxyUrlNormalize: true,
   images: {
     remotePatterns: [
       {

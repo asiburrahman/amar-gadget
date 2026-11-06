@@ -16,6 +16,7 @@ interface ProductGridProps {
     imageUrl?: string;
     category?: string;
     rating?: number;
+    unitsSold?: string;
   }>;
   loading?: boolean;
   onAddToCart?: (productId: string) => void;
@@ -53,7 +54,7 @@ export const ProductGrid = ({
         </div>
         <h3 className="text-xl font-bold text-foreground mb-1">No products available</h3>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          We couldn't find any products matching your selection. Check back soon for new arrivals!
+          We couldn&apos;t find any products matching your selection. Try adjusting your filters.
         </p>
       </div>
     );

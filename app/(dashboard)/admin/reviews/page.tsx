@@ -1,1 +1,2 @@
-export default function Page() { return <div>Admin Reviews</div>; }
+import { ReviewsDashboard } from "@/components/reviews/reviews-dashboard";
+export default function Page() { return <ReviewsDashboard mode="admin" />; }

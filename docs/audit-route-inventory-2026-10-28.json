@@ -1,0 +1,629 @@
+﻿{
+  "scope": "Offline source inventory and installed HTTP adapter capability; no live integration checks",
+  "counts": {
+    "pages": 64,
+    "apiRoutes": 29,
+    "textOnlyPlaceholderPages": 26
+  },
+  "httpAdapterTransactionError": "Transactions are not supported in HTTP mode",
+  "inventory": [
+    {
+      "route": "/forgot-password",
+      "file": "app/(auth)/forgot-password/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/login",
+      "file": "app/(auth)/login/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/register",
+      "file": "app/(auth)/register/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/reset-password",
+      "file": "app/(auth)/reset-password/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/unauthorized",
+      "file": "app/(auth)/unauthorized/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/verify-email",
+      "file": "app/(auth)/verify-email/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/verify-otp",
+      "file": "app/(auth)/verify-otp/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin/analytics",
+      "file": "app/(dashboard)/admin/analytics/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin/banners",
+      "file": "app/(dashboard)/admin/banners/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/brands",
+      "file": "app/(dashboard)/admin/brands/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/categories",
+      "file": "app/(dashboard)/admin/categories/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/coupons",
+      "file": "app/(dashboard)/admin/coupons/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/members",
+      "file": "app/(dashboard)/admin/members/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/notifications",
+      "file": "app/(dashboard)/admin/notifications/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/orders",
+      "file": "app/(dashboard)/admin/orders/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin",
+      "file": "app/(dashboard)/admin/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin/products",
+      "file": "app/(dashboard)/admin/products/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin/profile",
+      "file": "app/(dashboard)/admin/profile/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin/reports",
+      "file": "app/(dashboard)/admin/reports/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/reviews",
+      "file": "app/(dashboard)/admin/reviews/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/admin/sellers",
+      "file": "app/(dashboard)/admin/sellers/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin/settings",
+      "file": "app/(dashboard)/admin/settings/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/admin/users",
+      "file": "app/(dashboard)/admin/users/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/member/add-product",
+      "file": "app/(dashboard)/member/add-product/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/member/analytics",
+      "file": "app/(dashboard)/member/analytics/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/member/dashboard",
+      "file": "app/(dashboard)/member/dashboard/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/member/earnings",
+      "file": "app/(dashboard)/member/earnings/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/member/orders",
+      "file": "app/(dashboard)/member/orders/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/member/payouts",
+      "file": "app/(dashboard)/member/payouts/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/member/products",
+      "file": "app/(dashboard)/member/products/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/member/profile",
+      "file": "app/(dashboard)/member/profile/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/member/reviews",
+      "file": "app/(dashboard)/member/reviews/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/member/settings",
+      "file": "app/(dashboard)/member/settings/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/user/addresses",
+      "file": "app/(dashboard)/user/addresses/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/user/dashboard",
+      "file": "app/(dashboard)/user/dashboard/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/user/notifications",
+      "file": "app/(dashboard)/user/notifications/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/user/orders",
+      "file": "app/(dashboard)/user/orders/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/user/profile",
+      "file": "app/(dashboard)/user/profile/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/user/reviews",
+      "file": "app/(dashboard)/user/reviews/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/user/settings",
+      "file": "app/(dashboard)/user/settings/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/user/wishlist",
+      "file": "app/(dashboard)/user/wishlist/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/about",
+      "file": "app/(marketing)/about/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/account",
+      "file": "app/(marketing)/account/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/blog",
+      "file": "app/(marketing)/blog/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/brands",
+      "file": "app/(marketing)/brands/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/cart",
+      "file": "app/(marketing)/cart/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/categories/[slug]",
+      "file": "app/(marketing)/categories/[slug]/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/categories",
+      "file": "app/(marketing)/categories/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/checkout",
+      "file": "app/(marketing)/checkout/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/compare",
+      "file": "app/(marketing)/compare/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/contact",
+      "file": "app/(marketing)/contact/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/deals",
+      "file": "app/(marketing)/deals/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/faq",
+      "file": "app/(marketing)/faq/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/order-success/[id]",
+      "file": "app/(marketing)/order-success/[id]/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/order-success",
+      "file": "app/(marketing)/order-success/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/",
+      "file": "app/(marketing)/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/privacy-policy",
+      "file": "app/(marketing)/privacy-policy/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/products/[slug]",
+      "file": "app/(marketing)/products/[slug]/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/products",
+      "file": "app/(marketing)/products/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/returns",
+      "file": "app/(marketing)/returns/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/search",
+      "file": "app/(marketing)/search/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/terms",
+      "file": "app/(marketing)/terms/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": true
+    },
+    {
+      "route": "/track-order",
+      "file": "app/(marketing)/track-order/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/wishlist",
+      "file": "app/(marketing)/wishlist/page.tsx",
+      "kind": "page",
+      "textOnlyPlaceholder": false
+    },
+    {
+      "route": "/api/admin/sellers",
+      "file": "app/api/admin/sellers/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/analytics",
+      "file": "app/api/analytics/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/auth/forgot-password",
+      "file": "app/api/auth/forgot-password/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/auth/login",
+      "file": "app/api/auth/login/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/auth/logout",
+      "file": "app/api/auth/logout/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/auth/me",
+      "file": "app/api/auth/me/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/auth/register",
+      "file": "app/api/auth/register/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/auth/resend-otp",
+      "file": "app/api/auth/resend-otp/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/auth/reset-password",
+      "file": "app/api/auth/reset-password/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/auth/verify-otp",
+      "file": "app/api/auth/verify-otp/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/brands",
+      "file": "app/api/brands/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/cart",
+      "file": "app/api/cart/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/categories",
+      "file": "app/api/categories/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/health",
+      "file": "app/api/health/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/notifications",
+      "file": "app/api/notifications/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/orders/[orderId]",
+      "file": "app/api/orders/[orderId]/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/orders",
+      "file": "app/api/orders/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/products/[slug]",
+      "file": "app/api/products/[slug]/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/products",
+      "file": "app/api/products/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/reviews",
+      "file": "app/api/reviews/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "route": "/api/stripe/checkout",
+      "file": "app/api/stripe/checkout/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/stripe/customer-portal",
+      "file": "app/api/stripe/customer-portal/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/stripe/webhook",
+      "file": "app/api/stripe/webhook/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/upload",
+      "file": "app/api/upload/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/user/change-email/request",
+      "file": "app/api/user/change-email/request/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/user/change-email/verify",
+      "file": "app/api/user/change-email/verify/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/user/change-password",
+      "file": "app/api/user/change-password/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "route": "/api/user/profile",
+      "file": "app/api/user/profile/route.ts",
+      "kind": "api",
+      "methods": [
+        "GET",
+        "PUT"
+      ]
+    },
+    {
+      "route": "/api/user/upload-avatar",
+      "file": "app/api/user/upload-avatar/route.ts",
+      "kind": "api",
+      "methods": [
+        "POST",
+        "DELETE"
+      ]
+    }
+  ]
+}

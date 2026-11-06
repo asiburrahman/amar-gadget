@@ -1,58 +1,39 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { NextResponse, type NextRequest } from "next/server";
+import { verifyJwtToken } from "@/lib/session-token";
+import { verifiedIngressIp, isAllowedRequestOrigin } from "@/lib/ingress";
+import { isPublicAsset } from "@/lib/public-assets";
+import { readApplicationOrigin } from "@/config/runtime";
+import { privateIndexPath } from "@/lib/seo/policy";
 
-const isBuildTime =
-  process.env.NEXT_PHASE === "phase-production-build" ||
-  process.env.SKIP_ENV_VALIDATION === "true";
-
-if (!isBuildTime && !process.env.JWT_SECRET) {
-  console.warn("⚠️ JWT_SECRET environment variable is missing at runtime! Falling back to default.");
-}
-
-const JWT_SECRET_KEY = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-for-build-purposes-only-32chars"
-);
-
+/** Optimistic navigation only. Layouts, APIs and actions validate the current
+ * database version through lib/session-validation before protected access. */
 export async function proxy(request: NextRequest) {
-  const token = request.cookies.get("auth_token")?.value;
   const path = request.nextUrl.pathname;
-
-  if (!token) {
-    if (path.startsWith("/admin") || path.startsWith("/member") || path.startsWith("/user")) {
-      return NextResponse.redirect(new URL("/login", request.nextUrl));
-    }
-    return NextResponse.next();
+  const indexPolicy = (response: NextResponse) => { if (privateIndexPath(path)) response.headers.set("X-Robots-Tag", "noindex, nofollow"); return response; };
+  const readOnly = ["GET", "HEAD"].includes(request.method) && !request.headers.has("next-action");
+  const publicResource = readOnly && (path === "/api/health" || path === "/api/health/ready" || path.startsWith("/_next/static/") || path === "/_next/image" || isPublicAsset(path));
+  let responseHeaders: Headers | undefined;
+  if (process.env.NODE_ENV === "production" && !publicResource) {
+    const ip = verifiedIngressIp(request.headers, request.method, path + request.nextUrl.search);
+    if (!ip || !isAllowedRequestOrigin(request.headers, request.method, path)) return indexPolicy(NextResponse.json({ error: "Request ingress is not permitted." }, { status: 403, headers: { "Cache-Control": "no-store" } }));
+    const origin = new URL(readApplicationOrigin());
+    responseHeaders = new Headers(request.headers);
+    for (const key of ["forwarded", "cf-connecting-ip", "cf-connecting-ipv6", "x-real-ip", "x-vercel-forwarded-for", "x-forwarded-for"]) responseHeaders.delete(key);
+    responseHeaders.set("host", origin.host);
+    responseHeaders.set("x-forwarded-host", origin.host);
+    responseHeaders.set("x-forwarded-proto", origin.protocol.slice(0, -1));
   }
-
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET_KEY);
-    const userRole = (payload.role as string)?.toUpperCase();
-
-    // Strict Role-Based Access Control Checks
-    if (path.startsWith("/admin") && userRole !== "ADMIN") {
-      return NextResponse.redirect(new URL("/unauthorized", request.nextUrl));
-    }
-    if (path.startsWith("/member") && !["ADMIN", "MEMBER"].includes(userRole)) {
-      return NextResponse.redirect(new URL("/unauthorized", request.nextUrl));
-    }
-
-    const response = NextResponse.next();
-    response.headers.set("x-user-id", payload.sub as string);
-    response.headers.set("x-user-role", userRole);
-    return response;
-  } catch (error) {
-    console.error("JWT Verification failed inside Edge proxy:", error);
-    const response = NextResponse.redirect(new URL("/login", request.nextUrl));
-    response.cookies.delete("auth_token");
-    return response;
+  const proceed = () => indexPolicy(NextResponse.next(responseHeaders ? { request: { headers: responseHeaders } } : undefined));
+  if (!/^\/(admin|member|user)(\/|$)/.test(path)) return proceed();
+  const token = request.cookies.get("auth_token")?.value;
+  const payload = token ? await verifyJwtToken(token) : null;
+  if (!payload) {
+    const response = NextResponse.redirect(new URL("/login", process.env.NODE_ENV === "production" ? readApplicationOrigin() : request.url));
+    if (token) response.cookies.set("auth_token", "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 0, path: "/" });
+    return indexPolicy(response);
   }
+  if ((path.startsWith("/admin") && payload.role !== "ADMIN") || (path.startsWith("/member") && !["ADMIN", "MEMBER"].includes(payload.role))) return indexPolicy(NextResponse.redirect(new URL("/unauthorized", process.env.NODE_ENV === "production" ? readApplicationOrigin() : request.url)));
+  return proceed();
 }
 
-export const config = {
-  matcher: [
-    "/admin/:path*",
-    "/member/:path*",
-    "/user/:path*",
-  ],
-};
+export const config = { matcher: ["/:path*"] };

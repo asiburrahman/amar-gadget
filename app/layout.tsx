@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
-import "@/config/env"; // Enforce environment validation on bootstrap
 import "@/styles/globals.css";
+import { connection } from "next/server";
+import { readApplicationOrigin } from "@/config/runtime";
+import { WishlistSync } from "@/components/account/wishlist-sync";
+import { CartSync } from "@/components/account/cart-sync";
+import { AuthServiceNotice } from "@/components/account/auth-service-notice";
 
 const fontSans = Geist({
   subsets: ["latin"],
@@ -21,10 +25,12 @@ const fontMono = Geist_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Amar Gadget | Premium Multi-Vendor Marketplace",
-  description: "The leading multi-vendor marketplace for electronics and gadgets in Bangladesh.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  // Resolve the deployed origin at request time; a reusable standalone artifact
+  // must not bake a build machine's hostname into every page.
+  await connection();
+  return { metadataBase: new URL(readApplicationOrigin()), title: "Amar Gadget | Multi-Vendor Marketplace", description: "Browse electronics and gadgets from marketplace sellers in Bangladesh." };
+}
 
 export default function RootLayout({
   children,
@@ -37,6 +43,9 @@ export default function RootLayout({
       className={`${fontSans.variable} ${fontInter.variable} ${fontMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground transition-colors duration-200">
+        <WishlistSync />
+        <CartSync />
+        <AuthServiceNotice />
         {children}
       </body>
     </html>

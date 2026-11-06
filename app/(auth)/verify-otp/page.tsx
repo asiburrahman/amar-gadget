@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { H1 } from "@/components/ui/typography";
+import { useAuthStore, type AuthUser } from "@/stores/auth-store";
+import { registrationAvatar, clearRegistrationAvatar } from "@/stores/registration-avatar-store";
+import { checkedAvatar, uploadAvatarFile } from "@/lib/client/avatar-client";
 
 function VerifyOtpForm() {
   const searchParams = useSearchParams();
@@ -11,18 +14,63 @@ function VerifyOtpForm() {
   const email = searchParams.get("email") || "";
 
   const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const [verifiedUser, setVerifiedUser] = useState<AuthUser | null>(null);
+  const [navigating, setNavigating] = useState(false);
+  const busy = useRef(false);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(redirectTimer.current), []);
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = setTimeout(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  const goToAccount = (user: AuthUser) => {
+    clearTimeout(redirectTimer.current); setNavigating(true);
+    clearRegistrationAvatar(email);
+    const path = user.role === "ADMIN" ? "/admin" : user.role === "MEMBER" ? "/member/dashboard" : "/user/dashboard";
+    redirectTimer.current = setTimeout(() => router.replace(path), 800);
+  };
+  const saveSignupPhoto = async (user: AuthUser, reload = false) => {
+    const file = registrationAvatar(email);
+    if (!file) { goToAccount(user); return; }
+    if (user.email.trim().toLowerCase() !== email.trim().toLowerCase() || useAuthStore.getState().user?.id !== user.id) throw new Error("Your account changed. Upload the photo from your profile after signing in.");
+    let version = user.avatarVersion ?? 0;
+    if (reload) {
+      const response = await fetch("/api/user/upload-avatar", { headers: { "X-Avatar-Owner": user.id }, cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "Unable to reload your saved photo.");
+      version = checkedAvatar(data.photo, user.id).avatarVersion;
+    }
+    const photo = await uploadAvatarFile(user.id, version, file);
+    if (useAuthStore.getState().user?.id !== user.id) throw new Error("Your account changed. Check your saved photo after signing in.");
+    useAuthStore.getState().updateUser({ avatar: photo.avatar, avatarVersion: photo.avatarVersion });
+    setSuccessMsg("Email verified and profile photo saved. Redirecting...");
+    goToAccount(user);
+  };
+  const retryPhoto = async () => {
+    if (!verifiedUser || busy.current) return;
+    busy.current = true; setLoading(true); setErrorMsg("");
+    try { await saveSignupPhoto(verifiedUser, true); }
+    catch (error) { setErrorMsg(error instanceof Error ? error.message : "Photo was not confirmed. Retry or continue to your account."); }
+    finally { busy.current = false; setLoading(false); }
+  };
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!otp || otp.length < 6) {
-      setErrorMsg("Please enter the complete 6-digit OTP code.");
+    if (busy.current || loading) return;
+    if (!otp || otp.length !== 6 || !password) {
+      setErrorMsg("Enter the six-digit signup code and the password you used for registration.");
       return;
     }
 
+    busy.current = true;
     setLoading(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -31,7 +79,7 @@ function VerifyOtpForm() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({ email, otp, password }),
       });
 
       const data = await res.json();
@@ -43,25 +91,23 @@ function VerifyOtpForm() {
       }
 
       setSuccessMsg("✓ Email verified successfully! Redirecting to your dashboard...");
-
-      setTimeout(() => {
-        const userRole = data.user?.role?.toUpperCase();
-        if (userRole === "ADMIN") {
-          window.location.href = "/admin";
-        } else if (userRole === "MEMBER") {
-          window.location.href = "/member/dashboard";
-        } else {
-          window.location.href = "/user/dashboard";
-        }
-      }, 800);
-    } catch (err) {
+      setPassword("");
+      useAuthStore.getState().setUser(data.user);
+      setVerifiedUser(data.user);
+      try { await saveSignupPhoto(data.user); }
+      catch (error) { setSuccessMsg("Your email is verified. Your selected photo has not been confirmed."); setErrorMsg(error instanceof Error ? error.message : "Retry your photo or continue to your account."); }
+      setLoading(false);
+    } catch {
       setErrorMsg("Network error during verification.");
       setLoading(false);
+    } finally {
+      busy.current = false;
     }
   };
 
   const handleResend = async () => {
-    if (!email) return;
+    if (!email || busy.current || loading || cooldown) return;
+    busy.current = true;
     setResending(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -73,14 +119,17 @@ function VerifyOtpForm() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (data.success) {
-        setSuccessMsg("✓ A new 6-digit verification code has been dispatched to your email!");
+      if (res.ok && data.success) {
+        setSuccessMsg(data.message || "If this account needs verification, a signup code has been sent.");
+        setCooldown(60);
       } else {
+        if (res.status === 429) setCooldown(Math.min(600, Math.max(1, Number(res.headers.get("Retry-After")) || 60)));
         setErrorMsg(data.message || "Failed to resend OTP.");
       }
-    } catch (err) {
+    } catch {
       setErrorMsg("Error resending OTP.");
     } finally {
+      busy.current = false;
       setResending(false);
     }
   };
@@ -111,15 +160,20 @@ function VerifyOtpForm() {
         </div>
       )}
 
-      <form onSubmit={handleVerify} className="space-y-6">
+      {verifiedUser ? <div className="space-y-3">
+        <p>Your account is verified. You can also upload a photo from your profile.</p>
+        <button type="button" disabled={loading || navigating} onClick={() => void retryPhoto()} className="block underline disabled:opacity-50">Retry selected photo</button>
+        <button type="button" disabled={loading || navigating} onClick={() => goToAccount(verifiedUser)} className="block underline disabled:opacity-50">Continue to my account</button>
+      </div> : <form onSubmit={handleVerify} className="space-y-6">
         <div>
-          <label className="block text-xs font-bold text-foreground mb-2 text-center">
+          <label htmlFor="signup-code" className="block text-xs font-bold text-foreground mb-2 text-center">
             Enter 6-Digit Verification Code
           </label>
           <input
+            id="signup-code"
             type="text"
             maxLength={6}
-            placeholder="849201"
+            placeholder="Six-digit code"
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             className="w-full h-14 text-center text-2xl font-extrabold tracking-widest rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"
@@ -127,24 +181,32 @@ function VerifyOtpForm() {
           />
         </div>
 
+        <div>
+          <label htmlFor="signup-password" className="block text-xs font-bold mb-2">Registration password</label>
+          <input id="signup-password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-input bg-background p-3" />
+          <p className="mt-2 text-xs text-muted-foreground">Use the password you chose when signing up. If it no longer works, reset your password.</p>
+          <Link href="/forgot-password" className="text-xs underline">Reset password</Link>
+        </div>
+
         <button
           type="submit"
-          disabled={loading || otp.length < 6}
+          disabled={loading || resending || otp.length !== 6 || !password}
           className="w-full h-11 rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
         >
           {loading ? "Verifying..." : "Verify & Authenticate Account"}
         </button>
-      </form>
+      </form>}
+      <Link href="/login" className="block text-xs underline">Already verified? Sign in</Link>
 
       <div className="text-center text-xs text-muted-foreground border-t border-border pt-4 flex items-center justify-between">
-        <span>Didn't receive code?</span>
+        <span>Didn&apos;t receive code?</span>
         <button
           type="button"
           onClick={handleResend}
-          disabled={resending}
+          disabled={resending || loading || cooldown > 0 || !!verifiedUser}
           className="text-primary font-bold hover:underline disabled:opacity-50"
         >
-          {resending ? "Sending..." : "Resend OTP Code"}
+          {resending ? "Sending..." : cooldown ? `Resend after ${cooldown}s` : "Resend OTP Code"}
         </button>
       </div>
     </div>

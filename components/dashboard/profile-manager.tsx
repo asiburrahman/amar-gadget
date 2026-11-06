@@ -2,10 +2,16 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import NextImage from "next/image";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/stores/auth-store";
+import { useAvatarEditor } from "@/hooks/use-avatar-editor";
+import { newPasswordSchema, PASSWORD_POLICY_MESSAGE } from "@/lib/validations/auth";
 
 interface AddressData {
   id?: string;
+  version?: number;
   fullName?: string;
   phone?: string;
   street?: string;
@@ -20,6 +26,8 @@ interface ProfileUser {
   email: string;
   phone: string | null;
   avatar: string | null;
+  avatarVersion: number;
+  legacyAvatarAvailable: boolean;
   role: string;
   sellerStatus?: string | null;
   isVerified: boolean;
@@ -38,26 +46,43 @@ const BD_DISTRICTS = [
 ];
 
 export function ProfileManager({ initialRole }: ProfileManagerProps) {
-  const { user: authUser, refreshUser, updateUser, setUser } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return <p role="status">Loading account...</p>;
+  if (!user) return <p>Sign in to manage your profile.</p>;
+  return <OwnedProfileManager key={user.id} ownerId={user.id} initialRole={initialRole} />;
+}
+
+function OwnedProfileManager({ initialRole, ownerId }: ProfileManagerProps & { ownerId: string }) {
+  const router = useRouter();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const isCurrent = () => mounted.current && useAuthStore.getState().user?.id === ownerId;
+  const refreshUser = async () => isCurrent() ? useAuthStore.getState().fetchUser() : null;
+  const updateUser: ReturnType<typeof useAuth>["updateUser"] = (value) => { if (isCurrent()) useAuthStore.getState().updateUser(value); };
+  const setUser: ReturnType<typeof useAuth>["setUser"] = (value) => { if (isCurrent() && (value === null || value.id === ownerId)) useAuthStore.getState().setUser(value); };
+  const avatarEditor = useAvatarEditor(ownerId);
+  const avatarPreview = avatarEditor.preview;
+  const isUploadingAvatar = avatarEditor.busy;
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; event.target.value = ""; avatarEditor.selectFile(file); };
+  const handleRemovePhoto = () => { void avatarEditor.remove(); };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<"profile" | "email" | "password" | "address">("profile");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileUser | null>(null);
+  const [profileLoadRevision, setProfileLoadRevision] = useState(0);
 
   // Profile Form State
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [avatar, setAvatar] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Email Change State
   const [newEmail, setNewEmail] = useState("");
+  const [emailCurrentPassword, setEmailCurrentPassword] = useState("");
+  const emailBusy = useRef(false);
   const [emailOtp, setEmailOtp] = useState("");
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -78,24 +103,25 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   const [addressPhone, setAddressPhone] = useState("");
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
-  const [district, setDistrict] = useState("Dhaka");
+  const [district, setDistrict] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [isUpdatingAddress, setIsUpdatingAddress] = useState(false);
+  const addressBusy = useRef(false);
   const [addressMsg, setAddressMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Load user data
   useEffect(() => {
+    const abort = new AbortController();
     async function loadProfile() {
       try {
         setLoading(true);
-        const res = await fetch("/api/user/profile", { cache: "no-store" });
+        const res = await fetch("/api/user/profile", { cache: "no-store", headers: { "X-Profile-Owner": ownerId }, signal: abort.signal });
         const data = await res.json();
-        if (data.success && data.user) {
+        if (!isCurrent() || abort.signal.aborted) return;
+        if (res.ok && data.success && data.user?.id === ownerId) {
           setProfile(data.user);
           setName(data.user.name || "");
           setPhone(data.user.phone || "");
-          setAvatar(data.user.avatar || "");
-          setAvatarPreview(data.user.avatar || null);
           setUser(data.user);
 
           if (data.user.addresses && data.user.addresses.length > 0) {
@@ -104,26 +130,29 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
             setAddressPhone(defAddr.phone || data.user.phone || "");
             setStreet(defAddr.street || "");
             setCity(defAddr.city || "");
-            setDistrict(defAddr.district || "Dhaka");
+            setDistrict(defAddr.district || "");
             setZipCode(defAddr.zipCode || "");
           } else {
             setAddressFullName(data.user.name || "");
             setAddressPhone(data.user.phone || "");
           }
-        }
-      } catch (err) {
-        console.error("Failed to load profile:", err);
+        } else setProfileMsg({ type: "error", text: data.message || "Unable to load your saved profile." });
+      } catch {
+        if (isCurrent() && !abort.signal.aborted) setProfileMsg({ type: "error", text: "Unable to load your saved profile. Try again." });
       } finally {
-        setLoading(false);
+        if (!abort.signal.aborted && isCurrent()) setLoading(false);
       }
     }
 
-    loadProfile();
-  }, []);
+    void loadProfile();
+    return () => abort.abort();
+    // The parent keys profile drafts by account.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerId, profileLoadRevision]);
 
   // Resend OTP countdown
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (resendTimer > 0) {
       interval = setInterval(() => {
         setResendTimer((prev) => prev - 1);
@@ -131,135 +160,6 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     }
     return () => clearInterval(interval);
   }, [resendTimer]);
-
-  // Compress & resize image to 400x400 for optimal fast upload and DB storage
-  const processImageFile = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX_SIZE = 400;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_SIZE) {
-              height = Math.round((height * MAX_SIZE) / width);
-              width = MAX_SIZE;
-            }
-          } else {
-            if (height > MAX_SIZE) {
-              width = Math.round((width * MAX_SIZE) / height);
-              height = MAX_SIZE;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            resolve(event.target?.result as string);
-            return;
-          }
-
-          ctx.drawImage(img, 0, 0, width, height);
-          // Export as compressed WebP or JPEG
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-          resolve(dataUrl);
-        };
-        img.onerror = (err) => reject(err);
-      };
-      reader.onerror = (err) => reject(err);
-    });
-  };
-
-  // Direct File Selection Handler
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setProfileMsg({ type: "error", text: "শুধুমাত্র ছবি (JPG, PNG, WebP) ফাইল নির্বাচন করুন।" });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setProfileMsg({ type: "error", text: "ছবির সাইজ সর্বোচ্চ ৫ মেগাবাইট (5MB) হতে পারবে।" });
-      return;
-    }
-
-    try {
-      setIsUploadingAvatar(true);
-      setProfileMsg(null);
-
-      // Process and optimize image
-      const optimizedDataUrl = await processImageFile(file);
-      setAvatarFile(file);
-      setAvatarPreview(optimizedDataUrl);
-      setAvatar(optimizedDataUrl);
-
-      // Directly upload to server
-      const res = await fetch("/api/user/upload-avatar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatar: optimizedDataUrl }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setProfileMsg({ type: "success", text: "প্রোফাইল ছবি সফলভাবে আপলোড হয়েছে! (Photo uploaded successfully)" });
-        const updatedUser = { ...(profile || {}), avatar: optimizedDataUrl, name, phone };
-        if (profile) {
-          setProfile({ ...profile, avatar: optimizedDataUrl });
-        }
-        updateUser({ avatar: optimizedDataUrl });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
-        }
-        await refreshUser();
-      } else {
-        setProfileMsg({ type: "error", text: data.message || "Failed to upload image." });
-      }
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Error reading image file." });
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
-
-  // Remove Photo Handler
-  const handleRemovePhoto = async () => {
-    try {
-      setIsUploadingAvatar(true);
-      const res = await fetch("/api/user/upload-avatar", { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        setAvatar("");
-        setAvatarPreview(null);
-        setAvatarFile(null);
-        const updatedUser = { ...(profile || {}), avatar: null, name, phone };
-        if (profile) {
-          setProfile({ ...profile, avatar: null });
-        }
-        updateUser({ avatar: null });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
-        }
-        setProfileMsg({ type: "success", text: "প্রোফাইল ছবি মুছে ফেলা হয়েছে।" });
-        await refreshUser();
-      } else {
-        setProfileMsg({ type: "error", text: data.message || "Failed to remove photo." });
-      }
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Error removing photo." });
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
 
   // Handle Profile Update
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -270,31 +170,28 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     try {
       const res = await fetch("/api/user/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({
           name,
           phone,
-          avatar,
         }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (!isCurrent()) return;
+      if (res.ok && data.success && data.user) {
         setProfileMsg({ type: "success", text: "প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে! (Profile updated successfully)" });
-        const updatedUser = { ...(profile || {}), name, phone, avatar };
-        if (profile) {
-          setProfile({ ...profile, name, phone, avatar });
-        }
-        updateUser({ name, phone, avatar });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", { detail: updatedUser }));
-        }
+        const updatedUser = data.user;
+        setProfile((current) => current ? { ...current, ...updatedUser } : current);
+        setName(updatedUser.name || "");
+        setPhone(updatedUser.phone || "");
+        updateUser(updatedUser);
         await refreshUser();
       } else {
         setProfileMsg({ type: "error", text: data.message || "Failed to update profile." });
       }
-    } catch (err: any) {
-      setProfileMsg({ type: "error", text: err.message || "Something went wrong." });
+    } catch (err) {
+      setProfileMsg({ type: "error", text: err instanceof Error ? err.message : "Something went wrong." });
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -303,35 +200,43 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Request Email Change OTP
   const handleRequestEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (emailBusy.current) return;
     if (!newEmail || !newEmail.includes("@")) {
       setEmailMsg({ type: "error", text: "সঠিক নতুন ইমেইল এড্রেস লিখুন। (Please enter a valid new email address)" });
       return;
     }
+    if (!emailCurrentPassword) { setEmailMsg({ type: "error", text: "Enter your current password to request an email change." }); return; }
 
+    emailBusy.current = true;
     setIsSendingOtp(true);
     setEmailMsg(null);
 
     try {
       const res = await fetch("/api/user/change-email/request", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newEmail }),
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
+        body: JSON.stringify({ newEmail, currentPassword: emailCurrentPassword }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (!isCurrent()) return;
+      if (res.ok && data.success) {
         setIsOtpSent(true);
+        setNewEmail(data.email);
+        setEmailCurrentPassword("");
         setResendTimer(60);
         setEmailMsg({
           type: "success",
           text: `নতুন ইমেইলে (${newEmail}) ৬-সংখ্যার ওটিপি কোড পাঠানো হয়েছে। চেক করে নিচের ঘরে লিখুন।`,
         });
       } else {
+        if (res.status === 429) setResendTimer(Number(res.headers.get("Retry-After")) || 60);
         setEmailMsg({ type: "error", text: data.message || "Failed to send OTP code." });
       }
-    } catch (err: any) {
-      setEmailMsg({ type: "error", text: err.message || "Failed to send OTP code." });
+    } catch (err) {
+      setEmailMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to send OTP code." });
     } finally {
+      emailBusy.current = false;
       setIsSendingOtp(false);
     }
   };
@@ -339,36 +244,33 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Verify Email Change OTP
   const handleVerifyEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailOtp || emailOtp.length < 4) {
+    if (emailBusy.current) return;
+    if (!emailOtp || emailOtp.length !== 6) {
       setEmailMsg({ type: "error", text: "৬-সংখ্যার সঠিক ওটিপি কোড লিখুন। (Please enter the valid OTP)" });
       return;
     }
 
+    emailBusy.current = true;
     setIsVerifyingOtp(true);
     setEmailMsg(null);
 
     try {
       const res = await fetch("/api/user/change-email/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({ newEmail, otp: emailOtp }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (!isCurrent()) return;
+      if (res.ok && data.success && typeof data.user?.email === "string") {
+        const confirmedEmail = data.user.email;
         setEmailMsg({
           type: "success",
           text: `ইমেইল সফলভাবে পরিবর্তন করা হয়েছে! আপনার বর্তমান ইমেইল: ${newEmail}`,
         });
-        if (profile) {
-          setProfile({ ...profile, email: newEmail, isVerified: true });
-        }
-        updateUser({ email: newEmail, isVerified: true });
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("amar_gadget_user_updated", {
-            detail: { ...(profile || {}), email: newEmail, isVerified: true }
-          }));
-        }
+        setProfile((current) => current ? { ...current, email: confirmedEmail, isVerified: true } : current);
+        updateUser({ email: confirmedEmail, isVerified: true });
         setIsOtpSent(false);
         setNewEmail("");
         setEmailOtp("");
@@ -376,9 +278,10 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       } else {
         setEmailMsg({ type: "error", text: data.message || "Invalid or expired OTP." });
       }
-    } catch (err: any) {
-      setEmailMsg({ type: "error", text: err.message || "Verification failed." });
+    } catch (err) {
+      setEmailMsg({ type: "error", text: err instanceof Error ? err.message : "Verification failed." });
     } finally {
+      emailBusy.current = false;
       setIsVerifyingOtp(false);
     }
   };
@@ -386,8 +289,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Password Update
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordMsg({ type: "error", text: "নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।" });
+    if (!newPasswordSchema.safeParse(newPassword).success) {
+      setPasswordMsg({ type: "error", text: PASSWORD_POLICY_MESSAGE });
       return;
     }
 
@@ -402,7 +305,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     try {
       const res = await fetch("/api/user/change-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({
           currentPassword,
           newPassword,
@@ -411,16 +314,20 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
       });
 
       const data = await res.json();
-      if (data.success) {
-        setPasswordMsg({ type: "success", text: "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! (Password updated successfully)" });
+      if (!isCurrent()) return;
+      if (res.ok && data.success) {
+        setPasswordMsg({ type: "success", text: "Password updated. All sessions signed out. Please sign in again." });
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setUser(null);
+        router.replace("/login?reason=password-changed");
+        router.refresh();
       } else {
         setPasswordMsg({ type: "error", text: data.message || "Failed to update password." });
       }
-    } catch (err: any) {
-      setPasswordMsg({ type: "error", text: err.message || "Something went wrong." });
+    } catch (err) {
+      setPasswordMsg({ type: "error", text: err instanceof Error ? err.message : "Something went wrong." });
     } finally {
       setIsUpdatingPassword(false);
     }
@@ -429,13 +336,15 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
   // Handle Address Update
   const handleUpdateAddress = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (addressBusy.current) return;
+    addressBusy.current = true;
     setIsUpdatingAddress(true);
     setAddressMsg(null);
 
     try {
       const res = await fetch("/api/user/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Profile-Owner": ownerId },
         body: JSON.stringify({
           address: {
             fullName: addressFullName,
@@ -445,18 +354,29 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
             district,
             zipCode,
           },
+          addressRevision: profile?.addresses?.[0]?.id && profile.addresses[0].version ? { id: profile.addresses[0].id, version: profile.addresses[0].version } : null,
         }),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (!isCurrent()) return;
+      if (res.ok && data.success && data.user?.addresses?.[0]) {
         setAddressMsg({ type: "success", text: "ঠিকানা সফলভাবে সংরক্ষণ করা হয়েছে! (Address saved successfully)" });
+        const confirmed = data.user.addresses[0];
+        setAddressFullName(confirmed.fullName);
+        setAddressPhone(confirmed.phone);
+        setStreet(confirmed.street);
+        setCity(confirmed.city);
+        setDistrict(confirmed.district);
+        setZipCode(confirmed.zipCode || "");
+        setProfile((current) => current ? { ...current, ...data.user } : current);
       } else {
         setAddressMsg({ type: "error", text: data.message || "Failed to save address." });
       }
-    } catch (err: any) {
-      setAddressMsg({ type: "error", text: err.message || "Something went wrong." });
+    } catch (err) {
+      setAddressMsg({ type: "error", text: err instanceof Error ? err.message : "Something went wrong." });
     } finally {
+      addressBusy.current = false;
       setIsUpdatingAddress(false);
     }
   };
@@ -470,7 +390,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
     );
   }
 
-  const role = profile?.role || initialRole || "USER";
+  if (!profile) return <div role="alert"><p>{profileMsg?.text || "Unable to load your saved profile."}</p><button type="button" onClick={() => setProfileLoadRevision((value) => value + 1)}>Retry profile load</button></div>;
+  const role = profile.role || initialRole || "USER";
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
@@ -479,9 +400,27 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
         type="file"
         ref={heroFileInputRef}
         onChange={handleFileChange}
-        accept="image/png, image/jpeg, image/jpg, image/webp"
+        accept="image/png,image/jpeg,image/webp"
+        disabled={isUploadingAvatar}
         className="hidden"
       />
+
+      <div className="rounded-xl border p-4 space-y-2" aria-live="polite">
+        {avatarEditor.message && <p role={avatarEditor.needsReload ? "alert" : "status"}>{avatarEditor.message}</p>}
+        {avatarEditor.draft && <p>Selected photo is not saved yet.</p>}
+        <div className="flex flex-wrap gap-3 text-sm">
+          <button type="button" disabled={isUploadingAvatar} onClick={() => void avatarEditor.reload()} className="underline disabled:opacity-50">Reload saved photo</button>
+          {avatarEditor.draft && <>
+            <button type="button" disabled={isUploadingAvatar || avatarEditor.needsReload || !avatarEditor.photo} onClick={() => void avatarEditor.retry()} className="underline disabled:opacity-50">Retry selected photo</button>
+            <button type="button" disabled={isUploadingAvatar} onClick={avatarEditor.discard} className="underline">Discard selected photo</button>
+          </>}
+          {avatarEditor.photo?.legacyAvatarAvailable && <>
+            <p>An older photo is stored privately. Restore a supported image or choose a new photo.</p>
+            <button type="button" disabled={isUploadingAvatar || avatarEditor.needsReload} onClick={() => void avatarEditor.restore()} className="underline disabled:opacity-50">Restore older photo</button>
+            <button type="button" disabled={isUploadingAvatar || avatarEditor.needsReload} onClick={handleRemovePhoto} className="underline disabled:opacity-50">Remove saved photo and older copy</button>
+          </>}
+        </div>
+      </div>
 
       {/* 1. Profile Hero Card */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden p-6 md:p-8">
@@ -494,7 +433,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               title="ছবি পরিবর্তন করতে ক্লিক করুন (Click to upload photo)"
             >
               {avatarPreview ? (
-                <img src={avatarPreview} alt={name || "User"} className="w-full h-full object-cover" />
+                <NextImage src={avatarPreview} alt={name || "User"} width={112} height={112} unoptimized className="w-full h-full object-cover" />
               ) : (
                 <span className="text-3xl sm:text-4xl font-black text-[#333e48]">
                   {(name || profile?.email || "U").charAt(0).toUpperCase()}
@@ -685,7 +624,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               {/* Image Preview Box */}
               <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#fed700] shadow-sm bg-white shrink-0 flex items-center justify-center relative">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                  <NextImage src={avatarPreview} alt="Preview" width={96} height={96} unoptimized className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-3xl font-black text-slate-400">
                     {(name || profile?.email || "U").charAt(0).toUpperCase()}
@@ -705,7 +644,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  accept="image/png, image/jpeg, image/jpg, image/webp"
+                  accept="image/png,image/jpeg,image/webp"
+        disabled={isUploadingAvatar}
                   className="hidden"
                 />
 
@@ -722,7 +662,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                     <span>{avatarPreview ? "নতুন ছবি নির্বাচন করুন" : "ছবি আপলোড করুন (Choose Photo)"}</span>
                   </button>
 
-                  {avatarPreview && (
+                  {(avatarEditor.photo?.avatar || avatarEditor.photo?.legacyAvatarAvailable) && (
                     <button
                       type="button"
                       onClick={handleRemovePhoto}
@@ -790,7 +730,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  ইমেইল পরিবর্তন করতে "ইমেইল পরিবর্তন" ট্যাবে যান (OTP ভেরিফিকেশন প্রযোজ্য)।
+                  ইমেইল পরিবর্তন করতে &quot;ইমেইল পরিবর্তন&quot; ট্যাবে যান (OTP ভেরিফিকেশন প্রযোজ্য)।
                 </p>
               </div>
 
@@ -869,10 +809,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           {!isOtpSent ? (
             <form onSubmit={handleRequestEmailOtp} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">নতুন ইমেইল এড্রেস (New Email Address) *</label>
+                <label htmlFor="email-change-target" className="text-xs font-bold text-[#333e48]">নতুন ইমেইল এড্রেস (New Email Address) *</label>
                 <input
+                  id="email-change-target"
                   type="email"
                   required
+                  disabled={isSendingOtp}
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="e.g. newemail@domain.com"
@@ -883,10 +825,15 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                 </p>
               </div>
 
+              <div className="space-y-1.5">
+                <label htmlFor="email-change-password" className="block text-xs font-bold">Current password</label>
+                <input id="email-change-password" type="password" autoComplete="current-password" required disabled={isSendingOtp} value={emailCurrentPassword} onChange={(event) => setEmailCurrentPassword(event.target.value)} className="w-full rounded-xl border border-gray-300 p-3 text-xs" />
+                <p className="text-xs text-slate-500">Confirm your current password before requesting or resending an email-change code.</p>
+              </div>
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={isSendingOtp || !newEmail}
+                  disabled={isSendingOtp || !newEmail || !emailCurrentPassword || resendTimer > 0}
                   className="px-6 py-2.5 bg-[#fed700] hover:bg-[#eec800] text-[#333e48] font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                 >
                   {isSendingOtp ? (
@@ -899,12 +846,13 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   )}
                 </button>
               </div>
+              {resendTimer > 0 && <p role="status" className="text-xs">Request another code after {resendTimer}s.</p>}
             </form>
           ) : (
             /* STEP 2: Enter OTP & Confirm */
             <form onSubmit={handleVerifyEmailOtp} className="space-y-5 bg-amber-50/50 border border-amber-200 rounded-2xl p-6">
               <div className="space-y-1">
-                <span className="text-xs font-bold text-amber-900">ভেরিফিকেশন কোড লিখুন (Enter OTP Code)</span>
+                <label htmlFor="email-change-code" className="text-xs font-bold text-amber-900">ভেরিফিকেশন কোড লিখুন (Enter OTP Code)</label>
                 <p className="text-xs text-amber-800">
                   <span className="font-bold">{newEmail}</span> ঠিকানায় পাঠানো ৬-সংখ্যার কোডটি প্রবেশ করান:
                 </p>
@@ -912,9 +860,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
               <div className="space-y-1.5">
                 <input
+                  id="email-change-code"
                   type="text"
                   required
                   maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   value={emailOtp}
                   onChange={(e) => setEmailOtp(e.target.value.replace(/[^0-9]/g, ""))}
                   placeholder="• • • • • •"
@@ -926,9 +877,11 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    disabled={isVerifyingOtp || isSendingOtp}
                     onClick={() => {
                       setIsOtpSent(false);
                       setEmailOtp("");
+                      setEmailCurrentPassword("");
                     }}
                     className="text-xs font-bold text-slate-500 hover:text-black underline cursor-pointer"
                   >
@@ -944,8 +897,8 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
                   ) : (
                     <button
                       type="button"
-                      onClick={handleRequestEmailOtp}
-                      disabled={isSendingOtp}
+                      onClick={() => { setIsOtpSent(false); setEmailOtp(""); setEmailCurrentPassword(""); }}
+                      disabled={isSendingOtp || isVerifyingOtp}
                       className="text-xs font-bold text-amber-800 hover:underline cursor-pointer"
                     >
                       কোড পুনরায় পাঠান
@@ -955,7 +908,7 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
                 <button
                   type="submit"
-                  disabled={isVerifyingOtp || emailOtp.length < 4}
+                  disabled={isVerifyingOtp || emailOtp.length !== 6}
                   className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                 >
                   {isVerifyingOtp ? (
@@ -999,8 +952,10 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-lg">
             {/* Current Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#333e48]">বর্তমান পাসওয়ার্ড (Current Password) *</label>
+              <label htmlFor="password-change-current" className="text-xs font-bold text-[#333e48]">বর্তমান পাসওয়ার্ড (Current Password) *</label>
               <input
+                id="password-change-current"
+                autoComplete="current-password"
                 type={showPassword ? "text" : "password"}
                 required
                 value={currentPassword}
@@ -1012,25 +967,32 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
 
             {/* New Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড (New Password) *</label>
+              <label htmlFor="password-change-new" className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড (New Password) *</label>
               <input
+                id="password-change-new"
+                autoComplete="new-password"
                 type={showPassword ? "text" : "password"}
                 required
-                minLength={6}
+                minLength={8}
+                maxLength={128}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="কমপক্ষে ৬ অক্ষর (Minimum 6 characters)"
+                placeholder="8–128 characters"
                 className="w-full px-4 py-2.5 text-xs text-[#333e48] border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#fed700] transition"
               />
+              <p className="text-xs text-slate-500">{PASSWORD_POLICY_MESSAGE}</p>
             </div>
 
             {/* Confirm New Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড নিশ্চিত করুন (Confirm New Password) *</label>
+              <label htmlFor="password-change-confirm" className="text-xs font-bold text-[#333e48]">নতুন পাসওয়ার্ড নিশ্চিত করুন (Confirm New Password) *</label>
               <input
+                id="password-change-confirm"
+                autoComplete="new-password"
                 type={showPassword ? "text" : "password"}
                 required
-                minLength={6}
+                minLength={8}
+                maxLength={128}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="পুনরায় নতুন পাসওয়ার্ড লিখুন"
@@ -1105,8 +1067,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
           <form onSubmit={handleUpdateAddress} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">প্রাপকের নাম (Recipient Name) *</label>
+                <label htmlFor="delivery-name" className="text-xs font-bold text-[#333e48]">প্রাপকের নাম (Recipient Name) *</label>
                 <input
+                  id="delivery-name"
+                  autoComplete="shipping name"
+                  maxLength={120}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={addressFullName}
@@ -1117,8 +1083,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">যোগাযোগের মোবাইল (Phone) *</label>
+                <label htmlFor="delivery-phone" className="text-xs font-bold text-[#333e48]">যোগাযোগের মোবাইল (Phone) *</label>
                 <input
+                  id="delivery-phone"
+                  autoComplete="shipping tel"
+                  maxLength={32}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={addressPhone}
@@ -1129,8 +1099,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="md:col-span-2 space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">রাস্তা / বাসা / এলাকা (Street Address) *</label>
+                <label htmlFor="delivery-street" className="text-xs font-bold text-[#333e48]">রাস্তা / বাসা / এলাকা (Street Address) *</label>
                 <input
+                  id="delivery-street"
+                  autoComplete="shipping street-address"
+                  maxLength={500}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={street}
@@ -1141,8 +1115,12 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">থানা / শহর (City / Thana) *</label>
+                <label htmlFor="delivery-city" className="text-xs font-bold text-[#333e48]">থানা / শহর (City / Thana) *</label>
                 <input
+                  id="delivery-city"
+                  autoComplete="shipping address-level2"
+                  maxLength={100}
+                  disabled={isUpdatingAddress}
                   type="text"
                   required
                   value={city}
@@ -1153,23 +1131,34 @@ export function ProfileManager({ initialRole }: ProfileManagerProps) {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">জেলা (District) *</label>
-                <select
+                <label htmlFor="delivery-district" className="text-xs font-bold text-[#333e48]">জেলা (District) *</label>
+                <input
+                  id="delivery-district"
+                  list="delivery-district-suggestions"
+                  autoComplete="shipping address-level1"
+                  required
+                  maxLength={100}
+                  disabled={isUpdatingAddress}
                   value={district}
                   onChange={(e) => setDistrict(e.target.value)}
                   className="w-full px-4 py-2.5 text-xs text-[#333e48] border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#fed700] transition bg-white"
-                >
+                />
+                <datalist id="delivery-district-suggestions">
                   {BD_DISTRICTS.map((dist) => (
                     <option key={dist} value={dist}>
                       {dist}
                     </option>
                   ))}
-                </select>
+                </datalist>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#333e48]">পোস্টাল কোড (Zip / Postal Code)</label>
+                <label htmlFor="delivery-postal" className="text-xs font-bold text-[#333e48]">পোস্টাল কোড (Zip / Postal Code)</label>
                 <input
+                  id="delivery-postal"
+                  autoComplete="shipping postal-code"
+                  maxLength={20}
+                  disabled={isUpdatingAddress}
                   type="text"
                   value={zipCode}
                   onChange={(e) => setZipCode(e.target.value)}

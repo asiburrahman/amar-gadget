@@ -1,10 +1,21 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormInput } from "@/components/shared/form-input";
 import { H1 } from "@/components/ui/typography";
 import { useAuth } from "@/hooks/use-auth";
+import { safeAuthUser } from "@/stores/auth-store";
+
+const subscribeHydration = () => () => undefined;
+
+function enterAuthenticatedAccount(role: string) {
+  const path = role === "ADMIN" ? "/admin" : role === "MEMBER" ? "/member/dashboard" : "/user/dashboard";
+  // Like logout, principal changes require a full document replacement to
+  // discard private client/router state. Only this closed same-origin map is used.
+  window.location.replace(new URL(path, window.location.origin).href);
+}
 
 function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -50,7 +61,11 @@ function EyeOffIcon({ className = "w-4 h-4" }: { className?: string }) {
 }
 
 export default function LoginPage() {
+  // Controlled inputs must not accept typing before React attaches handlers;
+  // otherwise the first value can disappear during hydration on a slow client.
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const { user } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -60,9 +75,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      if (user.role === "ADMIN") window.location.href = "/admin";
-      else if (user.role === "MEMBER") window.location.href = "/member/dashboard";
-      else window.location.href = "/user/dashboard";
+      enterAuthenticatedAccount(user.role);
     }
   }, [user]);
 
@@ -77,7 +90,7 @@ export default function LoginPage() {
     if (e && "preventDefault" in e) {
       e.preventDefault();
     }
-    if (isLoading) return;
+    if (!hydrated || isLoading) return;
     setIsLoading(true);
     setErrorMessage("");
     setSuccessMessage("");
@@ -94,9 +107,7 @@ export default function LoginPage() {
       if (!res.ok || !data.success) {
         if (data.requiresOtp && data.email) {
           setErrorMessage(data.message || "Your account is not verified yet. Redirecting to OTP verification...");
-          setTimeout(() => {
-            window.location.href = `/verify-otp?email=${encodeURIComponent(data.email)}`;
-          }, 1200);
+          router.replace(`/verify-otp?email=${encodeURIComponent(data.email)}`);
           return;
         }
 
@@ -106,21 +117,12 @@ export default function LoginPage() {
         return;
       }
 
+      const authenticated = safeAuthUser(data.user);
+      if (!authenticated) throw new Error("Invalid sign-in response.");
       setSuccessMessage("Authentication successful! Redirecting...");
-
-      // Redirect based on user role
-      setTimeout(() => {
-        const userRole = data.user?.role?.toUpperCase();
-        if (userRole === "ADMIN") {
-          window.location.href = "/admin";
-        } else if (userRole === "MEMBER") {
-          window.location.href = "/member/dashboard";
-        } else {
-          window.location.href = "/user/dashboard";
-        }
-      }, 500);
-    } catch (err) {
-      console.error("Login submission error:", err);
+      enterAuthenticatedAccount(authenticated.role);
+    } catch {
+      console.error("Login submission could not be completed.");
       setErrorMessage("Network error occurred. Please check your connection.");
       setIsLoading(false);
     }
@@ -169,7 +171,7 @@ export default function LoginPage() {
         )}
 
         {/* Secure Form Container (Pure AJAX, never appends credentials to URL) */}
-        <div className="space-y-4">
+        <fieldset disabled={!hydrated || isLoading} aria-label="Sign-in credentials" className="space-y-4">
           <FormInput
             label="Email Address"
             type="email"
@@ -229,11 +231,11 @@ export default function LoginPage() {
               "Sign In to Account"
             )}
           </button>
-        </div>
+        </fieldset>
 
         {/* Registration Redirection */}
         <div className="text-center text-xs text-muted-foreground border-t pt-4">
-          Don't have an account yet?{" "}
+          Don&apos;t have an account yet?{" "}
           <Link href="/register" className="text-primary hover:underline font-bold">
             Create an Account
           </Link>

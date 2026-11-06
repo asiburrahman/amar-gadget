@@ -1,32 +1,30 @@
 import React from "react";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { verifyJwtToken } from "@/lib/auth";
+import { getCurrentUserWithRole } from "@/lib/session";
 import { Button } from "@/components/ui/button";
-import { getAllOrdersForAdmin } from "@/server/actions/order/order-actions";
+import { readAdminOrders } from "@/lib/admin-orders-read";
+import { adminOrdersQuerySchema } from "@/lib/validations/collection-query";
+import { ReadAccessError, ReadPageError } from "@/lib/protected-read";
+import { serviceUnavailable } from "@/lib/observability";
 import AdminOrdersClient from "./admin-orders-client";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminOrdersPage() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-
-  let currentUserRole: string | null = null;
-  if (token) {
-    const payload = await verifyJwtToken(token);
-    if (payload?.role) {
-      currentUserRole = payload.role as string;
-    }
+export default async function AdminOrdersPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  let actor;
+  try { actor = await getCurrentUserWithRole(["ADMIN"]); } catch (error) { throw serviceUnavailable("admin.session", error); }
+  if (!actor) redirect("/login");
+  const parsed = adminOrdersQuerySchema.safeParse(searchParams ? await searchParams : {});
+  if (!parsed.success) return <main className="p-6 space-y-3"><h1>Platform Orders Management</h1><p role="alert">Check the order search, status and page number.</p><Link href="/admin/orders">Reset order filters</Link></main>;
+  let result;
+  try { result = await readAdminOrders(actor, parsed.data); }
+  catch (error) {
+    if (error instanceof ReadAccessError) redirect("/login");
+    if (error instanceof ReadPageError) return <main className="p-6 space-y-3"><h1>Platform Orders Management</h1><p role="alert">{error.message}</p><Link href={`/admin/orders?${new URLSearchParams({ q: parsed.data.q, status: parsed.data.status })}`}>Load the first order page</Link></main>;
+    throw error;
   }
-
-  // Ensure Admin role
-  if (currentUserRole !== "ADMIN") {
-    redirect("/login");
-  }
-
-  const { data: orders = [] } = await getAllOrdersForAdmin();
+  const { orders, ...pageData } = result;
 
   return (
     <div className="min-h-screen bg-background p-6 md:p-10 space-y-8">
@@ -66,7 +64,7 @@ export default async function AdminOrdersPage() {
       </div>
 
       {/* Admin Orders Management Table */}
-      <AdminOrdersClient initialOrders={orders as any} />
+      <AdminOrdersClient key={`${actor.id}:${result.page}:${result.q}:${result.status}`} ownerId={actor.id} initialOrders={orders} pageData={pageData} />
     </div>
   );
 }

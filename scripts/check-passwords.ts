@@ -1,48 +1,17 @@
+import "dotenv/config";
 import { prisma } from "../lib/prisma";
-import { verifyPassword } from "../lib/auth";
+import { passwordHashStatus } from "../lib/password";
 
 async function main() {
-  const users = await prisma.user.findMany({
-    select: {
-      email: true,
-      role: true,
-      password: true,
-      isVerified: true,
-    }
-  });
-
-  const testPasswords = [
-    "AdminPassword123!",
-    "SellerPassword123!",
-    "UserPassword123!",
-    "admin123",
-    "Admin123!",
-    "Password123!",
-    "12345678",
-    "asibur123",
-    "Asibur123!",
-    "asibur70",
-    "amar-gadget",
-    "AmarGadget123!",
-  ];
-
-  for (const u of users) {
-    console.log(`\nUser: ${u.email} (Role: ${u.role}, Verified: ${u.isVerified}, HasPassword: ${!!u.password})`);
-    if (u.password) {
-      console.log(`  Full stored password: "${u.password}"`);
-      let matched = false;
-      for (const p of testPasswords) {
-        if (verifyPassword(p, u.password)) {
-          console.log(`  ==> MATCHED PASSWORD: "${p}"`);
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) {
-        console.log(`  Password hash prefix: ${u.password.substring(0, 15)}...`);
-      }
-    }
+  const counts = { current: 0, legacy: 0, missing: 0, unsupported: 0 };
+  let cursor: string | undefined;
+  for (;;) {
+    const users = await prisma.user.findMany({ select: { id: true, password: true }, orderBy: { id: "asc" }, take: 250, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+    for (const user of users) counts[passwordHashStatus(user.password)]++;
+    if (users.length < 250) break;
+    cursor = users[users.length - 1].id;
   }
+  // Format inventory only: never guess credentials or print hashes/passwords.
+  console.log(JSON.stringify({ passwordFormats: counts }));
 }
-
-main().catch(console.error).finally(() => prisma.$disconnect());
+main().catch(() => { console.error("Password format inventory failed."); process.exitCode = 1; }).finally(() => prisma.$disconnect());

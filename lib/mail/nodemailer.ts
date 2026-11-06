@@ -1,11 +1,17 @@
 import nodemailer from "nodemailer";
+import { readMailTransportConfig } from "@/config/runtime";
 
-export const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER || "asibur311@gmail.com",
-    pass: process.env.SMTP_PASS || "vitn zfwp bhux nzor",
-  },
-});
+export class MailConfigurationError extends Error {
+  constructor() { super("Email delivery is not configured."); }
+}
+
+export function getMailTransport() {
+  let config: ReturnType<typeof readMailTransportConfig>;
+  try { config = readMailTransportConfig(); } catch { throw new MailConfigurationError(); }
+  const { SMTP_HOST: host, SMTP_USER: user, SMTP_PASS: pass, SMTP_PORT: port } = config;
+  return nodemailer.createTransport({
+    host, port, secure: port === 465, requireTLS: port !== 465,
+    auth: { user, pass },
+    connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 15_000,
+  });
+}

@@ -1,12 +1,29 @@
 "use server";
 
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { purchasedProduct } from "@/lib/purchase-product-label";
+import { ZodError } from "zod";
+import { calculateCheckoutQuote, CheckoutQuoteError } from "@/lib/checkout-quote";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/order";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getCurrentUser, getCurrentUserWithRole } from "@/lib/session";
+import { canonicalCheckoutRequest } from "@/lib/checkout-request";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { INITIAL_RESERVATION_MS } from "@/lib/checkout-reservations";
+import { prepareCartCheckout, consumeCartForOrder } from "@/lib/cart-checkout";
+import { CartError } from "@/lib/cart";
+import { FulfillmentError } from "@/lib/fulfillment-policy";
+import { invalidateFulfillmentPages } from "@/lib/fulfillment-request";
+import { customerShipmentSelect, customerShipment, readSellerFulfillments, mutateFulfillment, mutateWholeOrder } from "@/lib/fulfillments";
+import { allocateDiscount, cents } from "@/lib/refund-policy";
+import { readCustomerOrders } from "@/lib/customer-orders-read";
+import { readAdminOrders } from "@/lib/admin-orders-read";
+import { ReadAccessError, ReadPageError } from "@/lib/protected-read";
+import { serviceUnavailable } from "@/lib/observability";
+import { withOrderTrackingRetry } from "@/lib/order-tracking-code";
 
 function hashCheckoutToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -19,13 +36,55 @@ function matchesCheckoutToken(token: string, tokenHash: string | null) {
   return candidate.length === stored.length && timingSafeEqual(candidate, stored);
 }
 
+class CheckoutError extends Error {
+  constructor(message: string, readonly code: string) { super(message); }
+}
+
+const checkoutResultSelect = {
+  id: true, trackingNumber: true, status: true, paymentStatus: true, reservationExpiresAt: true,
+} satisfies Prisma.OrderSelect;
+
 export async function createOrder(input: CheckoutInput) {
   try {
     const validated = checkoutSchema.parse(input);
     const currentUser = await getCurrentUser();
-    const checkoutToken = randomBytes(32).toString("hex");
+    const ip = getClientIp(await headers());
+    const ipLimit = await rateLimit(ip, 30, 60, "checkout-create-ip");
+    const actor = currentUser?.id ?? validated.phone.replace(/\D/g, "");
+    const actorLimit = ipLimit.success && await rateLimit(
+      createHash("sha256").update(actor).digest("hex"), 10, 60,
+      currentUser ? "checkout-create-account" : "checkout-create-contact",
+    );
+    if (!ipLimit.success || !actorLimit || !actorLimit.success) {
+      return { success: false as const, code: "RATE_LIMITED", error: "Too many checkout attempts. Please wait a minute and try again." };
+    }
+    const checkoutToken = validated.checkoutToken;
+    const tokenHash = hashCheckoutToken(checkoutToken);
+    const requestHash = createHash("sha256")
+      .update(canonicalCheckoutRequest(validated, currentUser?.id ?? null)).digest("hex");
 
-    const order = await prisma.$transaction(async (tx) => {
+    const order = await withOrderTrackingRetry((trackingNumber) => prisma.$transaction(async (tx) => {
+      // Serialize the same attempt across requests/processes before any guest
+      // or stock writes. The database releases this lock on commit/rollback.
+      // Only a constant hash is sent as a parameter; no token/PII enters SQL.
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${tokenHash}, 0))`;
+      const existing = await tx.order.findUnique({
+        where: { checkoutTokenHash: tokenHash },
+        select: { ...checkoutResultSelect, checkoutRequestHash: true },
+      });
+      if (existing) {
+        if (existing.checkoutRequestHash !== requestHash) {
+          throw new CheckoutError("This checkout attempt belongs to different details. Start a new checkout.", "CHECKOUT_CONFLICT");
+        }
+        return existing;
+      }
+      const cartSnapshot = await prepareCartCheckout(tx, validated, currentUser);
+      // Serialize redemption with administrative rule changes through commit.
+      if (validated.couponCode) await tx.$queryRaw`SELECT id FROM "Coupon" WHERE code=${validated.couponCode} FOR SHARE`;
+      const quote = await calculateCheckoutQuote(tx, validated);
+      if (validated.quoteFingerprint && validated.quoteFingerprint !== quote.fingerprint) {
+        throw new CheckoutError("Prices or discounts changed. Review the refreshed total before placing your order.", "QUOTE_CHANGED");
+      }
       const user = currentUser
         ? await tx.user.findUnique({ where: { id: currentUser.id } })
         : await tx.user.create({
@@ -38,154 +97,120 @@ export async function createOrder(input: CheckoutInput) {
             },
           });
 
-      if (!user) throw new Error("Your account is no longer available. Please sign in again.");
+      if (!user) throw new CheckoutError("Your account is no longer available. Please sign in again.", "ACCOUNT_UNAVAILABLE");
 
-      let subtotal = new Prisma.Decimal(0);
+      const allocations = allocateDiscount(quote.items.map((item) => ({ id: item.productId, grossCents: cents(item.lineTotal) })), cents(quote.discountAmount));
       const orderItems = [];
-
-      for (const item of validated.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-          include: { seller: { select: { sellerStatus: true } } },
-        });
-
-        if (
-          !product ||
-          product.status !== "APPROVED" ||
-          product.seller.sellerStatus !== "APPROVED"
-        ) {
-          throw new Error("One or more selected products are no longer available.");
-        }
-
-        const stockUpdate = await tx.product.updateMany({
-          where: { id: product.id, stock: { gte: item.quantity } },
+      for (const item of quote.items) {
+        const updated = await tx.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity }, status: "APPROVED", seller: { sellerStatus: "APPROVED" } },
           data: { stock: { decrement: item.quantity } },
         });
-        if (stockUpdate.count !== 1) {
-          throw new Error(`Insufficient stock for ${product.name}.`);
-        }
-
-        const unitPrice = product.discountPrice ?? product.price;
-        subtotal = subtotal.add(unitPrice.mul(item.quantity));
-        orderItems.push({
-          productId: product.id,
-          quantity: item.quantity,
-          price: unitPrice,
-        });
+        if (updated.count !== 1) throw new CheckoutError("A product is no longer available in the requested quantity.", "OUT_OF_STOCK");
+        orderItems.push({ productId: item.productId, quantity: item.quantity, price: new Prisma.Decimal(item.unitPrice), netCents: BigInt(allocations.find((line) => line.id === item.productId)!.netCents) });
       }
+      const total = new Prisma.Decimal(quote.total);
 
-      let total = subtotal;
-      if (validated.couponCode) {
-        const coupon = await tx.coupon.findUnique({
-          where: { code: validated.couponCode.trim().toUpperCase() },
-        });
-        const couponIsValid =
-          coupon?.isActive &&
-          (!coupon.expiresAt || coupon.expiresAt >= new Date()) &&
-          (!coupon.minSpend || subtotal.gte(coupon.minSpend));
-
-        if (!couponIsValid || !coupon) {
-          throw new Error("The coupon code is invalid, expired, or does not meet the minimum spend.");
-        }
-
-        if (coupon.discount.lte(0)) {
-          throw new Error("The coupon code is invalid.");
-        }
-        if (coupon.isPercentage) {
-          const percentage = Math.min(100, Math.max(0, Number(coupon.discount)));
-          total = total.mul(100 - percentage).div(100);
-        } else {
-          total = Prisma.Decimal.max(0, total.sub(Prisma.Decimal.max(0, coupon.discount)));
-        }
-      }
-
-      const shippingFee = subtotal.gt(0) && subtotal.lte(50000) ? 150 : 0;
-      total = total.add(shippingFee);
-      if (validated.paymentMethod === "STRIPE" && total.lt(1)) {
-        throw new Error("Card checkout requires an order total of at least BDT 1.");
-      }
-
-      return tx.order.create({
+      const created = await tx.order.create({
         data: {
           userId: user.id,
           total,
+          subtotalCents: BigInt(cents(quote.subtotal)), discountCents: BigInt(cents(quote.discountAmount)), shippingCents: BigInt(cents(quote.shippingFee)),
+          pricingEvidence: "CHECKOUT_QUOTE_V1", pricingReconciledAt: new Date(),
           status: validated.paymentMethod === "COD" ? "PROCESSING" : "PENDING",
           paymentMethod: validated.paymentMethod,
           paymentStatus: "UNPAID",
           shippingAddress: `${validated.fullName} (${validated.phone}), ${validated.street}, ${validated.city}, ${validated.district} ${validated.zipCode || ""}`,
           shippingPhone: validated.phone,
-          trackingNumber: `AG-${randomBytes(4).toString("hex").toUpperCase()}`,
+          trackingNumber,
           couponCode: validated.couponCode?.trim().toUpperCase() || null,
-          checkoutTokenHash: hashCheckoutToken(checkoutToken),
+          checkoutTokenHash: tokenHash,
+          checkoutRequestHash: requestHash,
+          ...(cartSnapshot ? { cartSnapshot } : {}),
+          ...(validated.paymentMethod === "STRIPE" ? {
+            reservationExpiresAt: new Date(Date.now() + INITIAL_RESERVATION_MS),
+            reservationNextCheckAt: new Date(Date.now() + INITIAL_RESERVATION_MS),
+          } : {}),
           items: { create: orderItems },
         },
-        select: { id: true, trackingNumber: true },
+        select: checkoutResultSelect,
       });
-    });
+      if (cartSnapshot && validated.paymentMethod === "COD") await consumeCartForOrder(tx, created.id);
+      return created;
+    }));
 
-    revalidatePath("/user/orders");
-    revalidatePath("/admin/orders");
-    (await cookies()).set("order_access_token", checkoutToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24,
-      path: `/order-success/${order.id}`,
-    });
+    if (order.status === "CANCELLED" || order.paymentStatus === "FAILED") {
+      return { success: false as const, code: "CHECKOUT_CLOSED", error: "This checkout is closed. Start a new checkout to place another order." };
+    }
+
+    // The transaction is already committed. A cache invalidation or response
+    // cookie failure must not turn a saved order into a false creation error.
+    try { revalidatePath("/user/orders"); revalidatePath("/admin/orders"); }
+    catch { console.warn("Order saved; order-list cache refresh deferred."); }
+    let receiptRecoveryRequired = false;
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set("order_access_token", checkoutToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24,
+        path: `/order-success/${order.id}`,
+      });
+      cookieStore.set("checkout_resume_token", checkoutToken, {
+        httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax",
+        maxAge: 60 * 60 * 24, path: `/api/checkout/${order.id}`,
+      });
+    } catch { receiptRecoveryRequired = true; console.warn("Order saved; original checkout attempt is required to recover receipt access."); }
     return {
       success: true as const,
       orderId: order.id,
       trackingNumber: order.trackingNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      ...(receiptRecoveryRequired ? { receiptRecoveryRequired: true } : {}),
       ...(validated.paymentMethod === "STRIPE" ? { checkoutToken } : {}),
     };
   } catch (error) {
-    console.error("Error creating order:", error);
+    if (error instanceof CartError) return { success: false as const, code: error.code, error: error.message, ...(error.resumeOrderId ? { resumeOrderId: error.resumeOrderId } : {}) };
+    if (error instanceof ZodError) {
+      return { success: false as const, code: "INVALID_CHECKOUT", error: "Check your cart and shipping details, then try again." };
+    }
+    if (error instanceof CheckoutError || error instanceof CheckoutQuoteError) {
+      return { success: false as const, code: error.code, error: error.message };
+    }
+    // Never return database/provider exception details to a public action.
+    const incident = serviceUnavailable("checkout.create", error).incident;
     return {
       success: false as const,
-      error: error instanceof Error ? error.message : "Failed to process order",
+      code: "INTERNAL_ERROR",
+      error: "Unable to process checkout right now. Please try again.",
+      reference: incident.reference,
     };
   }
 }
 
-export async function getUserOrders() {
-  const user = await getCurrentUser();
-  if (!user) return { success: false, error: "Unauthorized", data: [] };
-
+export async function getUserOrders(query: unknown = {}) {
   try {
-    const orders = await prisma.order.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        total: true,
-        status: true,
-        paymentMethod: true,
-        paymentStatus: true,
-        shippingAddress: true,
-        trackingNumber: true,
-        createdAt: true,
-        items: {
-          select: {
-            id: true,
-            quantity: true,
-            price: true,
-            product: { select: { id: true, name: true, imageUrl: true, slug: true } },
-          },
-        },
-      },
-    });
-
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Unauthorized", data: [] };
+    const { orders, counts, total, page, pageSize, totalPages } = await readCustomerOrders(user, query);
     return {
       success: true,
+      pagination: { total, page, pageSize, totalPages }, counts,
       data: orders.map((order) => ({
-        ...order,
+        id: order.id, status: order.status, paymentMethod: order.paymentMethod, paymentStatus: order.paymentStatus,
+        shippingAddress: order.shippingAddress, trackingNumber: order.trackingNumber, createdAt: order.createdAt,
         total: Number(order.total),
-        items: order.items.map((item) => ({ ...item, price: Number(item.price) })),
+        items: order.items.map((item) => ({ id: item.id, quantity: item.quantity, productName: item.productName, productSlug: item.productSlug, productSnapshotSource: item.productSnapshotSource, price: Number(item.price), product: purchasedProduct(item) })),
       })),
     };
   } catch (error) {
-    console.error("Error fetching customer orders:", error);
-    return { success: false, error: "Failed to fetch orders", data: [] };
+    if (error instanceof ReadAccessError) return { success: false, error: "Unauthorized", data: [] };
+    if (error instanceof ZodError) return { success: false, error: "Invalid order search, status or page.", data: [] };
+    if (error instanceof ReadPageError) return { success: false, error: error.message, data: [] };
+    const unavailable = serviceUnavailable("customer.orders.action", error);
+    return { success: false, error: "Order history is temporarily unavailable. Try again shortly.", reference: unavailable.digest, data: [] };
   }
 }
 
@@ -200,14 +225,19 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         status: true,
         paymentMethod: true,
         paymentStatus: true,
+        refundState: true, refundedCents: true, disputeStatus: true, disputeAmountCents: true, financialReviewReason: true,
         shippingAddress: true,
         trackingNumber: true,
         createdAt: true,
         checkoutTokenHash: true,
+        reservationReviewReason: true,
+        cartSnapshot: true,
+        fulfillments: { where: { items: { some: {} } }, orderBy: { id: "asc" }, select: customerShipmentSelect },
         items: {
           select: {
             id: true,
             quantity: true,
+            productName: true, productSlug: true, productSnapshotSource: true,
             price: true,
             product: { select: { id: true, name: true, imageUrl: true, slug: true } },
           },
@@ -223,7 +253,7 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
     const authorized =
       currentUser?.role.toUpperCase() === "ADMIN" ||
       currentUser?.id === order.userId ||
-      (accessToken !== undefined &&
+      (!currentUser && accessToken !== undefined &&
         matchesCheckoutToken(accessToken, order.checkoutTokenHash));
 
     if (!authorized) return { success: false, error: "Order not found", data: null };
@@ -236,259 +266,65 @@ export async function getOrderById(orderId: string, checkoutToken?: string) {
         status: order.status,
         paymentMethod: order.paymentMethod,
         paymentStatus: order.paymentStatus,
+        refundState: order.refundState, refundedAmount: Number(order.refundedCents) / 100, disputeStatus: order.disputeStatus, disputeLossAmount: Number(order.disputeAmountCents) / 100,
         shippingAddress: order.shippingAddress,
         trackingNumber: order.trackingNumber,
         createdAt: order.createdAt,
+        canViewOrders: currentUser?.id === order.userId,
+        needsReview: Boolean(order.reservationReviewReason || order.financialReviewReason || ["ACTIVE", "LOST"].includes(order.disputeStatus)),
+        cartSnapshot: order.cartSnapshot,
+        fulfillments: order.fulfillments.map(customerShipment),
         items: order.items.map((item) => ({
           ...item,
+          product: purchasedProduct(item),
           price: Number(item.price),
         })),
       },
     };
   } catch (error) {
     console.error("Error fetching order:", error);
-    return { success: false, error: "Error fetching order", data: null };
+    return { success: false, error: "Error fetching order", code: "ORDER_UNAVAILABLE", data: null };
   }
 }
 
-export async function getSellerOrders() {
+export async function getSellerOrders(query: unknown = {}) {
   const seller = await getCurrentUserWithRole(["MEMBER"]);
-  if (!seller || seller.sellerStatus !== "APPROVED") {
-    return { success: false, error: "Unauthorized", data: [] };
-  }
+  if (!seller || seller.sellerStatus !== "APPROVED") return { success: false as const, error: "Unauthorized", data: [] };
+  try { const result = await readSellerFulfillments(seller, query); return { success: true as const, data: result.shipments, page: result.page, total: result.total, totalPages: result.totalPages }; }
+  catch { return { success: false as const, error: "Unable to load your shipments.", data: [] }; }
+}
 
+export async function updateOrderStatusBySeller(fulfillmentId: string, newStatus: string, context?: { ownerId: string; version: number; carrier: string; trackingNumber: string }) {
+  const actor = await getCurrentUserWithRole(["MEMBER"]);
+  if (!actor || actor.sellerStatus !== "APPROVED") return { success: false as const, error: "Unauthorized" };
+  if (newStatus !== "SHIPPED" || !context || context.ownerId !== actor.id) return { success: false as const, error: "Use your shipment's current revision and carrier details to ship it." };
   try {
-    const orderItems = await prisma.orderItem.findMany({
-      where: { product: { sellerId: seller.id } },
-      orderBy: { createdAt: "desc" },
-      include: {
-        order: {
-          include: {
-            user: { select: { name: true, email: true, phone: true } },
-          },
-        },
-        product: { select: { id: true, name: true, imageUrl: true, price: true } },
-      },
-    });
+    const saved = await mutateFulfillment(actor, { fulfillmentId, action: "ship", version: context.version, carrier: context.carrier, trackingNumber: context.trackingNumber });
+    invalidateFulfillmentPages(saved.shipment.orderId); return { success: true as const, data: saved.shipment };
+  } catch (error) { return { success: false as const, error: error instanceof FulfillmentError ? error.message : "Unable to confirm shipment. Reload before retrying." }; }
+}
 
-    const data = orderItems.map((item) => ({
-      id: item.id,
-      orderId: item.orderId,
-      productId: item.productId,
-      quantity: item.quantity,
-      price: Number(item.price),
-      createdAt: item.createdAt,
-      product: { ...item.product, price: Number(item.product.price) },
-      order: {
-        id: item.order.id,
-        userId: item.order.userId,
-        total: Number(item.order.total),
-        status: item.order.status,
-        paymentMethod: item.order.paymentMethod,
-        paymentStatus: item.order.paymentStatus,
-        shippingAddress: item.order.shippingAddress,
-        trackingNumber: item.order.trackingNumber,
-        createdAt: item.order.createdAt,
-        user: item.order.user,
-      },
-    }));
-
-    return { success: true, data };
+export async function getAllOrdersForAdmin(query: unknown = {}) {
+  try {
+    const actor = await getCurrentUserWithRole(["ADMIN"]);
+    if (!actor) return { success: false, error: "Unauthorized", data: [] };
+    const { orders, ...pageData } = await readAdminOrders(actor, query);
+    return { success: true, data: orders, pageData };
   } catch (error) {
-    console.error("Error fetching seller orders:", error);
-    return { success: false, error: "Failed to fetch vendor orders", data: [] };
+    if (error instanceof ReadAccessError) return { success: false, error: "Unauthorized", data: [] };
+    if (error instanceof ZodError) return { success: false, error: "Invalid order search, status or page.", data: [] };
+    if (error instanceof ReadPageError) return { success: false, error: error.message, data: [] };
+    const unavailable = serviceUnavailable("admin.orders.action", error);
+    return { success: false, error: "Platform orders are temporarily unavailable. Try again shortly.", reference: unavailable.digest, data: [] };
   }
 }
 
-export async function updateOrderStatusBySeller(orderId: string, newStatus: string) {
-  const seller = await getCurrentUserWithRole(["MEMBER"]);
-  if (!seller || seller.sellerStatus !== "APPROVED") {
-    return { success: false, error: "Unauthorized" };
-  }
-  if (newStatus !== "SHIPPED") {
-    return { success: false, error: "Invalid order status." };
-  }
-
+export async function updateOrderStatusByAdmin(orderId: string, newStatus: string, context?: { ownerId: string; version: number }) {
+  const actor = await getCurrentUserWithRole(["ADMIN"]);
+  if (!actor) return { success: false as const, error: "Unauthorized" };
+  if (!context || context.ownerId !== actor.id || !["PROCESSING", "CANCELLED"].includes(newStatus)) return { success: false as const, error: "Use the current order revision to confirm or cancel an order. Ship and deliver each vendor shipment separately." };
   try {
-    const orderItem = await prisma.orderItem.findFirst({
-      where: { orderId, product: { sellerId: seller.id } },
-      include: {
-        order: {
-          select: { paymentMethod: true, paymentStatus: true, status: true },
-        },
-      },
-    });
-    if (!orderItem) return { success: false, error: "Order not found or permission denied." };
-    if (orderItem.order.status !== "PROCESSING") {
-      return { success: false, error: "Only processing orders can be shipped." };
-    }
-    if (orderItem.order.paymentMethod === "STRIPE" && orderItem.order.paymentStatus !== "PAID") {
-      return { success: false, error: "Card payment must be confirmed before shipping." };
-    }
-
-    const [orderItemCount, sellerItemCount] = await Promise.all([
-      prisma.orderItem.count({ where: { orderId } }),
-      prisma.orderItem.count({ where: { orderId, product: { sellerId: seller.id } } }),
-    ]);
-    if (orderItemCount !== sellerItemCount) {
-      return { success: false, error: "A multi-seller order must be shipped by an administrator." };
-    }
-
-    const updated = await prisma.order.update({
-      where: { id: orderId },
-      data: { status: newStatus },
-      select: { id: true, status: true, paymentStatus: true },
-    });
-
-    revalidatePath("/member/dashboard");
-    revalidatePath("/admin/orders");
-    revalidatePath("/user/orders");
-    revalidatePath("/user/dashboard");
-    return { success: true, data: updated };
-  } catch (error) {
-    console.error("Error updating order status by seller:", error);
-    return { success: false, error: "Failed to update order status." };
-  }
-}
-
-export async function getAllOrdersForAdmin() {
-  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
-    return { success: false, error: "Unauthorized", data: [] };
-  }
-
-  try {
-    const orders = await prisma.order.findMany({
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        total: true,
-        status: true,
-        paymentMethod: true,
-        paymentStatus: true,
-        shippingAddress: true,
-        trackingNumber: true,
-        createdAt: true,
-        user: { select: { id: true, name: true, email: true, phone: true } },
-        items: {
-          select: {
-            id: true,
-            quantity: true,
-            price: true,
-            product: { select: { id: true, name: true, imageUrl: true, price: true } },
-          },
-        },
-      },
-    });
-
-    return {
-      success: true,
-      data: orders.map((order) => ({
-        ...order,
-        total: Number(order.total),
-        items: order.items.map((item) => ({
-          ...item,
-          price: Number(item.price),
-          product: { ...item.product, price: Number(item.product.price) },
-        })),
-      })),
-    };
-  } catch (error) {
-    console.error("Error fetching admin orders:", error);
-    return { success: false, error: "Failed to fetch orders", data: [] };
-  }
-}
-
-export async function updateOrderStatusByAdmin(orderId: string, newStatus: string) {
-  if (!(await getCurrentUserWithRole(["ADMIN"]))) {
-    return { success: false, error: "Unauthorized" };
-  }
-  if (!["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"].includes(newStatus)) {
-    return { success: false, error: "Invalid order status." };
-  }
-
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        status: true,
-        paymentMethod: true,
-        paymentStatus: true,
-        items: { select: { productId: true, quantity: true } },
-      },
-    });
-    if (!order) return { success: false, error: "Order not found." };
-    if (newStatus === "CANCELLED" && order.status === "CANCELLED") {
-      return { success: false, error: "Order is already cancelled." };
-    }
-    const allowedTransitions: Record<string, string[]> = {
-      PENDING: ["PROCESSING", "CANCELLED"],
-      PROCESSING: ["SHIPPED", "DELIVERED", "CANCELLED"],
-      SHIPPED: ["DELIVERED"],
-      DELIVERED: [],
-      CANCELLED: [],
-    };
-    if (!allowedTransitions[order.status]?.includes(newStatus)) {
-      return { success: false, error: "That order status transition is not allowed." };
-    }
-    if (
-      newStatus === "PROCESSING" &&
-      order.paymentMethod === "STRIPE" &&
-      order.paymentStatus !== "PAID"
-    ) {
-      return { success: false, error: "Card payment must be confirmed before processing." };
-    }
-    if (newStatus === "CANCELLED" && order.paymentStatus === "PAID") {
-      return { success: false, error: "Paid orders must be refunded before they can be cancelled." };
-    }
-    if (
-      newStatus === "DELIVERED" &&
-      order.paymentMethod === "STRIPE" &&
-      order.paymentStatus !== "PAID"
-    ) {
-      return { success: false, error: "Card payment must be confirmed before delivery." };
-    }
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const result = await tx.order.updateMany({
-        where: {
-          id: orderId,
-          status: order.status,
-          paymentStatus: order.paymentStatus,
-        },
-        data: {
-          status: newStatus,
-          ...(newStatus === "DELIVERED" && order.paymentMethod === "COD"
-            ? { paymentStatus: "PAID" }
-            : {}),
-          ...(newStatus === "CANCELLED" && order.paymentMethod === "STRIPE"
-            ? { paymentStatus: "FAILED" }
-            : {}),
-        },
-      });
-      if (result.count !== 1) throw new Error("The order changed. Refresh and try again.");
-
-      if (newStatus === "CANCELLED") {
-        for (const item of order.items) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { increment: item.quantity } },
-          });
-        }
-      }
-
-      return tx.order.findUniqueOrThrow({
-        where: { id: orderId },
-        select: { id: true, status: true, paymentStatus: true },
-      });
-    });
-
-    revalidatePath("/admin/orders");
-    revalidatePath("/user/orders");
-    revalidatePath("/user/dashboard");
-    revalidatePath("/member/dashboard");
-    return { success: true, data: updated };
-  } catch (error) {
-    console.error("Error updating order status by admin:", error);
-    return { success: false, error: "Failed to update order status." };
-  }
+    const data = await mutateWholeOrder(actor, { orderId, ...context, action: newStatus === "CANCELLED" ? "cancel" : "confirm" });
+    invalidateFulfillmentPages(orderId); return { success: true as const, data };
+  } catch (error) { return { success: false as const, error: error instanceof FulfillmentError ? error.message : "Unable to confirm this order change. Reload before retrying." }; }
 }

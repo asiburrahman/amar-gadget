@@ -1,12 +1,12 @@
 import React from "react";
 
-interface ButtonProps {
+interface ButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "size"> {
   variant?: "default" | "secondary" | "outline" | "ghost" | "destructive" | "link";
   size?: "sm" | "md" | "lg";
   children: React.ReactNode;
   disabled?: boolean;
   loading?: boolean;
-  onClick?: (e?: any) => void;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
   className?: string;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
@@ -24,6 +24,7 @@ export const Button = ({
   icon,
   iconPosition = "left",
   type = "button",
+  ...nativeProps
 }: ButtonProps) => {
   // Variant configurations
   type VariantConfig = Record<NonNullable<ButtonProps["variant"]>, { bg: string; text: string; border: string; hoverBg: string; hoverText: string }>;
@@ -32,43 +33,43 @@ export const Button = ({
       bg: "bg-primary",
       text: "text-primary-foreground",
       border: "border-transparent",
-      hoverBg: "bg-primary/90",
-      hoverText: "text-primary-foreground",
+      hoverBg: "hover:bg-primary/90",
+      hoverText: "hover:text-primary-foreground",
     },
     secondary: {
       bg: "bg-secondary",
       text: "text-secondary-foreground",
       border: "border-transparent",
-      hoverBg: "bg-secondary/90",
-      hoverText: "text-secondary-foreground",
+      hoverBg: "hover:bg-secondary/90",
+      hoverText: "hover:text-secondary-foreground",
     },
     outline: {
       bg: "bg-transparent",
       text: "text-primary",
       border: "border-border",
-      hoverBg: "bg-muted",
-      hoverText: "text-primary",
+      hoverBg: "hover:bg-muted",
+      hoverText: "hover:text-primary",
     },
     ghost: {
       bg: "bg-transparent",
       text: "text-muted-foreground",
       border: "border-transparent",
-      hoverBg: "bg-muted",
-      hoverText: "text-muted-foreground",
+      hoverBg: "hover:bg-muted",
+      hoverText: "hover:text-muted-foreground",
     },
     destructive: {
       bg: "bg-destructive",
       text: "text-destructive-foreground",
       border: "border-transparent",
-      hoverBg: "bg-destructive/90",
-      hoverText: "text-destructive-foreground",
+      hoverBg: "hover:bg-destructive/90",
+      hoverText: "hover:text-destructive-foreground",
     },
     link: {
       bg: "bg-transparent",
       text: "text-primary underline-offset-4 hover:underline",
       border: "border-transparent",
-      hoverBg: "bg-transparent",
-      hoverText: "text-primary underline-offset-4 hover:underline",
+      hoverBg: "hover:bg-transparent",
+      hoverText: "hover:text-primary underline-offset-4 hover:underline",
     },
   };
 
@@ -100,13 +101,14 @@ export const Button = ({
 
   return (
     <button
+      {...nativeProps}
       type={type}
       disabled={disabled || loading}
       onClick={!disabled && !loading ? onClick : undefined}
       className={`${config.bg} ${config.text} ${config.border}
         ${sizeProps.height} ${sizeProps.px} ${sizeProps.text}
         font-medium rounded-lg
-        hover:${config.hoverBg} hover:${config.hoverText}
+        ${config.hoverBg} ${config.hoverText}
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
         disabled:opacity-50 disabled:cursor-not-allowed
         transition-all duration-200

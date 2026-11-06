@@ -1,18 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { accountAvatar } from "@/lib/avatar-policy";
 import { loginSchema } from "@/lib/validations/auth";
-import { verifyPassword, signJwtToken } from "@/lib/auth";
+import { verifyPassword, hashPassword, passwordNeedsRehash, PasswordWorkloadBusy, signJwtToken } from "@/lib/auth";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
-import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { otpDeliveryFailure } from "@/lib/otp-response";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
 
 export async function POST(req: Request) {
   try {
-    const limit = await rateLimit(getClientIp(req.headers), 10, 60, "auth-login");
-    if (!limit.success) {
-      return NextResponse.json({ success: false, message: "Too many sign-in attempts. Try again shortly." }, { status: 429 });
-    }
+    await limitAccountIp(req, "auth-login");
 
-    const body = await req.json();
+    const body = await readAccountJson(req);
     const validated = loginSchema.safeParse(body);
 
     if (!validated.success) {
@@ -27,13 +26,14 @@ export async function POST(req: Request) {
     }
 
     const { email, password } = validated.data;
+    await limitAccountIdentity(email, "auth-login", 10, 60);
 
     // 1. Retrieve user from database
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
 
-    if (!user) {
+    if (!(await verifyPassword(password, user?.password)) || !user?.password) {
       return NextResponse.json(
         {
           success: false,
@@ -43,26 +43,34 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Verify password (if stored password exists)
-    if (!user.password || !verifyPassword(password, user.password)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid email address or password.",
-        },
-        { status: 401 }
-      );
+    if (passwordNeedsRehash(user.password)) {
+      const upgraded = await hashPassword(password);
+      const saved = await prisma.user.updateMany({ where: { id: user.id, password: user.password, sessionVersion: user.sessionVersion }, data: { password: upgraded } });
+      // Never overwrite a concurrent password reset. Another successful login
+      // may already have upgraded this same password, so recheck that case.
+      if (saved.count !== 1) {
+        const current = await prisma.user.findUnique({ where: { id: user.id } });
+        if (!current || !(await verifyPassword(password, current.password))) return NextResponse.json({ success: false, message: "Invalid email address or password." }, { status: 401 });
+        user = current;
+      } else {
+        const current = await prisma.user.findUnique({ where: { id: user.id } });
+        if (!current || current.password !== upgraded) return NextResponse.json({ success: false, message: "Your credentials changed. Sign in again." }, { status: 401 });
+        user = current;
+      }
     }
+
+    // Reject changes while password work was in flight. A later change still
+    // revokes this token through its captured version at every protected read.
+    const latest = await prisma.user.findUnique({ where: { id: user.id } });
+    if (!latest || latest.password !== user.password || latest.sessionVersion !== user.sessionVersion) return NextResponse.json({ success: false, message: "Your credentials changed. Sign in again." }, { status: 401 });
+    user = latest;
 
     // 2.5 Check if user is verified
     if (!user.isVerified) {
       // Send fresh OTP to the unverified user
-      const otpResult = await sendOtpEmail(user.email);
+      const otpResult = await sendOtpEmail({ userId: user.id, email: user.email, purpose: "REGISTRATION" });
       if (!otpResult.success) {
-        return NextResponse.json(
-          { success: false, message: "Unable to send a verification code right now." },
-          { status: 503 }
-        );
+        return otpDeliveryFailure(otpResult);
       }
       return NextResponse.json(
         {
@@ -81,6 +89,7 @@ export async function POST(req: Request) {
       email: user.email,
       name: user.name,
       role: user.role,
+      sessionVersion: user.sessionVersion,
     });
 
     // 4. Attach HTTP-only auth_token cookie
@@ -92,6 +101,11 @@ export async function POST(req: Request) {
         name: user.name,
         email: user.email,
         role: user.role,
+        avatar: accountAvatar(user),
+        avatarVersion: user.avatarVersion,
+        phone: user.phone,
+        isVerified: user.isVerified,
+        sellerStatus: user.sellerStatus,
       },
     });
 
@@ -104,14 +118,8 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (error: any) {
-    console.error("Login error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Internal server error during login.",
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    if (error instanceof PasswordWorkloadBusy) return NextResponse.json({ success: false, message: error.message }, { status: 503, headers: { "Retry-After": "5" } });
+    return accountErrorResponse(error);
   }
 }

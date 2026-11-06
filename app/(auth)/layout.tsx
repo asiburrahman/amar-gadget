@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Navbar } from "@/components/navbar/navbar";
-import "@/config/env"; // Enforce environment validation on bootstrap
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
   title: "Amar Gadget | Authentication",
+  robots: { index: false, follow: false },
   description: "Sign in to your Amar Gadget account",
 };
 

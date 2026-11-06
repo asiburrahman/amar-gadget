@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
-
-export async function GET() {
-  return NextResponse.json(
-    { success: false, message: "Notifications are not implemented." },
-    { status: 501 }
-  );
+import { readAccountJson } from "@/lib/account-request";
+import { readNotifications, mutateNotifications } from "@/lib/notifications";
+import { notificationActor, notificationQuery, notificationHeaders, notificationFailure } from "@/lib/notification-request";
+export const dynamic = "force-dynamic";
+export async function GET(request: Request) {
+  try { const actor = await notificationActor(request); return NextResponse.json({ success: true, ...await readNotifications(actor, notificationQuery(request)) }, { headers: notificationHeaders }); }
+  catch (error) { return notificationFailure(error); }
+}
+export async function POST(request: Request) {
+  try { const actor = await notificationActor(request, true); return NextResponse.json({ success: true, ...await mutateNotifications(actor, await readAccountJson(request)) }, { headers: notificationHeaders }); }
+  catch (error) { return notificationFailure(error); }
 }

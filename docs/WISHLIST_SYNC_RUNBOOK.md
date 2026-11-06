@@ -1,0 +1,45 @@
+# Account wishlist and guest merge
+
+AUD-022 connects every existing wishlist button, the storefront `/wishlist`, the protected `/user/wishlist`, and the header count to one account-aware store. Authenticated membership is stored in PostgreSQL; only guest product IDs are persisted in this browser. Prices, stock, names and images are resolved from the current public catalog rather than trusted local snapshots.
+
+## Customer behavior and migration
+
+Signed-in customers add/remove products and see the same wishlist from another authenticated session. Adds/removes are idempotent set operations, not replacement of a possibly stale whole list. Clear requires confirmation and the observed server revision so another session's unseen additions cannot be deleted by a stale clear. Newly added membership is limited to 200 products per account; duplicates already saved do not consume another slot. Existing larger server lists remain readable/removable through bounded pages and are not truncated or bulk rewritten. Out-of-stock public products can remain wishlisted; cart entry uses actual stock and is disabled for zero stock. Checkout independently confirms current price/availability.
+
+Unavailable, rejected or suspended-seller products retain only their saved reference and display “Product unavailable”; their private names, prices, image URLs and other catalog fields are not disclosed. Customers can remove these references. Both wishlist pages use the same real view with 24-item display pages. They no longer use a hard-coded cart stock of ten, stale cached prices or a dashboard placeholder.
+
+Guest items are saved under `amar-gadget-wishlist-guest-v2` as normalized, distinct product IDs only. The public resolver supplies current catalog data. Guest storage is capped at 200; browser-storage failure retains this tab's state and explicitly reports that it is not persisted. Cross-tab guest operations use Web Locks when available, read the latest stored IDs before writes, and observe storage events. Without Web Locks, guest browser updates are best effort; the authenticated server guarantees do not depend on browser locks.
+
+Login does **not** automatically merge guest items. The customer explicitly chooses “Merge guest wishlist into this account.” The server adds available public IDs without replacing existing account membership. Missing/hidden IDs are reported as skipped and remain in the guest list for review/removal. Only acknowledged IDs are consumed from browser storage. A lost response can safely be retried because membership is unique and adds are idempotent. If the server write succeeds but browser cleanup, broadcast or follow-up read fails, the UI reports a saved change plus recovery instructions rather than a false failed write. Storage cleanup failure can leave guest IDs available for another harmless merge.
+
+The older `amar-gadget-wishlist` cache has no verified account owner and may contain former account metadata. It is quarantined: neither that cached metadata nor its membership is automatically displayed or assigned to a new account. The user may explicitly import the next batch into the guest list, merge that list separately, or discard older browser data. Import respects available guest capacity and retains unimported IDs; old names/prices/images are never reused. Older data over 1 MiB, over 10,000 rows or malformed/unusable references is explicitly marked unsafe to import and left intact until explicit discard. Guest and legacy data are never used as an authenticated account fallback during an outage.
+
+## Ownership, synchronization and recovery
+
+Auth loading/account transitions synchronously clear the old wishlist scope. Every async response is checked against the current account/epoch and request generation; old reads/mutations cannot publish into a new account. The authenticated API also requires `X-Wishlist-Owner` to match the actual verified session. That header is an account precondition, never authority: a queued request for A arriving with B's cookie fails instead of modifying B. Current verification, role and session version are rechecked under the owner's User-row lock before SQL work. Personal responses are private/no-store and existing ingress/Origin/noindex protections remain in force.
+
+The root bridge validates auth and loads the current scope, refreshes on focus/visibility and every 30 seconds while visible, and listens for cross-tab invalidations. Broadcast messages contain an owner invalidation only, not item metadata. Account storage stays server-side/in-memory; logout reveals only the independent guest list. Same-browser broadcasts speed up changes; another device sees changes on its next read/focus/poll. This is eventual refresh, not a WebSocket/instant-delivery guarantee. A failed sync is shown as unavailable, not an empty successful list. Wishlist mutations wait for a usable snapshot and do not optimistically claim saved hearts before a confirmed server write/read.
+
+Each private read response contains at most 200 rows with exact count/pages and a wishlist revision. The client follows all pages for legacy lists and publishes only a consistent revision. It restarts a mixed-version read up to three times within a 30-second read deadline, otherwise asks for refresh. Product metadata is refreshed from its current public state. Read and write generations prevent an older response replacing a newer mutation. Timers/subscriptions/requests are cancelled on provider teardown, including React Strict Mode remounts.
+
+## API and database contracts
+
+| Endpoint/method | Input | Behavior |
+| --- | --- | --- |
+| GET `/api/wishlist?page=N` | Verified session and expected-owner header | Owned bounded page, revision and current public product DTOs |
+| POST `/api/wishlist` | `{productIds, merge?}` | Add distinct available IDs; merge explicitly reports skipped IDs |
+| DELETE `/api/wishlist` | `{productIds}` | Remove only this account's matching references |
+| DELETE `/api/wishlist` | `{clear:true, version}` | Clear only at the observed revision |
+| POST `/api/wishlist/guest` | `{productIds}` | Resolve public catalog DTOs without reading/writing account membership |
+
+Bodies are bounded to 16 KiB before JSON allocation, with at most 200 distinct bounded product IDs. Unknown owner/price/name/status fields are rejected. Invalid requests return 400/413, anonymous sessions 401, changed accounts/revisions/limits/unavailable adds 409, rate exhaustion 429 with Retry-After, and unavailable SQL 503 without private exceptions. Reads allow 120/IP and 120/account per minute; writes 60/IP and 30/account per minute. The public guest resolver allows 60/IP per minute. Production requests still require trusted ingress and exact browser Origin for mutations.
+
+Migration `20261029140000_wishlist_sync` adds nonnegative `User.wishlistVersion` default zero and the ordered `(userId, createdAt, id)` wishlist index. Existing unique `(userId, productId)` membership remains the final duplicate guard. Logical membership changes increment the revision once; no-ops leave it unchanged. Owner-row serialization protects adds, removals, clear and the 200-item cap. Transactions have a ten-second bound, three-second owner-lock wait and five-second pool wait. A failed SQL batch rolls back both membership and revision. Existing data is preserved, not rewritten into a browser snapshot.
+
+## Verification and rollout
+
+Actual PostgreSQL/handler tests cover two-session set semantics, duplicate concurrency, cap races, legacy pagination, hidden/suspended metadata, current price/stock, guest resolving, ownership/account preconditions, stale clear, body/validation/rate bounds, SQL rollback and revocation while waiting on the actual owner lock. A disposable fresh-database rehearsal applies prior migrations, inserts existing membership, applies this migration and verifies preservation, revision/check, unique membership and ordered index.
+
+Controller tests explicitly mock HTTP/storage boundaries to force late reads/writes, account changes/logout, mixed-version pages, explicit merge and skipped IDs, malformed/legacy data, normalized IDs, unavailable browser locks/storage, failed broadcasts and committed-save/read-failure recovery. DOM tests cover real bridge lifecycle/Strict Mode, focus/poll cleanup, account transitions, merge consent, both view states, real-stock cart payloads and clear confirmation. These are controlled tests, not real multi-browser certification.
+
+After `npm run build`, `npm run smoke:wishlist` starts the prepared artifact with real local SQL and real authenticated HTTP sessions. It tests two sessions, cross-account/queued-header isolation, public catalog updates, explicit additive merge, hidden data, idempotency, stale clear, both pages, private headers, ingress/Origin and copied-cookie revocation. Use only an isolated local `audit_*` database via TEST_DATABASE_URL. Real-browser walkthroughs and production deployment/migration remain AUD-044/049 rollout checks. No provider account, production database or deployment was changed by this implementation.

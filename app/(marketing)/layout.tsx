@@ -3,7 +3,7 @@ import { Navbar } from "@/components/navbar/navbar";
 
 export const metadata: Metadata = {
   title: "Amar Gadget | Premium Multi-Vendor Marketplace",
-  description: "The leading multi-vendor marketplace for electronics and gadgets in Bangladesh.",
+  description: "Browse electronics and gadgets from the Amar Gadget marketplace catalog.",
 };
 
 export default function MarketingLayout({

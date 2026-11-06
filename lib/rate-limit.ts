@@ -1,35 +1,16 @@
-import { Redis } from "@upstash/redis";
 import { randomUUID } from "node:crypto";
-
-const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-// Conditionally initialize to prevent crashes if Redis is unconfigured (like in local dev)
-const redis = redisUrl && redisToken
-  ? new Redis({ url: redisUrl, token: redisToken })
-  : null;
+import { getRedisClient } from "@/lib/redis";
+import { verifiedIngressIp } from "@/lib/ingress";
 
 /**
- * Extracts the real client IP address securely, prioritizing proxy headers 
- * from Vercel, Cloudflare, and standard load balancers.
+ * Only the authenticated gateway assertion supplies an IP. Raw forwarding
+ * headers and client-selected platform headers are never authority here.
  */
 export function getClientIp(headers: Headers): string {
-  const cfConnectingIp = headers.get("cf-connecting-ip");
-  if (cfConnectingIp) return cfConnectingIp;
-
-  const vercelIp = headers.get("x-vercel-forwarded-for");
-  if (vercelIp) return vercelIp;
-
-  const xForwardedFor = headers.get("x-forwarded-for");
-  if (xForwardedFor) {
-    const ips = xForwardedFor.split(",").map((ip) => ip.trim());
-    if (ips[0]) return ips[0];
-  }
-
-  const xRealIp = headers.get("x-real-ip");
-  if (xRealIp) return xRealIp;
-
-  return "127.0.0.1";
+  const ip = verifiedIngressIp(headers);
+  if (ip) return ip;
+  if (process.env.NODE_ENV === "production") throw new Error("Untrusted request ingress");
+  return "untrusted-development";
 }
 
 export async function rateLimit(
@@ -38,19 +19,20 @@ export async function rateLimit(
   windowInSeconds = 60,
   namespace = "default"
 ) {
-  if (!redis) {
-    if (process.env.NODE_ENV === "production") {
-      console.error("Upstash Redis config missing in production; rate-limited request denied.");
-      return { success: false, limit, remaining: 0 };
-    }
-    return {
-      success: true,
-      limit,
-      remaining: limit,
-    };
-  }
-
   try {
+    const redis = getRedisClient();
+    if (!redis) {
+      if (process.env.NODE_ENV === "production") {
+        console.error("Upstash Redis config missing in production; rate-limited request denied.");
+        return { success: false, limit, remaining: 0 };
+      }
+      return {
+        success: true,
+        limit,
+        remaining: limit,
+      };
+    }
+
     const key = `ratelimit:${namespace}:${ip}`;
     const now = Math.floor(Date.now() / 1000);
     const clearBefore = now - windowInSeconds;
@@ -69,8 +51,8 @@ export async function rateLimit(
       limit,
       remaining: Math.max(0, limit - requestCount),
     };
-  } catch (error) {
-    console.error("Rate limiting execution failed:", error);
+  } catch {
+    console.error("Distributed rate limiting is unavailable.");
     return {
       success: process.env.NODE_ENV !== "production",
       limit,

@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Star } from "@/components/icons/Star";
 import { formatCurrency } from "@/lib/formatter";
 
@@ -19,29 +20,31 @@ interface BottomWidgetsProps {
   featuredProducts?: BottomProductItem[];
   onSaleProducts?: BottomProductItem[];
   topRatedProducts?: BottomProductItem[];
+  unavailable?: ("featured" | "onsale" | "toprated")[];
 }
 
 export const BottomWidgets: React.FC<BottomWidgetsProps> = ({
   featuredProducts = [],
   onSaleProducts = [],
   topRatedProducts = [],
+  unavailable = [],
 }) => {
   const featuredList = featuredProducts.slice(0, 3);
   const onsaleList = onSaleProducts.slice(0, 3);
   const topRatedList = topRatedProducts.slice(0, 3);
 
-  const renderColumn = (title: string, items: BottomProductItem[]) => (
+  const renderColumn = (title: string, items: BottomProductItem[], failed = false) => (
     <div className="space-y-5">
       <h3 className="text-sm font-black text-slate-900 border-b-2 border-blue-600 pb-2.5 uppercase tracking-wider">
         {title}
       </h3>
       <div className="space-y-4">
-        {items.length > 0 ? (
+        {failed ? <p role="alert" className="text-xs">{title} are temporarily unavailable. <Link href="/" className="underline">Reload products</Link></p> : items.length > 0 ? (
           items.map((item) => (
             <div key={item.id} className="flex items-center space-x-4 group p-1.5 rounded-xl hover:bg-slate-50 transition-colors">
               <div className="w-16 h-16 bg-slate-50 border border-slate-200 rounded-xl shrink-0 flex items-center justify-center p-1.5 shadow-2xs">
                 {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" />
+                  <Image unoptimized width={80} height={80} src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" />
                 ) : (
                   <div className="text-[10px] text-slate-300">No Image</div>
                 )}
@@ -52,12 +55,12 @@ export const BottomWidgets: React.FC<BottomWidgetsProps> = ({
                 </Link>
                 <div className="flex items-center space-x-0.5 text-amber-400 mb-1">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className={`w-2.5 h-2.5 ${i < Math.round(item.rating || 5) ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />
+                    <Star key={i} className={`w-2.5 h-2.5 ${i < Math.round(item.rating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"}`} />
                   ))}
                 </div>
                 <div className="flex items-baseline space-x-1.5">
                   <span className="text-xs font-black text-slate-900">
-                    {formatCurrency(item.discountPrice || item.price)}
+                    {formatCurrency(item.discountPrice ?? item.price)}
                   </span>
                   {item.discountPrice && (
                     <span className="text-[10px] text-slate-400 line-through">
@@ -80,13 +83,13 @@ export const BottomWidgets: React.FC<BottomWidgetsProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10">
         
         {/* Widget 1: Featured Products */}
-        {renderColumn("Featured Products", featuredList)}
+        {renderColumn("Featured Products", featuredList, unavailable.includes("featured"))}
 
         {/* Widget 2: On Sale Products */}
-        {renderColumn("Onsale Products", onsaleList)}
+        {renderColumn("Onsale Products", onsaleList, unavailable.includes("onsale"))}
 
         {/* Widget 3: Top Rated Products */}
-        {renderColumn("Top Rated Products", topRatedList)}
+        {renderColumn("Top Rated Products", topRatedList, unavailable.includes("toprated"))}
 
         {/* Widget 4: Promo Banner Card */}
         <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between items-center text-center shadow-xl text-white">
@@ -100,7 +103,7 @@ export const BottomWidgets: React.FC<BottomWidgetsProps> = ({
           </div>
 
           <div className="my-5 w-full h-36 relative flex items-center justify-center">
-            <img
+            <Image unoptimized fill sizes="300px"
               src="https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=300&auto=format&fit=crop&q=80"
               alt="Smart Tech Promo"
               className="max-h-full max-w-full object-contain drop-shadow-xl hover:scale-105 transition-transform duration-500"

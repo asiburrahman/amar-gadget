@@ -1,0 +1,58 @@
+import assert from "node:assert/strict";
+import { randomBytes, randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import sharp from "sharp";
+import { tsImport } from "tsx/esm/api";
+import { signIngress } from "../lib/ingress-protocol.cjs";
+import { createFinancialSmokeDatabase } from "./testing/finance-database.mjs";
+import { startStandaloneFixture } from "./testing/standalone-fixture.mjs";
+import { startRedisRestFixture } from "./testing/redis-rest-fixture.mjs";
+import { requestHttp } from "./testing/http-request.mjs";
+let phase = "isolated banner fixture";
+async function main() {
+  const fixture = await createFinancialSmokeDatabase(), db = fixture.db; let child, provider, redis;
+  try {
+    const secret = randomBytes(32).toString("hex"), maintenance = randomBytes(32).toString("hex"), password = randomBytes(32).toString("hex");
+    const { hashPassword } = await tsImport("../lib/password.ts", import.meta.url), { startS3MediaFixture } = await tsImport("../tests/helpers/s3-media-fixture.ts", import.meta.url), hash = await hashPassword(password);
+    const [admin, seller] = await Promise.all(["ADMIN", "MEMBER"].map((role) => db.user.create({ data: { email: `${randomUUID()}@banners-smoke.example.invalid`, password: hash, isVerified: true, role, sellerStatus: "APPROVED" } })));
+    provider = await startS3MediaFixture(); redis = await startRedisRestFixture(randomBytes(32).toString("hex"));
+    child = await startStandaloneFixture(fixture.url, redis, { TRUSTED_PROXY_SECRET: secret, CHECKOUT_SWEEP_SECRET: maintenance, R2_BUCKET_NAME: "fixture-media", R2_ACCESS_KEY_ID: provider.credentials.accessKeyId, R2_SECRET_ACCESS_KEY: provider.credentials.secretAccessKey, R2_PUBLIC_URL: "https://cdn.media.example.invalid", AUDIT_AVATAR_S3_FIXTURE: provider.endpoint, NODE_OPTIONS: `--require=${resolve("scripts/testing/avatar-s3-preload.cjs").replaceAll("\\", "/")}` });
+    const signature = (method, target) => signIngress({ secret, origin: child.origin, ip: "127.0.0.1", method, target });
+    const send = (target, method = "GET", body, cookie, extra = {}) => requestHttp(child.origin + target, { method, headers: { ...signature(method, target), ...(cookie ? { Cookie: cookie } : {}), ...(method !== "GET" ? { Origin: child.origin, "Content-Type": "application/json" } : {}), ...extra }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const login = async (account) => { const response = await send("/api/auth/login", "POST", { email: account.email, password }); assert.equal(response.status, 200); const cookie = response.headers.get("set-cookie")?.split(";")[0]; assert.ok(cookie); return cookie; };
+    const moderator = await login(admin), vendor = await login(seller), owner = { "X-Banner-Owner": admin.id }, path = "/api/admin/banners";
+    const mutate = async (body) => { const response = await send(path, "POST", body, moderator, owner); assert.equal(response.status, 200, `Banner ${body.action} returned ${response.status}`); return response.json(); };
+    const home = async () => { const response = await send("/"); assert.equal(response.status, 200); return response.text(); };
+    phase = "compiled fallback homepage and actual presigned image bytes";
+    const initial = await home(); assert.ok(initial.includes("Explore the catalog")); assert.ok(initial.includes("Find your next gadget")); assert.ok(!initial.includes("$79.99"));
+    const png = await sharp({ create: { width: 80, height: 40, channels: 4, background: "green" } }).png().toBuffer();
+    const preparedResponse = await send("/api/upload", "POST", { contentType: "image/png", size: png.length }, moderator); assert.equal(preparedResponse.status, 200); const prepared = await preparedResponse.json(), uploadUrl = new URL(prepared.uploadUrl);
+    assert.equal(uploadUrl.hostname, `fixture-media.${"a".repeat(32)}.r2.cloudflarestorage.com`);
+    assert.equal((await requestHttp(provider.endpoint + uploadUrl.pathname + uploadUrl.search, { method: "PUT", headers: { ...prepared.headers, Host: uploadUrl.host }, body: png })).status, 200);
+    const cdn = await requestHttp(provider.endpoint + new URL(prepared.publicUrl).pathname, { headers: { Host: "cdn.media.example.invalid" } }); assert.equal(cdn.status, 200); assert.deepEqual(Buffer.from(await cdn.arrayBuffer()), png);
+    phase = "compiled saved placements, exact original receipt and visible homepage wiring";
+    const create = (placement) => ({ action: "create", requestId: randomUUID(), uploadKey: prepared.fileKey, fields: { title: `Native ${placement} saved banner`, subtitle: "Actual saved offer description", placement, position: 2, linkUrl: "/products", isActive: true } });
+    const heroInput = create("HERO"), hero = await mutate(heroInput), promo = await mutate(create("PROMO")), ad = await mutate(create("AD"));
+    assert.equal((await mutate(heroInput)).result.id, hero.result.id); assert.equal(await db.banner.count(), 3);
+    const published = await home(); for (const title of [hero.row.title, promo.row.title, ad.row.title]) assert.ok(published.includes(title)); assert.ok(!published.includes("Explore the catalog")); assert.ok(!published.includes("Find your next gadget")); assert.ok(published.includes(prepared.publicUrl));
+    phase = "real activation, edit/order and stale/unsafe request guards";
+    await mutate({ action: "activation", id: promo.result.id, version: 1, requestId: randomUUID(), isActive: false }); const inactive = await home(); assert.ok(!inactive.includes(promo.row.title)); assert.ok(inactive.includes("Explore the catalog"));
+    const edited = await mutate({ action: "update", id: ad.result.id, version: 1, requestId: randomUUID(), fields: { title: "Native edited announcement", subtitle: null, placement: "AD", position: 0, linkUrl: null, isActive: true } }); assert.equal(edited.row.position, 0); assert.ok((await home()).includes("Native edited announcement"));
+    assert.equal((await send(path, "POST", { action: "activation", id: ad.result.id, version: 1, requestId: randomUUID(), isActive: false }, moderator, owner)).status, 409);
+    assert.equal((await send(path, "POST", { ...create("HERO"), fields: { ...heroInput.fields, linkUrl: "javascript:alert(1)" } }, moderator, owner)).status, 400);
+    phase = "retained evidence and shared banner image cleanup through actual endpoint";
+    const remove = (id, version) => mutate({ action: "delete", id, version, requestId: randomUUID() }); await remove(hero.result.id, 1);
+    const original = await mutate(heroInput); assert.equal(original.currentDeleted, true); assert.equal(original.row, null);
+    const afterHero = await home(); assert.ok(!afterHero.includes(hero.row.title)); assert.ok(afterHero.includes("THE NEW"));
+    provider.objects.get(`/fixture-media/${prepared.fileKey}`).modified = new Date(0); await db.productImageCleanup.update({ where: { key: prepared.fileKey }, data: { availableAt: new Date(0) } });
+    const cleanup = async () => { const response = await send("/api/internal/media/cleanup", "POST", undefined, undefined, { Authorization: `Bearer ${maintenance}` }); assert.equal(response.status, 200); return response.json(); };
+    assert.equal((await cleanup()).retained, 1); assert.ok(provider.objects.has(`/fixture-media/${prepared.fileKey}`));
+    await remove(promo.result.id, 2); await remove(ad.result.id, 2); await db.productImageCleanup.update({ where: { key: prepared.fileKey }, data: { availableAt: new Date(0) } }); assert.equal((await cleanup()).removed, 1); assert.ok(!provider.objects.has(`/fixture-media/${prepared.fileKey}`));
+    const history = await send(`${path}?mode=history&id=${hero.result.id}`, "GET", undefined, moderator, owner); assert.equal(history.status, 200); assert.equal(history.headers.get("cache-control"), "private, no-store"); const events = (await history.json()).events; assert.deepEqual(events.map((event) => event.action), ["DELETE", "CREATE"]); assert.ok(events.every((event) => event.actorId === admin.id));
+    phase = "compiled administrator page, current owner/role/origin and revoked session";
+    assert.equal((await send("/admin/banners", "GET", undefined, moderator)).status, 200); assert.equal((await send(path, "GET", undefined, vendor, { "X-Banner-Owner": seller.id })).status, 403); assert.equal((await send(path, "GET", undefined, moderator, { "X-Banner-Owner": seller.id })).status, 409); assert.equal((await send(path, "POST", heroInput, moderator, { ...owner, Origin: "https://wrong.example.invalid" })).status, 403);
+    await db.user.update({ where: { id: admin.id }, data: { sessionVersion: { increment: 1 } } }); assert.equal((await send(path, "GET", undefined, moderator, owner)).status, 403);
+    return { actualPresignedSdkVerificationAndCdnBytes: "PASS", compiledPlacementsAndHomepageWiring: "PASS", activationOrderingFallbackAndUnsafeLinkGuards: "PASS", retainedReceiptsHistoryAndSharedImageCleanup: "PASS", privateAdminPageOwnerRoleOriginAndRevocation: "PASS" };
+  } finally { await child?.stop(); await provider?.close(); await redis?.close(); await fixture.close(); }
+}
+main().then((value) => console.log(JSON.stringify(value))).catch((error) => { console.error(`Banner smoke failed during ${phase}: ${error?.code === "ERR_ASSERTION" ? error.message : "private diagnostic withheld"}. Private child output and credentials were not published.`); process.exitCode = 1; });

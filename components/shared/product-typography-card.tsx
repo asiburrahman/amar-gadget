@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { H4 } from "@/components/ui/typography";
+import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 
 interface ProductCardProps {
   title: string;
@@ -21,6 +22,7 @@ export function ProductTypographyCard({
     <>
       <div className="relative aspect-square w-full overflow-hidden rounded bg-muted" style={{ position: 'relative' }}>
         <Image
+          unoptimized={productImageNeedsDirectDelivery(imageUrl)}
           src={imageUrl}
           alt={title}
           fill

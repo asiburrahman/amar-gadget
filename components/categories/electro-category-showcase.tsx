@@ -6,6 +6,10 @@ import { formatCurrency } from "@/lib/formatter";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
 import { ShoppingCart } from "@/components/icons/ShoppingCart";
+import { CompareButton } from "@/components/catalog/compare-button";
+import { categoryLabel, categoryProducts } from "@/lib/catalog-hierarchy";
+import Image from "next/image";
+import { isPublicProductImageUrl, productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 
 export interface ShowcaseProduct {
   id: string;
@@ -26,33 +30,18 @@ export interface ShowcaseCategory {
   id: string;
   name: string;
   slug: string;
+  parentId?: string | null;
+  image?: string | null;
   icon?: string;
   products: ShowcaseProduct[];
+  pathLabel?: string;
 }
 
 interface ElectroCategoryShowcaseProps {
   categories: ShowcaseCategory[];
   allProducts: ShowcaseProduct[];
+  navigation?: { selectedId: string | null; categoryPage: number; q: string; total: number };
 }
-
-// Electro-style Compare and Heart SVG icons
-const CompareIcon = ({ className = "w-3.5 h-3.5" }: { className?: string }) => (
-  <svg
-    className={className}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M16 3h5v5" />
-    <path d="M4 20L21 3" />
-    <path d="M21 16v5h-5" />
-    <path d="M15 15l6 6" />
-    <path d="M4 4l5 5" />
-  </svg>
-);
 
 const HeartIcon = ({
   className = "w-3.5 h-3.5",
@@ -77,21 +66,24 @@ const HeartIcon = ({
 export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = ({
   categories = [],
   allProducts = [],
+  navigation,
 }) => {
-  const [activeSlug, setActiveSlug] = useState<string>("all");
+  const [localSlug, setActiveSlug] = useState<string>("all");
+  const activeSlug = navigation ? categories.find((category) => category.id === navigation.selectedId)?.slug ?? "all" : localSlug;
   const [addedNoticeId, setAddedNoticeId] = useState<string | null>(null);
   const [selectedHeroImage, setSelectedHeroImage] = useState<string | null>(null);
   const addItem = useCartStore((state) => state.addItem);
-  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist } = useWishlistStore();
+  const cartDisabled = useCartStore((state) => state.busy || state.refreshing || state.status !== "ready");
+  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
-  const handleAddToCart = (product: ShowcaseProduct, e?: React.MouseEvent) => {
+  const handleAddToCart = async (product: ShowcaseProduct, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     if (product.stock === 0) return;
 
-    addItem({
+    const saved = await addItem({
       id: product.id,
       name: product.name,
       price: product.price,
@@ -102,6 +94,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
       quantity: 1,
     });
 
+    if (!saved) return;
     setAddedNoticeId(product.id);
     setTimeout(() => {
       setAddedNoticeId((prev) => (prev === product.id ? null : prev));
@@ -127,19 +120,19 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
   };
 
   // Determine current active products based on tab
-  const activeCategory = categories.find((c) => c.slug === activeSlug);
+  const activeCategory = navigation ? categories.find((category) => category.id === navigation.selectedId) : categories.find((c) => c.slug === activeSlug);
   const currentProducts =
-    activeSlug === "all"
+    navigation || activeSlug === "all"
       ? allProducts
-      : activeCategory?.products || [];
+      : activeCategory ? categoryProducts(activeCategory.id, categories) : [];
 
   // Hero product is the first product
-  const heroProduct = currentProducts[0] || allProducts[0] || null;
+  const heroProduct = currentProducts[0] || null;
   // Other products for left and right columns
   const remainingProducts =
     currentProducts.length > 1
       ? currentProducts.slice(1)
-      : allProducts.filter((p) => p.id !== heroProduct?.id);
+      : [];
 
   // Left Column gets items 0 and 1
   const leftItem1 = remainingProducts[0] || null;
@@ -158,11 +151,17 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
     : [];
 
   const displayHeroImage =
-    selectedHeroImage || heroProduct?.imageUrl || "/placeholder-gadget.svg";
+    selectedHeroImage && heroGallery.includes(selectedHeroImage) ? selectedHeroImage : heroProduct?.imageUrl || "/placeholder-gadget.svg";
 
   return (
     <div className="w-full">
       {/* 1. NAV CLASSIC (Tabs header exactly matching Electro template) */}
+      {navigation ? <nav aria-label="Category selection" className="mb-4 flex gap-3 overflow-x-auto border-b pb-3">
+        <Link className="shrink-0 rounded border px-3 py-2" aria-current={!navigation.selectedId ? "page" : undefined} href={`/categories?${new URLSearchParams({ q: navigation.q, categoryPage: String(navigation.categoryPage) })}`}>All Products</Link>
+        {categories.map((category) => <Link key={category.id} className="shrink-0 rounded border px-3 py-2" aria-current={navigation.selectedId === category.id ? "page" : undefined} href={`/categories?${new URLSearchParams({ q: navigation.q, categoryPage: String(navigation.categoryPage), categoryId: category.id })}`}>
+          {category.image && isPublicProductImageUrl(category.image) && <Image src={category.image} alt="" width={24} height={24} unoptimized={productImageNeedsDirectDelivery(category.image)} className="inline-block h-6 w-6 object-contain" />} {category.pathLabel ?? categoryLabel(category, categories)}
+        </Link>)}
+      </nav> : (
       <div className="relative text-center z-10 mb-4">
         <ul
           className="flex items-center justify-start lg:justify-center overflow-x-auto no-scrollbar border-b border-gray-200 pb-0 gap-1 sm:gap-2"
@@ -184,7 +183,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                   : "text-[#77838f] hover:text-[#333e48] border-transparent"
               }`}
             >
-              Best Deals
+              All Products
             </button>
           </li>
 
@@ -207,13 +206,15 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                       : "text-[#77838f] hover:text-[#333e48] border-transparent"
                   }`}
                 >
-                  <span>{cat.name}</span>
+                  {cat.image && isPublicProductImageUrl(cat.image) && <Image src={cat.image} alt="" width={24} height={24} unoptimized={productImageNeedsDirectDelivery(cat.image)} className="inline-block h-6 w-6 object-contain" />}
+                  <span>{categoryLabel(cat, categories)}</span>
                 </button>
               </li>
             );
           })}
         </ul>
       </div>
+      )}
 
       {/* 2. TAB CONTENT (Electro 3-Column Showcase Grid) */}
       <div className="bg-white border border-[#eaeaea] rounded-lg overflow-hidden shadow-xs">
@@ -265,7 +266,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                       href={`/products/${heroProduct.slug || heroProduct.id}`}
                       className="block w-full h-full relative flex items-center justify-center"
                     >
-                      <img
+                      <Image unoptimized fill sizes="(max-width: 640px) 100vw, 400px"
                         src={displayHeroImage}
                         alt={heroProduct.name}
                         className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
@@ -290,8 +291,8 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                         }`}
                         title="Click to view image"
                       >
-                        <img
-                          src={thumb}
+                        <Image unoptimized
+                          src={thumb} width={40} height={40}
                           alt="Gallery thumbnail"
                           className="w-full h-full object-contain"
                         />
@@ -316,7 +317,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
                     <button
                       type="button"
                       onClick={() => handleAddToCart(heroProduct)}
-                      disabled={heroProduct.stock === 0}
+                      disabled={heroProduct.stock === 0 || cartDisabled}
                       className={`h-10 px-5 rounded-full font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50 ${
                         addedNoticeId === heroProduct.id
                           ? "bg-emerald-500 text-white"
@@ -335,17 +336,13 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
 
                 {/* Electro Card Footer with Compare & Add to Wishlist */}
                 <div className="border-t border-gray-100 pt-3 mt-4 flex items-center justify-between text-xs text-[#77838f]">
-                  <Link
-                    href={`/compare?product=${heroProduct.id}`}
-                    className="inline-flex items-center gap-1.5 hover:text-[#0066cc] transition-colors"
-                  >
-                    <CompareIcon className="w-3.5 h-3.5" />
-                    <span>Compare</span>
-                  </Link>
+                  <CompareButton productId={heroProduct.id} name={heroProduct.name} />
 
                   <button
                     type="button"
                     onClick={(e) => handleToggleWishlist(heroProduct, e)}
+                    disabled={wishlistBusy || wishlistStatus !== "ready"}
+                    aria-pressed={isInWishlist(heroProduct.id)}
                     className="inline-flex items-center gap-1.5 hover:text-red-500 transition-colors cursor-pointer"
                   >
                     <HeartIcon
@@ -401,7 +398,7 @@ export const ElectroCategoryShowcase: React.FC<ElectroCategoryShowcaseProps> = (
               <span className="absolute -bottom-[14px] left-0 w-16 h-[3px] bg-[#fed700] rounded-full" />
             </h3>
             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#fed700]/25 text-[#333e48] border border-[#fed700]/40">
-              {currentProducts.length} {currentProducts.length === 1 ? "Item" : "Items"}
+              {navigation ? `${navigation.total} matching items; ${currentProducts.length} on this page` : `${currentProducts.length} ${currentProducts.length === 1 ? "Item" : "Items"}`}
             </span>
           </div>
 
@@ -458,6 +455,8 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
   isAdded,
   isWishlisted,
 }) => {
+  const wishlistDisabled = useWishlistStore((state) => state.busy || state.status !== "ready");
+  const cartDisabled = useCartStore((state) => state.busy || state.refreshing || state.status !== "ready");
   if (!product) {
     return (
       <div className="flex-1 p-5 flex flex-col items-center justify-center text-center bg-gray-50/30 min-h-[220px]">
@@ -493,7 +492,7 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
             href={`/products/${product.slug || product.id}`}
             className="block w-full h-full relative flex items-center justify-center"
           >
-            <img
+            <Image unoptimized fill sizes="(max-width: 640px) 100vw, 400px"
               src={product.imageUrl || "/placeholder-gadget.svg"}
               alt={product.name}
               className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
@@ -520,7 +519,7 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
           <button
             type="button"
             onClick={(e) => onAddToCart(product, e)}
-            disabled={product.stock === 0}
+            disabled={product.stock === 0 || cartDisabled}
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-90 disabled:opacity-40 ${
               isAdded
                 ? "bg-emerald-500 text-white"
@@ -540,17 +539,13 @@ const StandardProductItem: React.FC<StandardProductItemProps> = ({
 
       {/* Electro Card Footer with Compare & Add to Wishlist */}
       <div className="border-t border-gray-100 pt-2.5 mt-3 flex items-center justify-between text-xs text-[#77838f]">
-        <Link
-          href={`/compare?product=${product.id}`}
-          className="inline-flex items-center gap-1 hover:text-[#0066cc] transition-colors"
-        >
-          <CompareIcon className="w-3.5 h-3.5" />
-          <span>Compare</span>
-        </Link>
+        <CompareButton productId={product.id} name={product.name} />
 
         <button
           type="button"
           onClick={(e) => onToggleWishlist(product, e)}
+          disabled={wishlistDisabled}
+          aria-pressed={isWishlisted}
           className="inline-flex items-center gap-1 hover:text-red-500 transition-colors cursor-pointer"
         >
           <HeartIcon

@@ -1,58 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendOtpEmail } from "@/lib/mail/send-otp";
-import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { forgotPasswordSchema } from "@/lib/validations/auth";
+import { readAccountJson, limitAccountIp, limitAccountIdentity, accountErrorResponse } from "@/lib/account-request";
 
 export async function POST(req: Request) {
   try {
-    const limit = await rateLimit(getClientIp(req.headers), 5, 60, "auth-forgot-password");
-    if (!limit.success) {
-      return NextResponse.json({ success: false, message: "Too many requests. Try again shortly." }, { status: 429 });
+    await limitAccountIp(req, "auth-forgot-password", 5);
+    const parsed = forgotPasswordSchema.safeParse(await readAccountJson(req));
+    if (!parsed.success) return NextResponse.json({ success: false, message: "Please provide a valid email address." }, { status: 400 });
+    const email = parsed.data.email;
+    await limitAccountIdentity(email, "auth-forgot-password", 3, 600);
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (user) {
+      const result = await sendOtpEmail({ userId: user.id, email, purpose: "PASSWORD_RESET" });
+      if (!result.success) console.warn("Password-reset request accepted; delivery did not complete.");
     }
-
-    const { email } = await req.json();
-
-    if (!email || typeof email !== "string") {
-      return NextResponse.json(
-        { success: false, message: "Please provide a valid email address." },
-        { status: 400 }
-      );
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (!user) {
-      // Return success anyway to avoid user enumeration
-      return NextResponse.json({
-        success: true,
-        message: "If an account exists with this email, a verification code has been sent.",
-      });
-    }
-
-    // Generate & send OTP
-    const result = await sendOtpEmail(normalizedEmail);
-
-    if (!result.success) {
-      return NextResponse.json(
-        { success: false, message: "Failed to send reset verification code." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "If an account exists with this email, a verification code has been sent.",
-    });
-  } catch (error: any) {
-    console.error("POST /api/auth/forgot-password error:", error);
-    return NextResponse.json(
-      { success: false, message: error.message || "An error occurred." },
-      { status: 500 }
-    );
-  }
+    return NextResponse.json({ success: true, accepted: true, message: "Request received. If this address is eligible, check your inbox for a new or recently requested reset code. If none arrives, retry later." });
+  } catch (error) { return accountErrorResponse(error); }
 }

@@ -9,6 +9,9 @@ import { formatCurrency } from "@/lib/formatter";
 import { ShoppingCart } from "@/components/icons/ShoppingCart";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
+import { productImageNeedsDirectDelivery, isPublicProductImageUrl } from "@/lib/product-media-policy";
+import { CompareButton } from "@/components/catalog/compare-button";
+import { RatingSummary } from "@/components/reviews/rating-summary";
 
 interface ProductCardProps {
   id: string;
@@ -21,6 +24,7 @@ interface ProductCardProps {
   imageUrl?: string;
   category?: string;
   rating?: number;
+  unitsSold?: string;
   onAddToCart?: (productId: string) => void;
   onAddToWishlist?: (productId: string) => void;
   className?: string;
@@ -30,38 +34,41 @@ export const ProductCard = ({
   id,
   slug,
   name,
-  description,
   price,
   discountPrice,
   stock,
   imageUrl,
   category,
-  rating = 5,
+  rating = 0,
+  unitsSold,
   className = "",
 }: ProductCardProps) => {
   const [addedNotice, setAddedNotice] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
-  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist } = useWishlistStore();
+  const cartDisabled = useCartStore((state) => state.busy || state.refreshing || state.status !== "ready");
+  const { addItem: addWishlist, isInWishlist, removeItem: removeWishlist, busy: wishlistBusy, status: wishlistStatus } = useWishlistStore();
 
   const isWishlisted = isInWishlist(id);
-  const effectivePrice = discountPrice || price;
+  const effectivePrice = discountPrice ?? price;
+  const publicImage = imageUrl && isPublicProductImageUrl(imageUrl) ? imageUrl : undefined;
 
-  const handleAddToCart = (e: React.MouseEvent) => {
+  const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (stock === 0) return;
 
-    addItem({
+    const saved = await addItem({
       id,
       name,
       price,
       discountPrice,
-      imageUrl,
+      imageUrl: publicImage,
       stock,
       category,
       quantity: 1,
     });
 
+    if (!saved) return;
     setAddedNotice(true);
     setTimeout(() => setAddedNotice(false), 2000);
   };
@@ -78,7 +85,7 @@ export const ProductCard = ({
         name,
         price,
         discountPrice,
-        imageUrl,
+        imageUrl: publicImage,
         category,
       });
     }
@@ -99,9 +106,10 @@ export const ProductCard = ({
         {/* Product Image Stage - Fixed Uniform 1:1 Aspect Ratio Box across ALL cards */}
         <div className="relative w-full aspect-square overflow-hidden bg-white dark:bg-slate-900 p-2 flex items-center justify-center border-b border-slate-100 dark:border-slate-800/60">
           <Link href={`/products/${slug || id}`} className="block relative w-full h-full">
-            {imageUrl ? (
+            {publicImage ? (
               <Image
-                src={imageUrl}
+                unoptimized={productImageNeedsDirectDelivery(publicImage)}
+                src={publicImage}
                 alt={name}
                 fill
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -135,6 +143,8 @@ export const ProductCard = ({
           <button
             type="button"
             onClick={handleToggleWishlist}
+            disabled={wishlistBusy || wishlistStatus !== "ready"}
+            aria-pressed={isWishlisted}
             className={`absolute top-2.5 right-2.5 h-7 w-7 rounded-full flex items-center justify-center transition-all z-20 shadow-2xs cursor-pointer ${
               isWishlisted
                 ? "bg-red-500 text-white shadow-red-500/20 scale-105"
@@ -156,8 +166,7 @@ export const ProductCard = ({
                 </span>
               )}
               <div className="flex items-center gap-0.5 text-amber-500 font-bold text-[11px] ml-auto shrink-0">
-                <span>★</span>
-                <span className="text-slate-700 dark:text-slate-300">{rating.toFixed(1)}</span>
+                <RatingSummary rating={rating} />
               </div>
             </div>
 
@@ -172,6 +181,8 @@ export const ProductCard = ({
 
       {/* Footer Pricing & Sleek Add to Cart Button */}
       <div className="p-3 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800/80 mt-auto flex flex-col gap-2.5">
+        {unitsSold !== undefined && <p className="text-[10px] text-muted-foreground">{unitsSold} units in paid, delivered orders</p>}
+        <CompareButton productId={id} name={name} />
         <div className="flex items-center justify-between min-w-0">
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
@@ -195,7 +206,7 @@ export const ProductCard = ({
         <button
           type="button"
           onClick={handleAddToCart}
-          disabled={stock === 0}
+          disabled={stock === 0 || cartDisabled}
           className={`w-full h-9 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
             stock === 0
               ? "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed"

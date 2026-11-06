@@ -1,84 +1,48 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCartStore } from "@/stores/cart-store";
 import { useWishlistStore } from "@/stores/wishlist-store";
 import { useAuth } from "@/hooks/use-auth";
-import { Search } from "@/components/icons/Search";
+import { HeaderSearch } from "@/components/catalog/header-search";
+import { ComparisonLink } from "@/components/catalog/compare-button";
+import { formatCurrency } from "@/lib/formatter";
+import { STORE_CURRENCY } from "@/lib/currency";
 import { User } from "@/components/icons/User";
 import { Menu } from "@/components/icons/Menu";
 import { ChevronDown } from "@/components/icons/ChevronDown";
 import { X } from "@/components/icons/X";
+import { useCatalogDepartments } from "@/hooks/use-catalog-departments";
 
-export const ElectroHeader: React.FC = () => {
+export const ElectroHeader: React.FC<{ className?: string }> = ({ className = "" }) => {
+  const pathname = usePathname();
+  return <HeaderContent key={pathname} pathname={pathname} className={className} />;
+};
+
+function HeaderContent({ pathname, className }: { pathname: string; className: string }) {
   const { user, logout } = useAuth();
-  const [activeUser, setActiveUser] = useState(user);
-
-  useEffect(() => {
-    setActiveUser(user);
-  }, [user]);
-
-  useEffect(() => {
-    const handleSync = (e: any) => {
-      if (e.detail) {
-        setActiveUser(e.detail);
-      }
-    };
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === "amar_gadget_user" && e.newValue) {
-        try {
-          setActiveUser(JSON.parse(e.newValue));
-        } catch (err) {}
-      }
-    };
-    window.addEventListener("amar_gadget_user_updated", handleSync);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("amar_gadget_user_updated", handleSync);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
-
-  const displayUser = activeUser || user;
+  const displayUser = user;
   const [isDepartmentOpen, setIsDepartmentOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("All Categories");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeLang, setActiveLang] = useState("Dollar (US)");
-  const [isLangOpen, setIsLangOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  const pathname = usePathname();
   const cartItems = useCartStore((state) => state.items);
+  const cartReady = useCartStore((state) => state.status === "ready" && !state.refreshing);
   const wishlistItems = useWishlistStore((state) => state.items);
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-  const totalCartPrice = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const totalCartPrice = cartItems.reduce((acc, item) => acc + (item.discountPrice ?? item.price) * item.quantity, 0);
   const wishlistCount = wishlistItems.length;
 
-  // Close dropdowns on page change
-  useEffect(() => {
-    setIsDepartmentOpen(false);
-    setIsMobileMenuOpen(false);
-    setIsUserMenuOpen(false);
-  }, [pathname]);
-
-  const categories = [
-    { name: "Value of the Day", href: "/deals", isBold: true, hasSub: false },
-    { name: "Top 100 Offers", href: "/deals", isBold: true, hasSub: false },
-    { name: "Smartphones & Tablets", href: "/categories/smartphones", isBold: false, hasSub: true },
-    { name: "Laptops & Computers", href: "/categories/laptops", isBold: false, hasSub: true },
-    { name: "Audio & Headphones", href: "/categories/audio", isBold: false, hasSub: true },
-    { name: "Smart Watches & Wearables", href: "/categories/smart-watches", isBold: false, hasSub: true },
-    { name: "Accessories", href: "/categories/accessories", isBold: false, hasSub: true },
-    { name: "Electronics", href: "/categories/electronics", isBold: false, hasSub: true },
-    { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
-  ];
+  const departments = useCatalogDepartments(isDepartmentOpen || isMobileMenuOpen);
+  const categories = [...departments.rows.map((row) => ({ name: row.name, href: `/categories/${encodeURIComponent(row.slug)}`, isBold: false, hasSub: false })), { name: "All Categories", href: "/categories", isBold: true, hasSub: false }];
+  const departmentFeedback = <>{departments.busy && <p role="status" className="px-4 py-2 text-xs">Loading departments...</p>}{departments.error && <div className="px-4 py-2 text-xs"><p role="alert">{departments.error}</p><button type="button" onClick={departments.reload} className="underline">Reload departments</button></div>}</>;
 
   return (
-    <header className="w-full bg-white text-[#333e48] border-b border-gray-200 z-50 relative lg:sticky lg:top-0 shadow-xs transition-all">
+    <header className={`w-full bg-white text-[#333e48] border-b border-gray-200 z-50 relative lg:sticky lg:top-0 shadow-xs transition-all ${className}`}>
       {/* 1. TOPBAR - Spacious Padding & Larger Readable Typography */}
       <div className="hidden lg:block bg-slate-50/80 border-b border-gray-200/80 text-xs text-slate-600 py-2.5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -106,24 +70,7 @@ export const ElectroHeader: React.FC = () => {
 
             <span className="text-gray-300">|</span>
 
-            {/* Language / Currency Selector */}
-            <div className="relative">
-              <button
-                onClick={() => setIsLangOpen(!isLangOpen)}
-                className="flex items-center space-x-1.5 hover:text-black focus:outline-hidden cursor-pointer"
-              >
-                <span>{activeLang}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-
-              {isLangOpen && (
-                <div className="absolute right-0 mt-2 w-36 bg-white border border-gray-200 text-gray-700 rounded-lg shadow-xl py-1 z-50 text-xs">
-                  <button onClick={() => { setActiveLang("Dollar (US)"); setIsLangOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 font-medium">Dollar (US)</button>
-                  <button onClick={() => { setActiveLang("BDT (৳)"); setIsLangOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 font-medium">BDT (৳)</button>
-                  <button onClick={() => { setActiveLang("Euro (€)"); setIsLangOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 font-medium">Euro (€)</button>
-                </div>
-              )}
-            </div>
+            <span aria-label="Store currency">Prices and checkout: {STORE_CURRENCY}</span>
 
             <span className="text-gray-300">|</span>
 
@@ -136,7 +83,7 @@ export const ElectroHeader: React.FC = () => {
                 >
                   <div className="h-6 w-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden relative shadow-xs">
                     {displayUser.avatar ? (
-                      <img src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
+                      <Image unoptimized width={40} height={40} src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
                     ) : (
                       (displayUser.name || displayUser.email).charAt(0).toUpperCase()
                     )}
@@ -176,6 +123,7 @@ export const ElectroHeader: React.FC = () => {
                       <span>প্রোফাইল ও সেটিংস (Profile)</span>
                     </Link>
 
+                    <Link href={displayUser.role === "ADMIN" ? "/admin/reviews" : displayUser.role === "MEMBER" ? "/member/reviews" : "/user/reviews"} onClick={() => setIsUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 hover:bg-[#fed700]/20 hover:text-black font-bold transition">{displayUser.role === "ADMIN" ? "Review moderation" : displayUser.role === "MEMBER" ? "Reviews of my products" : "My purchase reviews"}</Link>
                     <div className="border-t border-gray-100 my-1"></div>
 
                     <button
@@ -229,60 +177,14 @@ export const ElectroHeader: React.FC = () => {
 
           {/* Center: Search Bar with Category Selector */}
           <div className="hidden md:flex flex-1 max-w-2xl mx-2">
-            <form onSubmit={(e) => e.preventDefault()} className="flex items-center w-full h-10 rounded-full border-2 border-[#fed700] bg-white p-0.5 shadow-xs focus-within:ring-2 focus-within:ring-[#fed700]/50 transition-all">
-
-              {/* Search Input on Left */}
-              <input
-                type="text"
-                placeholder="Search for Products"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 pl-4 pr-3 py-1 text-xs sm:text-sm text-[#333e48] placeholder-gray-400 focus:outline-hidden bg-transparent"
-              />
-
-              {/* Category Select Dropdown on Right */}
-              <div className="relative border-l border-gray-200 pl-2 pr-2 flex items-center shrink-0">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="pl-1 pr-5 py-1 text-xs font-semibold text-gray-600 bg-transparent appearance-none cursor-pointer focus:outline-hidden"
-                >
-                  <option>All Categories</option>
-                  <option>Computers & Accessories</option>
-                  <option>Cameras, Audio & Video</option>
-                  <option>Mobiles & Tablets</option>
-                  <option>TV & Audio</option>
-                  <option>Watches & Eyewear</option>
-                  <option>Accessories</option>
-                </select>
-                <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 pointer-events-none" />
-              </div>
-
-              {/* Circular Search Button on Far Right */}
-              <button
-                type="submit"
-                className="w-8 h-8 rounded-full bg-[#fed700] hover:bg-[#eec800] text-[#333e48] flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-xs ml-0.5"
-                aria-label="Search"
-              >
-                <Search className="w-4 h-4 text-[#333e48]" />
-              </button>
-            </form>
+            <HeaderSearch />
           </div>
 
           {/* Right: Action Icons (Compare, Wishlist, Cart) */}
           <div className="flex items-center space-x-5 lg:space-x-6">
 
             {/* Compare / Refresh Icon */}
-            <Link href="/compare" className="hidden sm:flex items-center text-[#333e48] hover:text-black transition-colors relative group" title="Compare">
-              <div className="relative">
-                <svg className="w-5 h-5 text-[#333e48]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="absolute -top-2 -right-2 bg-[#fed700] text-[#333e48] text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center shadow-xs">
-                  0
-                </span>
-              </div>
-            </Link>
+            <ComparisonLink />
 
             {/* Wishlist Heart Icon */}
             <Link href="/wishlist" className="hidden sm:flex items-center text-[#333e48] hover:text-black transition-colors relative group" title="Wishlist">
@@ -307,7 +209,7 @@ export const ElectroHeader: React.FC = () => {
                 </span>
               </div>
               <span className="hidden sm:inline-block text-xs sm:text-sm font-black text-[#333e48] ml-1">
-                ${totalCartPrice.toFixed(2)}
+                {cartReady && cartItems.every((item) => item.available) ? formatCurrency(totalCartPrice) : "Review cart"}
               </span>
             </Link>
           </div>
@@ -315,21 +217,7 @@ export const ElectroHeader: React.FC = () => {
 
         {/* Mobile Search Bar */}
         <div className="mt-2 px-4 md:hidden">
-          <form onSubmit={(e) => e.preventDefault()} className="flex items-center w-full h-9 rounded-full border-2 border-[#fed700] bg-white p-0.5">
-            <input
-              type="text"
-              placeholder="Search for Products"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 pl-4 text-xs text-[#333e48] placeholder-gray-400 focus:outline-hidden bg-transparent"
-            />
-            <button
-              type="submit"
-              className="w-7 h-7 rounded-full bg-[#fed700] text-[#333e48] flex items-center justify-center cursor-pointer shrink-0"
-            >
-              <Search className="w-3.5 h-3.5 text-[#333e48]" />
-            </button>
-          </form>
+          <HeaderSearch mobile />
         </div>
       </div>
 
@@ -353,7 +241,8 @@ export const ElectroHeader: React.FC = () => {
                 className="absolute top-full left-0 w-full bg-white border border-gray-200 border-t-0 shadow-2xl z-50 py-1 rounded-none"
                 onMouseLeave={() => setIsDepartmentOpen(false)}
               >
-                {categories.map((cat, idx) => (
+              {departmentFeedback}
+              {categories.map((cat, idx) => (
                   <Link
                     key={idx}
                     href={cat.href}
@@ -436,7 +325,7 @@ export const ElectroHeader: React.FC = () => {
             </nav>
 
             <div className="hidden xl:block text-xs font-semibold text-gray-600">
-              <span>Free Shipping on Orders $50+</span>
+              <Link href="/contact" className="underline">Ask about delivery options</Link>
             </div>
           </div>
 
@@ -464,6 +353,7 @@ export const ElectroHeader: React.FC = () => {
             {/* Menu List */}
             <div className="flex-1 py-4 px-3 space-y-1">
               <p className="px-3 text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Departments</p>
+              {departmentFeedback}
               {categories.map((cat, idx) => (
                 <Link
                   key={idx}
@@ -483,7 +373,7 @@ export const ElectroHeader: React.FC = () => {
                     <div className="px-3 py-2 bg-slate-50 rounded-xl flex items-center gap-2.5">
                       <div className="h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold overflow-hidden shrink-0">
                         {displayUser.avatar ? (
-                          <img src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
+                          <Image unoptimized width={40} height={40} src={displayUser.avatar} alt={displayUser.name || "User"} className="h-full w-full object-cover" />
                         ) : (
                           (displayUser.name || displayUser.email).charAt(0).toUpperCase()
                         )}
@@ -522,6 +412,7 @@ export const ElectroHeader: React.FC = () => {
                     >
                       🚪 লগআউট (Sign Out)
                     </button>
+                    <Link href={displayUser.role === "ADMIN" ? "/admin/reviews" : displayUser.role === "MEMBER" ? "/member/reviews" : "/user/reviews"} onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-lg">{displayUser.role === "ADMIN" ? "Review moderation" : displayUser.role === "MEMBER" ? "Reviews of my products" : "My purchase reviews"}</Link>
                   </div>
                 ) : (
                   <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Register or Sign in</Link>

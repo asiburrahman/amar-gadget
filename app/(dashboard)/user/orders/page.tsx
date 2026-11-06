@@ -1,53 +1,34 @@
 import React from "react";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { verifyJwtToken } from "@/lib/auth";
+import { readCustomerOrders } from "@/lib/customer-orders-read";
+import { customerOrdersQuerySchema } from "@/lib/validations/collection-query";
+import { ReadAccessError, ReadPageError } from "@/lib/protected-read";
+import { serviceUnavailable } from "@/lib/observability";
+import { getCurrentUser } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import UserOrdersClient from "./user-orders-client";
+import { customerShipment } from "@/lib/fulfillments";
+import { purchasedProduct } from "@/lib/purchase-product-label";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomerOrdersPage() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-
-  let currentUserId: string | null = null;
-  if (token) {
-    const payload = await verifyJwtToken(token);
-    if (payload?.sub) {
-      currentUserId = payload.sub as string;
-    }
+export default async function CustomerOrdersPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  let actor;
+  try { actor = await getCurrentUser(); } catch (error) { throw serviceUnavailable("customer.session", error); }
+  if (!actor) redirect("/login");
+  const parsed = customerOrdersQuerySchema.safeParse(searchParams ? await searchParams : {});
+  if (!parsed.success) return <main className="p-6 space-y-3"><h1>My Order History</h1><p role="alert">Check the search, status filter and page number.</p><Link href="/user/orders">Reset order filters</Link></main>;
+  const query = parsed.data;
+  const pageHref = (page: number) => `/user/orders?${new URLSearchParams({ q: query.q, status: query.status, page: String(page) })}`;
+  let result;
+  try { result = await readCustomerOrders(actor, query); }
+  catch (error) {
+    if (error instanceof ReadAccessError) redirect("/login");
+    if (error instanceof ReadPageError) return <main className="p-6 space-y-3"><h1>My Order History</h1><p role="alert">{error.message}</p><Link href={pageHref(1)}>Load the first order page</Link></main>;
+    throw error;
   }
-
-  if (!currentUserId) {
-    redirect("/login");
-  }
-
-  const currentUser = await prisma.user.findUnique({
-    where: { id: currentUserId },
-    select: { id: true, name: true, email: true },
-  });
-
-  if (!currentUser) {
-    redirect("/login");
-  }
-
-  // Fetch orders STRICTLY belonging to this user
-  const orders = await prisma.order.findMany({
-    where: { userId: currentUserId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      items: {
-        include: {
-          product: {
-            select: { id: true, name: true, imageUrl: true, slug: true },
-          },
-        },
-      },
-    },
-  });
+  const { orders, user: currentUser, counts, page, totalPages, total } = result;
 
   const serializedOrders = orders.map((o) => ({
     id: o.id,
@@ -55,8 +36,10 @@ export default async function CustomerOrdersPage() {
     status: o.status,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
+    refundState: o.refundState, refundedAmount: Number(o.refundedCents) / 100, disputeStatus: o.disputeStatus, disputeLossAmount: Number(o.disputeAmountCents) / 100,
     shippingAddress: o.shippingAddress,
     trackingNumber: o.trackingNumber,
+    fulfillments: o.fulfillments.map(customerShipment),
     createdAt: o.createdAt.toISOString(),
     items: o.items.map((i) => ({
       id: i.id,
@@ -64,9 +47,9 @@ export default async function CustomerOrdersPage() {
       price: Number(i.price),
       product: {
         id: i.product.id,
-        name: i.product.name,
+        name: purchasedProduct(i).name,
         imageUrl: i.product.imageUrl,
-        slug: i.product.slug,
+        slug: purchasedProduct(i).slug!,
       },
     })),
   }));
@@ -109,7 +92,12 @@ export default async function CustomerOrdersPage() {
       </div>
 
       {/* Interactive Orders List Component */}
-      <UserOrdersClient user={currentUser} initialOrders={serializedOrders} />
+      <UserOrdersClient key={`${actor.id}:${query.q}:${query.status}:${page}`} user={currentUser} initialOrders={serializedOrders} query={query} counts={counts} />
+      <nav aria-label="Order history pages" className="flex flex-wrap items-center gap-4">
+        <p>Page {page} of {totalPages}; {total} matching orders.</p>
+        {page > 1 && <Link href={pageHref(page - 1)} className="underline">Previous orders</Link>}
+        {page < totalPages && <Link href={pageHref(page + 1)} className="underline">Next orders</Link>}
+      </nav>
     </div>
   );
 }

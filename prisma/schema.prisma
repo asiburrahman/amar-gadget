@@ -13,10 +13,15 @@ model User {
   name         String?
   password     String?
   avatar       String?
+  avatarKey    String? @db.VarChar(160)
+  avatarVersion Int @default(0)
   phone        String?
   role         String      @default("USER") // USER, MEMBER (Seller), ADMIN
   sellerStatus String      @default("APPROVED") // APPROVED, PENDING, BLOCKED, REJECTED
   isVerified   Boolean     @default(false)
+  sessionVersion Int       @default(0)
+  administrationVersion Int @default(1)
+  wishlistVersion Int      @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -25,16 +30,124 @@ model User {
   reviews     Review[]
   wishlists   Wishlist[]
   addresses   Address[]
+  cart        Cart?
+  legacyAvatar UserAvatarLegacy?
+  vendorFulfillments OrderFulfillment[]
+  otpTokens   OtpToken[]
+  otpThrottles OtpThrottle[]
+  notifications Notification[]
+  @@index([role, createdAt, id])
+  @@index([createdAt, id])
+}
+
+model NotificationEvent {
+  id String @id @default(uuid())
+  dedupeKey String @unique @db.VarChar(240)
+  kind String @db.VarChar(40)
+  audience String @db.VarChar(16)
+  recipientGroup String @db.VarChar(24)
+  recipientId String? @db.VarChar(64)
+  subjectType String @db.VarChar(24)
+  subjectId String @db.VarChar(64)
+  data Json
+  state String @default("READY") @db.VarChar(16)
+  version Int @default(1)
+  attempts Int @default(0)
+  claimCount Int @default(0)
+  cursorId String? @db.VarChar(64)
+  nextAttemptAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  leaseToken String? @db.VarChar(36)
+  leaseUntil DateTime?
+  lastErrorCode String? @db.VarChar(80)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  notifications Notification[]
+  retries NotificationRetryEvent[]
+  @@index([state, nextAttemptAt, id])
+  @@index([state, leaseUntil])
+}
+
+model Notification {
+  id String @id @default(uuid())
+  eventId String
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audience String @db.VarChar(16)
+  kind String @db.VarChar(40)
+  title String @db.VarChar(120)
+  body String @db.VarChar(600)
+  href String @db.VarChar(200)
+  occurredAt DateTime
+  readAt DateTime?
+  readVersion Int @default(0)
+  deliveredAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@unique([eventId, userId])
+  @@index([userId, audience, occurredAt, id])
+  @@index([userId, audience, readAt, occurredAt, id])
+}
+
+model NotificationRetryEvent {
+  id String @id @default(uuid())
+  eventId String
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  actorId String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([eventId, createdAt])
+}
+
+model UserAvatarLegacy {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  value String
+  createdAt DateTime @default(now())
+}
+
+model AccountAdminRequest {
+  id String @id
+  ownerId String
+  hash String
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+}
+
+model AccountAdminEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  userId String
+  actorId String?
+  reason String?
+  before Json
+  after Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  @@index([userId, sequence])
+}
+
+model AvatarImageCleanup {
+  key String @id @db.VarChar(160)
+  ownerId String @db.VarChar(64)
+  availableAt DateTime
+  attempts Int @default(0)
+  lastError String? @db.VarChar(100)
+  createdAt DateTime @default(now())
+  @@index([availableAt, key])
 }
 
 model Category {
   id          String      @id @default(uuid())
-  name        String      @unique
+  name        String
   slug        String      @unique
   image       String?
+  version     Int         @default(1)
+  parentId    String?
+  parent      Category?   @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Category[]  @relation("CategoryHierarchy")
+  aliases     CategoryAlias[]
   products    Product[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  @@index([parentId, id])
 }
 
 model Brand {
@@ -42,9 +155,45 @@ model Brand {
   name        String      @unique
   slug        String      @unique
   logo        String?
+  version     Int         @default(1)
+  aliases     BrandAlias[]
   products    Product[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+}
+
+model CategoryAlias {
+  slug       String   @id
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  @@index([categoryId])
+}
+
+model BrandAlias {
+  slug    String @id
+  brandId String
+  brand   Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  @@index([brandId])
+}
+
+model TaxonomyRequest {
+  id        String   @id
+  ownerId   String
+  hash      String
+  result    Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model TaxonomyEvent {
+  id        String   @id @default(uuid())
+  kind      String
+  targetId  String
+  action    String
+  actorId   String?
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([kind, targetId, createdAt, id])
 }
 
 model Product {
@@ -52,15 +201,20 @@ model Product {
   name          String
   slug          String      @unique
   description   String?
+  specifications Json      @default("[]")
   price         Decimal     @db.Decimal(10, 2)
   discountPrice Decimal?    @db.Decimal(10, 2)
   stock         Int
   imageUrl      String?
   images        String[]    @default([])
+  mediaVersion  Int         @default(1)
+  catalogVersion Int        @default(1)
+  inventoryVersion Int      @default(1)
   isFeatured    Boolean     @default(false)
-  status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED
+  status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED, ARCHIVED
   rating        Float       @default(0)
   reviewCount   Int         @default(0)
+  reviewVersion Int         @default(0)
   
   sellerId      String
   seller        User        @relation(fields: [sellerId], references: [id])
@@ -69,7 +223,7 @@ model Product {
   category      Category    @relation(fields: [categoryId], references: [id])
   
   brandId       String?
-  brand         Brand?       @relation(fields: [brandId], references: [id])
+  brand         Brand?       @relation(fields: [brandId], references: [id], onDelete: Restrict)
   
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -77,6 +231,70 @@ model Product {
   orderItems    OrderItem[]
   reviews       Review[]
   wishlists     Wishlist[]
+  campaigns     CampaignProduct[]
+
+  @@index([sellerId, id])
+  @@index([sellerId, status, createdAt, id])
+  @@index([categoryId, status, createdAt(sort: Desc), id], map: "Product_category_status_created_id_idx")
+  @@index([brandId, status, createdAt(sort: Desc), id], map: "Product_brand_status_created_id_idx")
+  // Reviewed SQL also owns the three partial/expression public catalog indexes.
+}
+
+model ProductMaintenanceRequest {
+  id String @id
+  ownerId String
+  hash String
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+}
+
+model ProductMaintenanceEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  productId String
+  ownerId String
+  actorId String?
+  reason String?
+  before Json
+  after Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  @@index([productId, sequence])
+}
+
+model ProductImageCleanup {
+  key String @id @db.VarChar(160)
+  ownerId String @db.VarChar(64)
+  availableAt DateTime
+  attempts Int @default(0)
+  lastError String? @db.VarChar(100)
+  createdAt DateTime @default(now())
+  @@index([availableAt, key])
+}
+
+model Campaign {
+  id String @id @default(uuid())
+  title String @db.VarChar(120)
+  slug String @unique @db.VarChar(120)
+  description String @default("") @db.VarChar(1000)
+  startsAt DateTime
+  endsAt DateTime
+  isActive Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  products CampaignProduct[]
+  @@index([isActive, startsAt, endsAt])
+}
+
+model CampaignProduct {
+  campaignId String
+  productId String
+  position Int
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@id([campaignId, productId])
+  @@unique([campaignId, position])
+  @@index([productId])
 }
 
 model Order {
@@ -84,20 +302,104 @@ model Order {
   userId          String
   user            User        @relation(fields: [userId], references: [id])
   total           Decimal     @db.Decimal(10, 2)
-  status          String      @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  status          String      @default("PENDING") // Includes PARTIALLY_SHIPPED and PARTIALLY_DELIVERED aggregate states.
+  fulfillmentVersion Int @default(1)
+  refundVersion Int @default(1)
+  subtotalCents BigInt?
+  discountCents BigInt?
+  shippingCents BigInt?
+  pricingEvidence String? @db.VarChar(500)
+  pricingReconciledAt DateTime?
+  refundedCents BigInt @default(0)
+  shippingRefundedCents BigInt @default(0)
+  refundState String @default("NONE")
+  financialReviewReason String? @db.VarChar(120)
+  disputeStatus String @default("NONE")
+  disputeAmountCents BigInt @default(0)
   paymentMethod   String      @default("COD") // COD, STRIPE
   paymentStatus   String      @default("UNPAID") // UNPAID, PAID, FAILED
   paymentIntentId String?
   checkoutTokenHash String? @unique
+  checkoutRequestHash String? @db.VarChar(64)
+  reservationExpiresAt DateTime?
+  reservationNextCheckAt DateTime?
+  reservationReviewReason String?
+  stripeSessionRequestedAt DateTime?
+  stripeCheckoutSessionId String? @unique
+  stripeCheckoutOrigin String?
+  stripeCheckoutVersion Int @default(1)
   shippingAddress String?
   shippingPhone   String?
-  trackingNumber  String?
+  shippingCarrier String? @db.VarChar(80)
+  shipmentTrackingNumber String? @db.VarChar(120)
+  trackingNumber  String? @unique
   couponCode      String?
+  cartSnapshot    Json?
+  cartConsumedAt  DateTime?
+  cartAcknowledgedAt DateTime?
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   
   items           OrderItem[]
+  events          OrderEvent[]
+  fulfillments    OrderFulfillment[]
+  refunds Refund[]
+  financialEvents FinancialEvent[]
+  disputes PaymentDispute[]
+
+  @@index([paymentMethod, status, paymentStatus, reservationNextCheckAt], map: "Order_reservation_sweep_idx")
+  @@index([userId, createdAt(sort: Desc)], map: "Order_userId_createdAt_idx")
+  @@index([createdAt, id])
+}
+
+model Cart {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version Int @default(0)
+  couponCode String? @db.VarChar(64)
+  couponVersion Int @default(0)
+  lastRequestId String? @db.VarChar(36)
+  lastRequestHash String? @db.VarChar(64)
+  lastResult Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lines CartLine[]
+}
+
+model CartLine {
+  id String @id @default(uuid())
+  cartUserId String
+  cart Cart @relation(fields: [cartUserId], references: [userId], onDelete: Cascade)
+  // Soft catalog reference: deleted/hidden products remain removable without
+  // product deletion cascading into a customer's cart or changing its version.
+  productId String @db.VarChar(64)
+  quantity Int
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([cartUserId, productId])
+  @@index([cartUserId, createdAt, id])
+}
+
+model OrderEvent {
+  id                     String @id @default(uuid())
+  sequence               BigInt @unique @default(autoincrement())
+  orderId                String
+  order                  Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind                   String
+  previousStatus         String?
+  status                 String?
+  previousPaymentStatus  String?
+  paymentStatus          String?
+  shippingCarrier        String? @db.VarChar(80)
+  shipmentTrackingNumber String? @db.VarChar(120)
+  fulfillmentId          String? @db.VarChar(64)
+  fulfillmentStatus      String? @db.VarChar(16)
+  occurredAt             DateTime?
+  recordedAt             DateTime @default(now())
+
+  @@index([orderId, sequence])
 }
 
 model OrderItem {
@@ -106,10 +408,275 @@ model OrderItem {
   order     Order    @relation(fields: [orderId], references: [id])
   productId String
   product   Product  @relation(fields: [productId], references: [id])
+  productName String?
+  productSlug String?
+  productSnapshotSource String?
   quantity  Int
   price     Decimal  @db.Decimal(10, 2)
+  netCents BigInt?
+  refundedCents BigInt @default(0)
+  refundedQuantity Int @default(0)
+  retainedQuantity Int @default(0)
+  retainedCents BigInt?
+  voidedQuantity Int @default(0)
+  returnedQuantity Int @default(0)
+  financialVersion Int @default(1)
+  refundLines RefundLine[]
+  returns OrderReturn[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  reviews   Review[]
+  // The database binds new items to their seller shipment before INSERT.
+  // Nullable in Prisma permits existing nested-create callers to omit it;
+  // the reviewed SQL constraints enforce a populated, matching assignment.
+  fulfillmentId String?
+  fulfillment OrderFulfillment? @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
+
+  @@index([productId, orderId, id])
+  @@index([orderId, productId])
+  @@index([fulfillmentId, id])
+}
+
+model Refund {
+  id String @id @default(uuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  requestId String @unique @db.VarChar(36)
+  requestHash String @db.VarChar(64)
+  createdById String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  kind String
+  status String @default("QUEUED")
+  version Int @default(1)
+  amountCents BigInt
+  shippingCents BigInt @default(0)
+  paymentMethod String
+  providerRefundId String? @unique @db.VarChar(120)
+  providerPaymentIntentId String? @db.VarChar(120)
+  providerStatus String? @db.VarChar(32)
+  providerCreatedAt DateTime?
+  submittedAt DateTime?
+  nextCheckAt DateTime?
+  leaseUntil DateTime?
+  leaseToken String? @db.VarChar(36)
+  errorCode String? @db.VarChar(80)
+  manualMethod String? @db.VarChar(30)
+  manualReference String? @db.VarChar(120)
+  confirmedById String? @db.VarChar(64)
+  confirmedAt DateTime?
+  appliedAt DateTime?
+  allocationConfirmed Boolean @default(true)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @updatedAt
+  lines RefundLine[]
+  @@index([orderId, createdAt, id])
+  @@index([status, nextCheckAt])
+}
+
+model RefundLine {
+  id String @id @default(uuid())
+  refundId String
+  refund Refund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  orderItemId String
+  item OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  quantity Int
+  offset Int
+  amountCents BigInt
+  beforeDispatch Boolean
+  @@unique([refundId, orderItemId])
+  @@index([orderItemId])
+}
+
+model OrderReturn {
+  id String @id @default(uuid())
+  requestId String @unique @db.VarChar(36)
+  orderItemId String
+  item OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  quantity Int
+  acceptedById String @db.VarChar(64)
+  evidence String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([orderItemId, createdAt])
+}
+
+model FinancialEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refundId String? @db.VarChar(64)
+  kind String @db.VarChar(80)
+  status String? @db.VarChar(32)
+  amountCents BigInt?
+  actorId String? @db.VarChar(64)
+  actorRole String? @db.VarChar(16)
+  evidence String? @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([orderId, sequence])
+  @@index([refundId, sequence])
+}
+
+model PaymentDispute {
+  id String @id @db.VarChar(120)
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  status String @db.VarChar(40)
+  amountCents BigInt
+  fundsLostCents BigInt @default(0)
+  updatedAt DateTime @updatedAt
+  @@index([orderId])
+}
+
+model FinancialWebhookReceipt {
+  id String @id @db.VarChar(120)
+  kind String @db.VarChar(80)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model OrderFulfillment {
+  id String @id @default(uuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerId String
+  seller User @relation(fields: [sellerId], references: [id])
+  status String @default("PENDING")
+  version Int @default(1)
+  carrier String? @db.VarChar(80)
+  trackingNumber String? @db.VarChar(120)
+  shippedAt DateTime?
+  deliveredAt DateTime?
+  codCollected Boolean @default(false)
+  codCollectedAt DateTime?
+  legacySnapshot Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items OrderItem[]
+  events FulfillmentEvent[]
+  @@unique([orderId, sellerId])
+  @@index([sellerId, createdAt(sort: Desc), id])
+  @@index([sellerId, status, createdAt(sort: Desc), id])
+}
+
+model FulfillmentEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  fulfillmentId String
+  fulfillment OrderFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
+  kind String
+  previousStatus String?
+  status String
+  carrier String? @db.VarChar(80)
+  trackingNumber String? @db.VarChar(120)
+  codCollected Boolean
+  actorId String? @db.VarChar(64)
+  actorRole String? @db.VarChar(16)
+  occurredAt DateTime?
+  recordedAt DateTime @default(now())
+  @@index([fulfillmentId, sequence])
+}
+
+model SellerSettlementPolicy {
+  id String @id @default(uuid())
+  scopeKey String @db.VarChar(80)
+  version Int
+  commissionBps Int?
+  shippingRecipient String? @db.VarChar(16)
+  createdById String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  snapshots SellerSettlementSnapshot[]
+  @@unique([scopeKey, version])
+}
+
+model SellerSettlementSnapshot {
+  fulfillmentId String @id @db.VarChar(64)
+  // Captured scalar IDs retain provenance even if an unpaid fixture/order is
+  // removed. Later payout ledger postings retain their own financial evidence.
+  orderId String @db.VarChar(64)
+  sellerId String @db.VarChar(64)
+  policyId String?
+  policy SellerSettlementPolicy? @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  origin String @db.VarChar(24)
+  version Int @default(1)
+  adoptedById String? @db.VarChar(64)
+  adoptionReason String? @db.VarChar(500)
+  adoptedAt DateTime?
+  capturedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([sellerId, capturedAt, fulfillmentId])
+  @@index([orderId])
+}
+
+model SellerWallet {
+  sellerId String @id @db.VarChar(64)
+  balanceCents BigInt @default(0)
+  version Int @default(0)
+}
+
+model SellerAccrual {
+  fulfillmentId String @id @db.VarChar(64)
+  orderId String @db.VarChar(64)
+  sellerId String @db.VarChar(64)
+  version Int @default(1)
+  targetCents BigInt
+  projection Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([orderId])
+  @@index([sellerId, createdAt, fulfillmentId])
+}
+
+model SellerLedgerEntry {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  sellerId String @db.VarChar(64)
+  kind String @db.VarChar(24)
+  deltaCents BigInt
+  fulfillmentId String? @db.VarChar(64)
+  accrualVersion Int?
+  payoutId String? @db.VarChar(64)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@unique([fulfillmentId, accrualVersion])
+  @@unique([payoutId, kind])
+  @@index([sellerId, sequence])
+}
+
+model SellerPayout {
+  id String @id @default(uuid())
+  sellerId String @db.VarChar(64)
+  amountCents BigInt
+  method String @db.VarChar(30)
+  status String @default("RESERVED") @db.VarChar(16)
+  version Int @default(1)
+  createdById String @db.VarChar(64)
+  reason String @db.VarChar(500)
+  reference String? @db.VarChar(120)
+  resolvedById String? @db.VarChar(64)
+  resolutionReason String? @db.VarChar(500)
+  moneyNotSent Boolean?
+  resolvedAt DateTime?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([sellerId, createdAt, id])
+  @@index([status, createdAt, id])
+}
+
+model SellerPayoutEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  payoutId String @db.VarChar(64)
+  actorId String @db.VarChar(64)
+  previousStatus String? @db.VarChar(16)
+  status String @db.VarChar(16)
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([payoutId, sequence])
+}
+
+model SellerSettlementRequest {
+  id String @id @db.VarChar(36)
+  actorId String @db.VarChar(64)
+  hash String @db.VarChar(64)
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
 }
 
 model Review {
@@ -122,6 +689,22 @@ model Review {
   product   Product  @relation(fields: [productId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Existing ownerless/unverified records remain quarantined as LEGACY.
+  // A SQL partial index permits one canonical row per user/product while
+  // retaining historical duplicates as read-only, noncanonical legacy rows.
+  isCanonical Boolean @default(true)
+  status String @default("PENDING")
+  version Int @default(1)
+  orderItemId String?
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+  moderationReason String? @db.VarChar(300)
+  moderatedById String? @db.VarChar(64)
+  moderatedAt DateTime?
+
+  @@index([userId, createdAt(sort: Desc), id])
+  @@index([productId, status, createdAt(sort: Desc), id])
+  @@index([status, createdAt, id])
+  @@index([orderItemId])
 }
 
 model Wishlist {
@@ -133,10 +716,13 @@ model Wishlist {
   createdAt DateTime @default(now())
 
   @@unique([userId, productId])
+  @@index([userId, createdAt, id])
+  @@index([productId])
 }
 
 model Address {
   id         String   @id @default(uuid())
+  version    Int      @default(1)
   userId     String
   user       User     @relation(fields: [userId], references: [id])
   fullName   String
@@ -148,6 +734,10 @@ model Address {
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  // At most one default per user is enforced by the partial unique index
+  // Address_one_default_per_user in the reviewed SQL migration.
 }
 
 model Coupon {
@@ -158,7 +748,29 @@ model Coupon {
   minSpend    Decimal?  @db.Decimal(10, 2)
   expiresAt   DateTime?
   isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime  @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  version     Int       @default(1)
+  updatedAt   DateTime  @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)")) @updatedAt
+}
+
+model CouponRequest {
+  id        String   @id
+  ownerId   String
+  hash      String
+  result    Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model CouponEvent {
+  id        String   @id @default(uuid())
+  sequence  BigInt   @unique @default(autoincrement())
+  couponId  String
+  action    String
+  actorId   String?
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([couponId, sequence])
 }
 
 model Banner {
@@ -168,15 +780,213 @@ model Banner {
   imageUrl    String
   linkUrl     String?
   isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  placement   String   @default("HERO")
+  position    Int      @default(0)
+  version     Int      @default(1)
+  createdAt   DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  updatedAt   DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)")) @updatedAt
+
+  @@index([placement, isActive, position, id])
+}
+
+model BannerRequest {
+  id String @id
+  ownerId String
+  hash String
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+}
+
+model BannerEvent {
+  id String @id @default(uuid())
+  sequence BigInt @unique @default(autoincrement())
+  bannerId String
+  action String
+  actorId String?
+  before Json?
+  after Json?
+  createdAt DateTime @default(dbgenerated("timezone('UTC'::text, CURRENT_TIMESTAMP)"))
+  @@index([bannerId, sequence])
 }
 
 model OtpToken {
   id        String   @id @default(uuid())
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
   email     String
-  code      String
+  purpose   String
+  codeHash  String @db.VarChar(64)
+  accountFingerprint String @db.VarChar(64)
+  attempts Int @default(0)
+  deliveredAt DateTime?
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
 
-  @@index([email])
+  @@unique([userId, purpose])
+  @@index([email, purpose, expiresAt])
+}
+
+model NewsletterSubscriber {
+  id String @id @default(uuid())
+  email String @unique @db.VarChar(254)
+  status String @default("PENDING")
+  version Int @default(1)
+  generation Int @default(1)
+  confirmationNonce String
+  confirmationExpiresAt DateTime
+  unsubscribeNonce String
+  consentVersion String
+  consentedAt DateTime
+  confirmedAt DateTime?
+  unsubscribedAt DateTime?
+  lastRequestedAt DateTime
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  requests NewsletterRequest[]
+  events NewsletterEvent[]
+  @@index([status, createdAt, id])
+}
+
+model NewsletterRequest {
+  id String @id
+  contentHash String @db.VarChar(64)
+  subscriberId String
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Restrict)
+  generation Int
+  state String @default("READY")
+  attempts Int @default(0)
+  leaseToken String?
+  leaseUntil DateTime?
+  nextAttemptAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  sentAt DateTime?
+  lastErrorCode String?
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@index([state, nextAttemptAt, createdAt, id])
+  @@index([subscriberId, createdAt])
+}
+
+model NewsletterEvent {
+  id String @id @default(uuid())
+  subscriberId String
+  subscriber NewsletterSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Restrict)
+  version Int
+  generation Int
+  kind String
+  beforeStatus String?
+  afterStatus String
+  sourceRequestId String?
+  consentVersion String
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  @@unique([subscriberId, version])
+}
+
+model SupportContactSettings {
+  id String @id
+  email String? @db.VarChar(254)
+  phone String? @db.VarChar(32)
+  address String? @db.VarChar(500)
+  hours String? @db.VarChar(300)
+  published Boolean @default(false)
+  version Int
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model SupportContactEvent {
+  id String @id @default(uuid())
+  version Int @unique
+  actorId String
+  before Json?
+  after Json
+  verified Boolean
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model SupportMessage {
+  id String @id
+  contentHash String @db.VarChar(64)
+  name String @db.VarChar(100)
+  email String @db.VarChar(254)
+  topic String @db.VarChar(16)
+  subject String @db.VarChar(160)
+  orderReference String? @db.VarChar(120)
+  message String @db.Text
+  consentAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  status String @default("OPEN") @db.VarChar(16)
+  version Int @default(1)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  events SupportMessageEvent[]
+
+  @@index([status, topic, createdAt, id])
+  @@index([createdAt, id])
+}
+
+model SupportMessageEvent {
+  id String @id @default(uuid())
+  messageId String
+  message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  version Int
+  actorId String
+  beforeStatus String
+  afterStatus String
+  reason String @db.VarChar(500)
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+
+  @@unique([messageId, version])
+}
+
+model SupportRequest {
+  id String @id
+  ownerId String
+  contentHash String @db.VarChar(64)
+  result Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+}
+
+model SiteContent {
+  kind String @db.VarChar(12)
+  slug String @db.VarChar(100)
+  version Int
+  draft Json
+  publishedVersion Int?
+  publishedAt DateTime?
+  updatedAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  publication SiteContentRevision? @relation("SiteContentPublication", fields: [kind, slug, publishedVersion], references: [kind, slug, version], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([kind, slug])
+  @@index([kind, publishedAt(sort: Desc), slug])
+  @@index([kind, updatedAt(sort: Desc), slug])
+}
+
+model SiteContentRevision {
+  kind String @db.VarChar(12)
+  slug String @db.VarChar(100)
+  version Int
+  requestId String @unique @db.Uuid
+  contentHash String @db.VarChar(64)
+  actorId String
+  action String @db.VarChar(16)
+  reason String @db.VarChar(500)
+  reviewed Boolean @default(false)
+  before Json?
+  after Json
+  createdAt DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  publications SiteContent[] @relation("SiteContentPublication")
+
+  @@id([kind, slug, version])
+}
+
+model OtpThrottle {
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose String
+  verificationWindowStart DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  verificationAttempts Int @default(0)
+  sendWindowStart DateTime @default(dbgenerated("timezone('UTC', CURRENT_TIMESTAMP)"))
+  sendCount Int @default(0)
+  lastSentAt DateTime?
+
+  @@id([userId, purpose])
 }

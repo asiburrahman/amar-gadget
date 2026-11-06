@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
-RUN npm ci --ignore-scripts || npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 FROM base AS builder
 WORKDIR /app
@@ -15,9 +15,9 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV SKIP_ENV_VALIDATION=1
 ENV NODE_OPTIONS="--max-old-space-size=1536"
 
+RUN npx patch-package --error-on-fail
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npx prisma generate
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 
@@ -44,9 +44,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/checkout-reservations-worker.mjs ./scripts/checkout-reservations-worker.mjs
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "start.cjs"]

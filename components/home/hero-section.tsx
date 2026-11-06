@@ -2,9 +2,16 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { formatCurrency } from "@/lib/formatter";
+import type { HomepageBanner } from "@/lib/homepage-banners";
+import { BannerCarousel } from "@/components/home/banner-carousel";
+import { productImageNeedsDirectDelivery } from "@/lib/product-media-policy";
 
 interface HeroSectionProps {
+  banners?: HomepageBanner[];
+  unavailable?: boolean;
+  categoriesUnavailable?: boolean;
   featuredProduct?: {
     id: string;
     slug?: string;
@@ -19,31 +26,15 @@ interface HeroSectionProps {
 export const HeroSection: React.FC<HeroSectionProps> = ({
   featuredProduct,
   categories = [],
+  banners = [],
+  unavailable = false,
+  categoriesUnavailable = false,
 }) => {
-  const defaultCategories = [
+  const categoryList = [
     { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
-    { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
-    { name: "Smartphones", href: "/categories/smartphones", isBold: false, hasSub: true },
-    { name: "Laptops & Computers", href: "/categories/laptops", isBold: false, hasSub: true },
-    { name: "Audio & Headphones", href: "/categories/audio", isBold: false, hasSub: true },
-    { name: "Smart Watches", href: "/categories/smart-watches", isBold: false, hasSub: true },
-    { name: "Accessories", href: "/categories/accessories", isBold: false, hasSub: true },
-    { name: "Electronics", href: "/categories/electronics", isBold: false, hasSub: true },
+    { name: "Current Deals", href: "/deals", isBold: true, hasSub: false },
+    ...categories.map((category) => ({ name: category.name, href: category.slug ? `/categories/${encodeURIComponent(category.slug)}` : "/categories", isBold: false, hasSub: false })),
   ];
-
-  const categoryList =
-    categories.length > 0
-      ? [
-          { name: "All Categories", href: "/categories", isBold: true, hasSub: false },
-          { name: "Top Deals", href: "/deals", isBold: true, hasSub: false },
-          ...categories.map((c) => ({
-            name: c.name,
-            href: c.slug ? `/categories/${c.slug}` : `/categories`,
-            isBold: false,
-            hasSub: false,
-          })),
-        ]
-      : defaultCategories;
 
   const targetLink = featuredProduct
     ? `/products/${featuredProduct.slug || featuredProduct.id}`
@@ -51,6 +42,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   return (
     <section className="bg-[#f5f5f5] pt-0 pb-0 border-b border-gray-200">
+      {categoriesUnavailable && <p role="alert" className="mx-auto max-w-7xl p-4">Category navigation is temporarily unavailable. <Link href="/categories" className="underline">Reload categories</Link></p>}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
         
         {/* Left Category Sidebar Navigation Bar */}
@@ -75,7 +67,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         </div>
 
         {/* Right Hero Banner Slider */}
-        <div className="lg:col-span-3 bg-transparent p-8 sm:p-10 lg:p-12 flex flex-col md:flex-row items-center justify-between min-h-[460px] relative overflow-hidden">
+        {unavailable ? <p role="alert" className="lg:col-span-3 p-8">Featured offers are temporarily unavailable.</p> : banners.length ? <BannerCarousel banners={banners} /> : <div className="lg:col-span-3 bg-transparent p-8 sm:p-10 lg:p-12 flex flex-col md:flex-row items-center justify-between min-h-[460px] relative overflow-hidden">
           
           {/* Banner Text Content */}
           <div className="max-w-md z-10 space-y-4 text-center md:text-left">
@@ -95,7 +87,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               <div className="flex items-baseline justify-center md:justify-start space-x-1 mb-5">
                 <span className="text-3xl lg:text-4xl font-black text-[#333e48] tracking-tight">
                   {featuredProduct
-                    ? formatCurrency(featuredProduct.discountPrice || featuredProduct.price)
+                    ? formatCurrency(featuredProduct.discountPrice ?? featuredProduct.price)
                     : "Best Deals in BD"}
                 </span>
               </div>
@@ -108,26 +100,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </Link>
             </div>
 
-            {/* Slider Bar & Dots */}
-            <div className="flex items-center justify-center md:justify-start space-x-2 pt-6">
-              <span className="w-6 h-2 rounded-full bg-[#fed700] cursor-pointer shadow-xs"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-gray-300 hover:bg-gray-400 cursor-pointer"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-gray-300 hover:bg-gray-400 cursor-pointer"></span>
-            </div>
           </div>
 
           {/* Banner Image */}
-          <div className="mt-8 md:mt-0 relative w-full max-w-md h-72 md:h-96 flex justify-center items-center">
-            <img
+          {featuredProduct?.imageUrl && <div className="mt-8 md:mt-0 relative w-full max-w-md h-72 md:h-96 flex justify-center items-center">
+            <Image
               src={
-                featuredProduct?.imageUrl ||
-                "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80"
+                featuredProduct.imageUrl
               }
               alt={featuredProduct?.name || "Featured Product"}
+              width={640}
+              height={480}
+              unoptimized={productImageNeedsDirectDelivery(featuredProduct.imageUrl)}
               className="object-contain max-h-full drop-shadow-2xl hover:scale-105 transition-transform duration-500"
             />
-          </div>
-        </div>
+          </div>}
+        </div>}
 
       </div>
     </section>

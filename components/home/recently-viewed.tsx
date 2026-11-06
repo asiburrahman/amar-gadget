@@ -1,93 +1,36 @@
 "use client";
-
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
 import { ProductCard } from "@/components/shared/product-card";
+import { useRecentHistoryStore } from "@/stores/recent-history-store";
+import { cleanHistory } from "@/lib/validations/recent-history";
+import type { RecentProduct } from "@/lib/recent-products";
 
-export interface RecentlyViewedProductItem {
-  id: string;
-  slug?: string;
-  name: string;
-  description?: string;
-  price: number;
-  discountPrice?: number | null;
-  stock: number;
-  imageUrl?: string;
-  category?: string;
-  rating?: number;
+export function RecentlyViewed() {
+  const entries = useRecentHistoryStore((state) => state.entries), clear = useRecentHistoryStore((state) => state.clear);
+  const [result, setResult] = useState<{ key: string; products: RecentProduct[]; error?: string }>({ key: "", products: [] });
+  const [attempt, setAttempt] = useState(0), [expanded, setExpanded] = useState(false);
+  const key = entries.map((entry) => `${entry.id}:${entry.viewedAt}`).join(",");
+  useEffect(() => {
+    let controller: AbortController | undefined;
+    const load = async () => {
+      controller?.abort(); const request = new AbortController(); controller = request;
+      const ids = cleanHistory(entries).map((entry) => entry.id);
+      if (!ids.length) { setResult({ key, products: [] }); return; }
+      const params = new URLSearchParams(); for (const id of ids) params.append("product", id);
+      try { const response = await fetch(`/api/products/recently-viewed?${params}`, { signal: request.signal, cache: "no-store" }); const body = await response.json(); if (!response.ok || !body.success) throw new Error(); if (!request.signal.aborted) setResult({ key, products: body.products }); }
+      catch { if (!request.signal.aborted) setResult({ key, products: [], error: "Recently viewed products are temporarily unavailable." }); }
+    };
+    void load();
+    const refresh = () => { if (document.visibilityState === "visible") void load(); };
+    window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", refresh);
+    return () => { controller?.abort(); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [entries, key, attempt]);
+  const loading = entries.length > 0 && result.key !== key;
+  return <section aria-label="Recently viewed" className="py-10 border-b"><div className="max-w-7xl mx-auto px-4 space-y-4"><h2 className="text-xl font-bold">Recently viewed</h2><p className="text-sm">Products you opened on this browser in the last 30 days. This history is shared by people using this browser.</p>
+    {entries.length > 0 && <button type="button" className="underline" onClick={() => { clear(); setExpanded(false); }}>Clear viewing history</button>}
+    {loading ? <p role="status">Loading recently viewed products...</p> : result.error && entries.length ? <p role="alert">{result.error} <button type="button" onClick={() => { setResult({ key: "", products: [] }); setAttempt(attempt + 1); }}>Retry recent products</button></p> : !entries.length || !result.products.length ? <p role="status">No available products in this browser&apos;s viewing history.</p> : <>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{(expanded ? result.products : result.products.slice(0, 4)).map((product) => <ProductCard key={product.id} {...product} />)}</div>
+      {result.products.length > 4 && <button type="button" onClick={() => setExpanded(!expanded)}>{expanded ? "Show fewer recent products" : `Show all ${result.products.length} recent products`}</button>}
+    </>}
+  </div></section>;
 }
-
-interface RecentlyViewedProps {
-  products?: RecentlyViewedProductItem[];
-}
-
-export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({ products = [] }) => {
-  const [showAll, setShowAll] = useState(false);
-  const ROW_LIMIT = 4;
-  const visibleProducts = showAll ? products : products.slice(0, ROW_LIMIT);
-
-  if (products.length === 0) return null;
-
-  return (
-    <section className="py-12 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        <div className="border-b border-slate-200 dark:border-slate-800 pb-3">
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Recently Viewed
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Products you & other shoppers recently explored
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {visibleProducts.map((item) => (
-            <ProductCard
-              key={item.id}
-              id={item.id}
-              slug={item.slug}
-              name={item.name}
-              description={item.description}
-              price={item.price}
-              discountPrice={item.discountPrice}
-              stock={item.stock}
-              imageUrl={item.imageUrl}
-              category={item.category}
-              rating={item.rating ?? 5}
-            />
-          ))}
-        </div>
-
-        {/* See More / See Less Button */}
-        {products.length > ROW_LIMIT && (
-          <div className="flex justify-center pt-2">
-            <button
-              type="button"
-              onClick={() => setShowAll((prev) => !prev)}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-gray-300 bg-white hover:bg-[#fed700] hover:border-[#fed700] text-[#333e48] font-bold text-xs sm:text-sm shadow-xs hover:shadow transition-all duration-200 cursor-pointer active:scale-95 group"
-            >
-              <span>
-                {showAll
-                  ? "See Less"
-                  : `See More (${products.length - ROW_LIMIT} more)`}
-              </span>
-              <svg
-                className={`w-3.5 h-3.5 text-[#333e48] transition-transform duration-200 ${
-                  showAll ? "rotate-180" : "group-hover:translate-y-0.5"
-                }`}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-};
-
