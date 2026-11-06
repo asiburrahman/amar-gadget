@@ -211,7 +211,7 @@ model Product {
   catalogVersion Int        @default(1)
   inventoryVersion Int      @default(1)
   isFeatured    Boolean     @default(false)
-  status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED
+  status        String      @default("PENDING_APPROVAL") // PENDING_APPROVAL, APPROVED, REJECTED, ARCHIVED
   rating        Float       @default(0)
   reviewCount   Int         @default(0)
   reviewVersion Int         @default(0)
@@ -235,6 +235,9 @@ model Product {
 
   @@index([sellerId, id])
   @@index([sellerId, status, createdAt, id])
+  @@index([categoryId, status, createdAt(sort: Desc), id], map: "Product_category_status_created_id_idx")
+  @@index([brandId, status, createdAt(sort: Desc), id], map: "Product_brand_status_created_id_idx")
+  // Reviewed SQL also owns the three partial/expression public catalog indexes.
 }
 
 model ProductMaintenanceRequest {
@@ -299,7 +302,7 @@ model Order {
   userId          String
   user            User        @relation(fields: [userId], references: [id])
   total           Decimal     @db.Decimal(10, 2)
-  status          String      @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  status          String      @default("PENDING") // Includes PARTIALLY_SHIPPED and PARTIALLY_DELIVERED aggregate states.
   fulfillmentVersion Int @default(1)
   refundVersion Int @default(1)
   subtotalCents BigInt?
@@ -329,7 +332,7 @@ model Order {
   shippingPhone   String?
   shippingCarrier String? @db.VarChar(80)
   shipmentTrackingNumber String? @db.VarChar(120)
-  trackingNumber  String?
+  trackingNumber  String? @unique
   couponCode      String?
   cartSnapshot    Json?
   cartConsumedAt  DateTime?
@@ -714,6 +717,7 @@ model Wishlist {
 
   @@unique([userId, productId])
   @@index([userId, createdAt, id])
+  @@index([productId])
 }
 
 model Address {

@@ -893,3 +893,46 @@ plus the compiled content, collection, outage, local STARTTLS OTP and refund
 checks. The strict lint job also succeeded. AUD-046 is implemented and verified;
 the current count is **49/51**. Next is AUD-049; the owner's external SMTP
 revocation remains AUD-051. The full remaining-task objective stays active.
+
+## AUD-049 implementation under verification - 6 November 2026
+
+The new additive migration 38 defines role/seller/catalog/order/payment and
+numeric domains, preserves partial address/review uniqueness and makes non-null
+order tracking unique. Checkout allocates 128-bit references and retries only
+that specific fully rolled-back PostgreSQL collision, with redacted diagnostics.
+Readiness requires actual validated protections and exact unique index shapes.
+
+The real Prisma CLI rehearsal installs baseline 37, records nonempty account,
+shipment, COD collection/refund, seller ledger/terms and publication history,
+blocks invalid-role and duplicate-tracking upgrades atomically, then exercises
+explicit fixture reconciliation, resolve/retry, successful upgrade 38 and a
+second deploy. All 62 public application tables retain their exact data/timestamp
+fingerprints across the successful upgrade. A separate measured fixture checks
+seven catalog/wishlist plans and identical ordered results across the actual
+CLI upgrade. Historical noncanonical LEGACY review evidence is retained.
+
+Local focused integration, native, TypeScript, schema/lint, production build
+and compiled provider/outage/content checks have passed. The initial full Jest
+run exposed one now-obsolete impossible-discount fixture; it now asserts actual
+database rejection and retains the independent unsafe-media approval test.
+Initial browser verification passed 39/40; Firefox's upload PUT was dispatched
+near the UI assertion deadline. The revised test first proves the exact actual
+storage PUT returns 503, then asserts the retry UI and actual subsequent upload.
+Failed evidence is retained; final full gates and source CI are still pending.
+AUD-049 remains open at this checkpoint, with the tracked count still 49/51.
+
+See [database invariant contracts and reproduction](DATABASE_INVARIANTS_RUNBOOK.md).
+The owner authorized the eventual main merge after verification; none has yet
+occurred. Provider-side SMTP revocation remains the owner's AUD-051 action.
+AUD-049 local verification checkpoint: the complete mandatory gate passed
+174 suites / 1,280 tests with no skips and real CLI migrations/twice-idempotent
+seed. The later expanded focused invariant suite passed all 28 cases (seven
+additional boundary/legacy-compatibility cases); final source CI will run the
+complete expanded set. Native tests passed 16/16. Final four-project browsers
+passed 40/40 with zero retries in 6.9 minutes. Final TypeScript, Prisma schema,
+strict lint, production/standalone build, six compiled invariant/readiness
+checks, and compiled collection/outage/STARTTLS OTP/refund/content checks passed.
+The smoke now establishes real process liveness before testing older-schema
+unavailability, since a Next banner alone is insufficient. Earlier failed runs
+are retained above and in the database runbook. Source CI is pending; AUD-049
+is not yet closed and main has not yet been merged.

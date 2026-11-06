@@ -139,7 +139,17 @@ test("seller uploads actual bytes, recovers storage failure and submits a privat
   const png = await sharp({ create: { width: 64, height: 64, channels: 4, background: "blue" } }).png().toBuffer();
   shop.storage.setAvailable(false);
   try {
+    // Observe the actual failed storage round trip before timing the UI
+    // response. Presigning/transport scheduling is a separate bounded phase,
+    // especially when Firefox runs alongside the real database suite.
+    const rejectedUpload = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === "PUT" &&
+        (url.hostname === `fixture-media.${"a".repeat(32)}.r2.cloudflarestorage.com` ||
+          url.origin === shop.origin && url.pathname.startsWith("/__fixture_storage/"));
+    }, { timeout: 30_000 });
     await page.getByLabel("Add product images").setInputFiles({ name: "verified.png", mimeType: "image/png", buffer: png });
+    expect((await rejectedUpload).status()).toBe(503);
     await expect(page.getByRole("button", { name: "Retry verified.png" })).toBeVisible();
   } finally { shop.storage.setAvailable(true); }
   await page.getByRole("button", { name: "Retry verified.png" }).click();

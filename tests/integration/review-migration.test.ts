@@ -36,6 +36,15 @@ import { Client } from "pg";
       await expect(db.query(`UPDATE "Review" SET status='PUBLISHED',"moderatedAt"=now(),"moderatedById"='old-admin' WHERE id='newer'`)).rejects.toBeDefined();
       const indexes = (await db.query(`SELECT indexname FROM pg_indexes WHERE tablename IN ('Review','OrderItem','Product')`)).rows.map((row: { indexname: string }) => row.indexname);
       expect(indexes).toEqual(expect.arrayContaining(["Review_one_canonical_user_product", "Review_userId_createdAt_id_idx", "Review_productId_status_createdAt_id_idx", "Review_orderItemId_idx", "OrderItem_productId_orderId_id_idx", "Product_sellerId_id_idx", "OrderItem_orderId_productId_idx"]));
+      // Preserve the real quarantined duplicate from the historical upgrade;
+      // unconditional owner/product uniqueness would destroy this evidence.
+      const invariantMigration = "20261105100000_database_invariants";
+      for (const entry of names.filter((entry) => entry > "20261030110000_review_listing_indexes" && entry < invariantMigration)) await db.query(await readFile(join(root, entry, "migration.sql"), "utf8"));
+      const retained = (await db.query('SELECT * FROM "Review" ORDER BY id')).rows;
+      await db.query(await readFile(join(root, invariantMigration, "migration.sql"), "utf8"));
+      expect((await db.query('SELECT * FROM "Review" ORDER BY id')).rows).toEqual(retained);
+      expect(retained).toHaveLength(2);
+      expect(retained.find((row) => row.id === "older")).toMatchObject({ status: "LEGACY", isCanonical: false, rating: 9, comment: longComment });
     } finally { await db?.end(); try { if (created) await admin.query(`DROP DATABASE "${name}"`); } finally { await admin.end(); } }
   }, 30_000);
 });

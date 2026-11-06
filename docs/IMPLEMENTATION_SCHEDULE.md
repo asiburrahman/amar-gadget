@@ -4,6 +4,14 @@ Requested by Asibur Rahman on 28 October 2026: finish the remaining audit work c
 
 This is a dependency-ordered work queue, not a background timer or a promised completion date. Each active session takes the next task through implementation, relevant validation, documentation and GitHub commit/push. All work stays on `codex/deep-audit-2026-10-28`; main is not merged automatically.
 
+Owner update, 5 November 2026: after the remaining implementation and required
+verification, merge the work into main. This explicitly authorizes the later
+main merge and supersedes the earlier instruction to leave main unmerged.
+Main has not been merged at this checkpoint; finish AUD-049, inspect the actual
+branch/main state and verification, then perform and record the merge. External
+SMTP credential revocation remains the owner's action and must not be reported
+as completed by a source merge.
+
 Standing owner instruction after AUD-007: complete **all remaining 40 tasks**, one at a time, preserving every task's scope, with a focused professional commit and push for each. Session checkpoints do not narrow that objective or require a fresh permission request to continue routine authorized work.
 
 New findings are additive, not replacements for that scope. The dependency scan during AUD-008 identified urgent AUD-050; see [additional audit findings](ADDITIONAL_AUDIT_FINDINGS.md). It is prioritized immediately after AUD-008, before continuing account-security work.

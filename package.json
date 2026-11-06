@@ -20,6 +20,9 @@
     "test:browser": "playwright test",
     "bench:passwords": "tsx scripts/benchmark-passwords.ts",
     "audit:password-formats": "tsx scripts/check-passwords.ts",
+    "audit:database-invariants": "node scripts/audit-database-invariants.mjs",
+    "test:database-upgrade": "node scripts/rehearse-database-invariants.mjs",
+    "test:database-plans": "node scripts/rehearse-database-plans.mjs",
     "seed:accounts": "tsx scripts/seed-users-credentials.ts",
     "provision:admin": "tsx scripts/provision-admin.ts",
     "audit:dependencies": "npm audit",
@@ -60,7 +63,8 @@
     "smoke:site-content": "node scripts/smoke-site-content.mjs",
     "smoke:reliability-collections": "node scripts/smoke-reliability-collections.mjs",
     "smoke:reliability-outages": "node scripts/smoke-reliability-outages.mjs",
-    "smoke:otp-clock": "node scripts/smoke-otp-clock.mjs"
+    "smoke:otp-clock": "node scripts/smoke-otp-clock.mjs",
+    "smoke:database-invariants": "node scripts/smoke-database-invariants.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

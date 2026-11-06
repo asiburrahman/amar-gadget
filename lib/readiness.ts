@@ -5,6 +5,7 @@ import { getRedisClient } from "@/lib/redis";
 import { REQUIRED_SCHEMA_MIGRATION } from "@/lib/database-schema";
 import { reportOperationFailure } from "@/lib/observability";
 import { otpClockGuard } from "@/lib/otp-clock-guard";
+import { databaseInvariantGuard } from "@/lib/database-invariant-guard";
 
 let database: PrismaClient | undefined;
 let cached: { expires: number; result: ReadinessResult } | undefined;
@@ -23,7 +24,7 @@ async function probe(): Promise<ReadinessResult> {
   await Promise.allSettled([
     (async () => {
       try {
-      const rows = await database!.$queryRaw<{ migration_name: string }[]>`SELECT migration_name FROM "_prisma_migrations" WHERE migration_name = ${REQUIRED_SCHEMA_MIGRATION} AND finished_at IS NOT NULL AND rolled_back_at IS NULL AND ${otpClockGuard} LIMIT 1`;
+      const rows = await database!.$queryRaw<{ migration_name: string }[]>`SELECT migration_name FROM "_prisma_migrations" WHERE migration_name = ${REQUIRED_SCHEMA_MIGRATION} AND finished_at IS NOT NULL AND rolled_back_at IS NULL AND ${otpClockGuard} AND ${databaseInvariantGuard} LIMIT 1`;
       if (rows.length !== 1) throw Object.assign(Error("Required schema is unavailable"), { code: "P2021" });
       // Parse/permission-check critical runtime relations and columns without
       // reading any account, order, ledger, contact or subscription records.

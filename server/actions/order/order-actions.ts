@@ -1,6 +1,6 @@
 "use server";
 
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { purchasedProduct } from "@/lib/purchase-product-label";
 import { ZodError } from "zod";
@@ -23,6 +23,7 @@ import { readCustomerOrders } from "@/lib/customer-orders-read";
 import { readAdminOrders } from "@/lib/admin-orders-read";
 import { ReadAccessError, ReadPageError } from "@/lib/protected-read";
 import { serviceUnavailable } from "@/lib/observability";
+import { withOrderTrackingRetry } from "@/lib/order-tracking-code";
 
 function hashCheckoutToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -62,7 +63,7 @@ export async function createOrder(input: CheckoutInput) {
     const requestHash = createHash("sha256")
       .update(canonicalCheckoutRequest(validated, currentUser?.id ?? null)).digest("hex");
 
-    const order = await prisma.$transaction(async (tx) => {
+    const order = await withOrderTrackingRetry((trackingNumber) => prisma.$transaction(async (tx) => {
       // Serialize the same attempt across requests/processes before any guest
       // or stock writes. The database releases this lock on commit/rollback.
       // Only a constant hash is sent as a parameter; no token/PII enters SQL.
@@ -121,7 +122,7 @@ export async function createOrder(input: CheckoutInput) {
           paymentStatus: "UNPAID",
           shippingAddress: `${validated.fullName} (${validated.phone}), ${validated.street}, ${validated.city}, ${validated.district} ${validated.zipCode || ""}`,
           shippingPhone: validated.phone,
-          trackingNumber: `AG-${randomBytes(4).toString("hex").toUpperCase()}`,
+          trackingNumber,
           couponCode: validated.couponCode?.trim().toUpperCase() || null,
           checkoutTokenHash: tokenHash,
           checkoutRequestHash: requestHash,
@@ -136,7 +137,7 @@ export async function createOrder(input: CheckoutInput) {
       });
       if (cartSnapshot && validated.paymentMethod === "COD") await consumeCartForOrder(tx, created.id);
       return created;
-    });
+    }));
 
     if (order.status === "CANCELLED" || order.paymentStatus === "FAILED") {
       return { success: false as const, code: "CHECKOUT_CLOSED", error: "This checkout is closed. Start a new checkout to place another order." };
@@ -179,11 +180,12 @@ export async function createOrder(input: CheckoutInput) {
       return { success: false as const, code: error.code, error: error.message };
     }
     // Never return database/provider exception details to a public action.
-    console.error("Order creation failed:", error);
+    const incident = serviceUnavailable("checkout.create", error).incident;
     return {
       success: false as const,
       code: "INTERNAL_ERROR",
       error: "Unable to process checkout right now. Please try again.",
+      reference: incident.reference,
     };
   }
 }

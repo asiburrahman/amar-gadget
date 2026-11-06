@@ -64,6 +64,10 @@ jobs:
       - run: npm ci
       - name: Prisma schema validation
         run: npx prisma validate
+      - name: Actual CLI upgrade, invalid legacy rollback and query plans
+        run: |
+          npm run test:database-upgrade
+          npm run test:database-plans
       - name: Unit, real PostgreSQL, migrations and seed (no skipped tests)
         run: npm run test:isolated
       - name: Native ingress and fixture readiness tests
@@ -79,6 +83,7 @@ jobs:
           npm run smoke:otp-clock
           npm run smoke:refunds
           npm run smoke:site-content
+          npm run smoke:database-invariants
       - name: Install browser engines
         run: npx playwright install --with-deps chromium firefox webkit
       - name: Checkout, upload recovery, content publication and navigation in real browsers

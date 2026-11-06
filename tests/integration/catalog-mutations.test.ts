@@ -58,7 +58,13 @@ databaseSuite("catalog mutations use runtime validation and current PostgreSQL a
     expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(true);
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).status).toBe("APPROVED");
     expect((await updateProductStatus(product.id, "REJECTED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(true);
-    await db.product.update({ where: { id: product.id }, data: { discountPrice: 150, imageUrl: "javascript:alert(1)" } });
+    const beforeInvalidPrice = await db.product.findUniqueOrThrow({ where: { id: product.id } });
+    // AUD-049 now rejects impossible discounts at the database boundary.
+    await expect(db.product.update({ where: { id: product.id }, data: { discountPrice: 150 } })).rejects.toMatchObject({ code: "P2039" });
+    expect(await db.product.findUniqueOrThrow({ where: { id: product.id } })).toEqual(beforeInvalidPrice);
+    // Unsafe legacy media can still require application-level quarantine;
+    // keep exercising approval validation rather than bypassing the new CHECK.
+    await db.product.update({ where: { id: product.id }, data: { imageUrl: "javascript:alert(1)" } });
     expect((await updateProductStatus(product.id, "APPROVED", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(false);
     expect((await updateProductStatus(product.id, "PENDING_APPROVAL", (await db.product.findUniqueOrThrow({ where: { id: product.id } })).catalogVersion)).success).toBe(true);
     expect((await db.product.findUniqueOrThrow({ where: { id: product.id } })).status).toBe("PENDING_APPROVAL");
