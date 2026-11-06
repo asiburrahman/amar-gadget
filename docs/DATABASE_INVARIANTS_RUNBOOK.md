@@ -3,7 +3,8 @@
 **Status: AUD-049 complete and CI-verified on b9cf24f, 6 November 2026.** The
 tracked count is 50/51 after the local and PostgreSQL 16/18 CI gates passed.
 AUD-051 is the separate, still-unconfirmed owner SMTP credential revocation.
-No production migration, provider payment, deployment or main merge is claimed.
+No production migration, provider payment or deployment is claimed. The later
+owner-authorized main merge is be65fcd; see the implementation log.
 
 ## Migration and compatibility
 

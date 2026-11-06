@@ -2,12 +2,12 @@
 
 Requested by Asibur Rahman on 28 October 2026: finish the remaining audit work carefully, in small steps. Do not compress the scope, replace working features with demos, or label unverified behavior production-ready. Continue routine reversible work without repeated approval requests. Ask for business rules or external-service access only when that specific step needs them.
 
-This is a dependency-ordered work queue, not a background timer or a promised completion date. Each active session takes the next task through implementation, relevant validation, documentation and GitHub commit/push. All work stays on `codex/deep-audit-2026-10-28`; main is not merged automatically.
+This is a dependency-ordered work queue, not a background timer or a promised completion date. Each active session takes the next task through implementation, relevant validation, documentation and GitHub commit/push. Implementation was recorded on `codex/deep-audit-2026-10-28`; the later owner-authorized main integration preserves that history.
 
 Owner update, 5 November 2026: after the remaining implementation and required
 verification, merge the work into main. This explicitly authorizes the later
 main merge and supersedes the earlier instruction to leave main unmerged.
-Main has not been merged at this checkpoint; finish AUD-049, inspect the actual
+Main had not been merged at that checkpoint; finish AUD-049, inspect the actual
 branch/main state and verification, then perform and record the merge. External
 SMTP credential revocation remains the owner's action and must not be reported
 as completed by a source merge.
@@ -43,7 +43,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest completed step: AUD-049 - database invariants and rollout rehearsal.** Current total: all 49 original tasks plus AUD-050 implemented (**50 of 51 tracked tasks**); only AUD-051 external SMTP credential revocation confirmation remains open. All three CI jobs passed on b9cf24f in run 42205423702. Actual PostgreSQL 16/18 logs each show 174 suites / 1,287 tests without skips, 16 native tests and 40 browser cases, with real CLI upgrade/rollback, measured plans and compiled protection/provider/outage checks. Next: perform the owner's authorized main integration and record the actual merge. The full objective stays active while required external credential confirmation is outstanding.
+**Latest completed step: AUD-049 - database invariants and rollout rehearsal.** Current total: all 49 original tasks plus AUD-050 implemented (**50 of 51 tracked tasks**); only AUD-051 external SMTP credential revocation confirmation remains open. All three CI jobs passed on b9cf24f in run 42205423702. Actual PostgreSQL 16/18 logs each show 174 suites / 1,287 tests without skips, 16 native tests and 40 browser cases, with real CLI upgrade/rollback, measured plans and compiled protection/provider/outage checks. The owner-authorized main merge is be65fcd (6 November 2026), preserving the complete task history. The full objective stays active while required external credential confirmation is outstanding.
 
 ## Completed AUD-042 checkpoint
 

@@ -4,9 +4,9 @@ A multi-vendor electronics marketplace with customer, seller and administrator w
 
 আমার গ্যাজেট একটি মাল্টি-ভেন্ডর ই-কমার্স প্রকল্প। এই রিপোজিটরিতে স্টোরফ্রন্ট, অ্যাকাউন্ট, অর্ডার, পেমেন্ট, সেলার পরিচালনা এবং অ্যাডমিনের কাজের কোড ও পরীক্ষার প্রমাণ রাখা হয়েছে।
 
-[![Verification](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml/badge.svg?branch=codex%2Fdeep-audit-2026-10-28)](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml)
+[![Verification](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml)
 
-The audit and implementation history lives on [codex/deep-audit-2026-10-28](https://github.com/asiburrahman/amar-gadget/tree/codex/deep-audit-2026-10-28). The current tracked status is **50 of 51 tasks completed**; only AUD-051 awaits the owner's SMTP credential revocation confirmation. AUD-049 passed local verification and all three CI jobs. The owner authorized main integration after verification; its actual merge is recorded separately. See the [task schedule](docs/IMPLEMENTATION_SCHEDULE.md) and [implementation log](docs/CODEX_IMPLEMENTATION_LOG.md).
+The audit branch was merged into main on 6 November 2026 in [be65fcd](https://github.com/asiburrahman/amar-gadget/commit/be65fcd4a624f4f4098f59131f752ad79e5fac13), preserving its individual task commits. The public [codex/deep-audit-2026-10-28 branch](https://github.com/asiburrahman/amar-gadget/tree/codex/deep-audit-2026-10-28) remains available as contribution evidence. The current tracked status is **50 of 51 tasks completed**; only AUD-051 awaits the owner's SMTP credential revocation confirmation. AUD-049 passed local verification and all three source CI jobs. See the [task schedule](docs/IMPLEMENTATION_SCHEDULE.md) and [implementation log](docs/CODEX_IMPLEMENTATION_LOG.md).
 
 The owner-supplied deployment address is [amargadget.gmksolution.com](https://amargadget.gmksolution.com). Its availability and hosted provider behavior have not been certified by the local verification recorded here. This README does not claim production readiness, throughput, customer counts, delivery times, warranty coverage or a successful live payment.
 
@@ -200,7 +200,7 @@ npm run test:browser
 
 Follow the [release verification runbook](docs/RELEASE_VERIFICATION.md) for the full compiled/provider checks and CI matrix. Running plain `npm test` without the guarded test database can skip database suites and is not release evidence. Browser/smoke runners use disposable synthetic accounts and local protocol fixtures; application code does not import those fixtures or fake provider success.
 
-At the source-verification checkpoint, no main-branch merge had yet been performed. No production migration, deployment, hosted money transfer or outbound customer email was performed by this audit. The exposed historical SMTP credential still requires the owner's provider-side revocation confirmation; removing a fallback from source does not revoke it.
+The owner-authorized main merge preserves the CI-verified application source; the later integration record changes documentation only. The badge above tracks main's own verification separately. No production migration, deployment, hosted money transfer or outbound customer email was performed by this audit. The exposed historical SMTP credential still requires the owner's provider-side revocation confirmation; removing a fallback from source does not revoke it.
 
 ## Contributing and attribution
 

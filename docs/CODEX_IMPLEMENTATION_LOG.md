@@ -952,3 +952,23 @@ verified: **50/51 tracked tasks complete**. AUD-051 awaits the owner's provider
 revocation confirmation; no production migration/deployment or hosted-provider
 certification is inferred. The owner-authorized main integration is next and
 its actual commit/push will be recorded separately. The goal remains active.
+## Owner-authorized main integration - 6 November 2026
+
+The owner explicitly requested main integration after the remaining code and
+required checks. Source b9cf24f passed all three CI jobs in run 42205423702;
+both PostgreSQL job logs were inspected before merging. Closure f0702d9 only
+updated documentation. Remote main was fetched and had no intervening commits.
+
+Merge [be65fcd](https://github.com/asiburrahman/amar-gadget/commit/be65fcd4a624f4f4098f59131f752ad79e5fac13)
+has parents 37a80a8 (previous main) and f0702d9 (audit closure). The audit branch
+is an ancestor of the merge, and the merge's content is identical to that branch.
+No squash, rebase, force push or history rewrite was used. Individual task
+commits and `Assisted-by: OpenAI Codex` attribution remain visible. The retained
+public audit branch is the portfolio/contribution record requested by the owner.
+
+The following integration-record commit changes only documentation; application,
+configuration, tests, migration and workflow source remain identical to the
+CI-verified b9cf24f. Main's own workflow is tracked separately in GitHub Actions.
+This merge does not migrate/deploy production, certify hosted providers, send
+customer mail or revoke the historical SMTP credential. **50/51 tasks are
+complete; AUD-051 remains open pending owner revocation confirmation.**
