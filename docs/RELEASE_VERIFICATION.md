@@ -1,10 +1,11 @@
 # Marketplace release verification
 
-Current completed baseline: AUD-046 passed strict lint and both PostgreSQL
-16/18 CI jobs in run 42012901540 on b72e17d. Both database-job logs were inspected:
-172 suites / 1,250 tests without skips, 16 native tests and 40 browser cases each,
-plus the compiled content/provider/outage checks. AUD-049 and the owner's
-external AUD-051 remain open. Historical failed and successful checkpoints
+Current completed baseline: AUD-049 passed strict lint and both PostgreSQL
+16/18 CI jobs in run 42205423702 on b9cf24f. Both database-job logs were inspected:
+174 suites / 1,287 tests without skips, 16 native tests and 40 browser cases each,
+plus real CLI upgrade/invalid-data rollback, seven measured query plans and
+compiled invariant/content/provider/outage checks. Only the owner's external
+AUD-051 remains open (50/51 complete). Historical failed and successful checkpoints
 below retain their original scope. This record does not certify a production
 deployment or hosted Stripe, Cloudflare, SMTP or Upstash accounts.
 

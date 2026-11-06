@@ -43,7 +43,7 @@ Cross-cutting tests, migration validation, error handling and accessibility belo
 
 ## Current task
 
-**Latest implemented step: AUD-046 - reviewed public content, legacy routes and truthful documentation.** Current total: 48 original tasks plus AUD-050 implemented (49 of 51 tracked tasks); AUD-049 plus AUD-051 external credential revocation remain open (2 total). **Next: AUD-049 - database invariants and rollout rehearsal.** SMTP revocation still requires the owner's external provider action. Each task remains a separate implementation and commit/push. All three CI jobs passed on b72e17d, including lint and PostgreSQL 16/18 verification, and both database-job logs were inspected. See the implementation log and release verification runbook; the complete remaining-task objective stays active.
+**Latest completed step: AUD-049 - database invariants and rollout rehearsal.** Current total: all 49 original tasks plus AUD-050 implemented (**50 of 51 tracked tasks**); only AUD-051 external SMTP credential revocation confirmation remains open. All three CI jobs passed on b9cf24f in run 42205423702. Actual PostgreSQL 16/18 logs each show 174 suites / 1,287 tests without skips, 16 native tests and 40 browser cases, with real CLI upgrade/rollback, measured plans and compiled protection/provider/outage checks. Next: perform the owner's authorized main integration and record the actual merge. The full objective stays active while required external credential confirmation is outstanding.
 
 ## Completed AUD-042 checkpoint
 
@@ -95,6 +95,23 @@ Inspected PostgreSQL 16/18 logs show the same full counts and compiled checks.
 AUD-046 is complete; the current total is **49/51**. See
 [content evidence](SITE_CONTENT_IMPLEMENTATION_NOTES.md). AUD-049 is the next
 separate implementation task; AUD-051 remains external.
+
+## Completed AUD-049 checkpoint
+
+The additive migration preserves all 37 published predecessors, application
+rows and financial/publication history. It adds legal state/money/stock domains,
+nullable tracking uniqueness and measured indexes. Checkout uses 128-bit codes
+with bounded retries only for the exact rolled-back tracking conflict. Readiness
+requires the actual validated protections and retained partial unique indexes.
+Real CLI bad-data upgrades fail atomically, and explicit owned-fixture
+reconciliation/retry preserves all 62 public application tables. Quarantined
+noncanonical historical reviews remain intact.
+
+Commit b9cf24f passed all three jobs in
+[run 42205423702](https://github.com/asiburrahman/amar-gadget/actions/runs/42205423702).
+Both downloaded database logs were inspected. See the
+[database invariant runbook](DATABASE_INVARIANTS_RUNBOOK.md). AUD-049 is complete;
+50/51 tasks are complete. SMTP revocation remains the owner's AUD-051 action.
 
 ## Owner-provided introduction
 

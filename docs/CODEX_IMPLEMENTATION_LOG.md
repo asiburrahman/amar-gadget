@@ -936,3 +936,19 @@ The smoke now establishes real process liveness before testing older-schema
 unavailability, since a Next banner alone is insufficient. Earlier failed runs
 are retained above and in the database runbook. Source CI is pending; AUD-049
 is not yet closed and main has not yet been merged.
+AUD-049 remote closure, 6 November 2026: source commit
+[b9cf24f](https://github.com/asiburrahman/amar-gadget/commit/b9cf24f90a2aa2ce8623499ddbc00b8014cfb6ab)
+passed [run 42205423702](https://github.com/asiburrahman/amar-gadget/actions/runs/42205423702).
+All three jobs succeeded. Downloaded PostgreSQL 16 job 127850716057 and
+PostgreSQL 18 job 127850716398 logs each show **174 suites / 1,287 tests with
+zero skips, 16 native tests and 40 browser cases**, plus actual CLI bad-data
+rollback/upgrade, all seven measured query plans, schema/type/build and all
+compiled invariant/collection/outage/STARTTLS OTP/refund/content checks.
+The expanded full CI run includes the seven boundary cases added after the
+local 1,280-test full gate. No failed local checkpoint was counted as passing.
+
+AUD-049 is complete. All 49 original tasks plus AUD-050 are implemented and
+verified: **50/51 tracked tasks complete**. AUD-051 awaits the owner's provider
+revocation confirmation; no production migration/deployment or hosted-provider
+certification is inferred. The owner-authorized main integration is next and
+its actual commit/push will be recorded separately. The goal remains active.

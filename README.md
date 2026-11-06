@@ -6,7 +6,7 @@ A multi-vendor electronics marketplace with customer, seller and administrator w
 
 [![Verification](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml/badge.svg?branch=codex%2Fdeep-audit-2026-10-28)](https://github.com/asiburrahman/amar-gadget/actions/workflows/verify.yml)
 
-The audit and implementation work lives on [codex/deep-audit-2026-10-28](https://github.com/asiburrahman/amar-gadget/tree/codex/deep-audit-2026-10-28). It has not been merged into main. The current tracked status is **49 of 51 tasks completed**, with AUD-049 remaining and AUD-051 awaiting the owner's SMTP credential revocation. AUD-046 passed local verification and all three CI jobs. See the [task schedule](docs/IMPLEMENTATION_SCHEDULE.md) and [implementation log](docs/CODEX_IMPLEMENTATION_LOG.md).
+The audit and implementation history lives on [codex/deep-audit-2026-10-28](https://github.com/asiburrahman/amar-gadget/tree/codex/deep-audit-2026-10-28). The current tracked status is **50 of 51 tasks completed**; only AUD-051 awaits the owner's SMTP credential revocation confirmation. AUD-049 passed local verification and all three CI jobs. The owner authorized main integration after verification; its actual merge is recorded separately. See the [task schedule](docs/IMPLEMENTATION_SCHEDULE.md) and [implementation log](docs/CODEX_IMPLEMENTATION_LOG.md).
 
 The owner-supplied deployment address is [amargadget.gmksolution.com](https://amargadget.gmksolution.com). Its availability and hosted provider behavior have not been certified by the local verification recorded here. This README does not claim production readiness, throughput, customer counts, delivery times, warranty coverage or a successful live payment.
 
@@ -29,7 +29,7 @@ The owner-supplied deployment address is [amargadget.gmksolution.com](https://am
 | Support | Persisted inquiries, private support queue, dashboard-managed published contact information | Enter verified public email, phone, address and support hours in `/admin/settings/support`; these fields do not configure SMTP |
 | Newsletter | Consent, confirmation, unsubscribe and delivery/retry records | Configure SMTP and supervise the newsletter worker; a queued message is not reported as delivered |
 | Public content | Reviewed page/article publication, private drafts, exact decision receipts and retained revision history | `/admin/settings/content`; publish actual operator information. No operator policies or sample articles are seeded |
-| Reliability | Safe incident references, explicit outage states, bounded queries, liveness and schema/Redis readiness | Monitor readiness and workers; final schema/constraint rehearsal remains AUD-049 |
+| Reliability | Safe incident references, explicit outage states, bounded queries, schema/Redis readiness and verified database constraints | Monitor readiness/workers and rehearse the documented production rollout |
 | Verification | Real PostgreSQL tests, compiled HTTP checks, four browser projects and GitHub CI | Local provider fixtures prove protocol/application behavior, not hosted Stripe/R2/SMTP account acceptance |
 
 There is no subscription billing or Stripe customer portal. The legacy portal endpoint returns an explicit `410` contract directing callers to order history and support. Refund and payout actions do not simulate money movement.
@@ -172,24 +172,27 @@ See [content implementation and verification notes](docs/SITE_CONTENT_IMPLEMENTA
 
 ## Verification and public evidence
 
-The latest completed baseline is AUD-046, commit [b72e17d](https://github.com/asiburrahman/amar-gadget/commit/b72e17d02a286172681718940fffe5b8793cc3b9), with a fully successful [GitHub CI run](https://github.com/asiburrahman/amar-gadget/actions/runs/42012901540). The inspected logs show:
+The latest completed baseline is AUD-049, commit [b9cf24f](https://github.com/asiburrahman/amar-gadget/commit/b9cf24f90a2aa2ce8623499ddbc00b8014cfb6ab), with a fully successful [GitHub CI run](https://github.com/asiburrahman/amar-gadget/actions/runs/42205423702). The inspected PostgreSQL 16 and 18 logs each show:
 
-- 172 Jest suites and 1,250 tests, with no skipped tests.
+- 174 Jest suites and 1,287 tests, with no skipped tests.
 - 16 native tests and 40 browser cases across Chromium, Firefox, WebKit and mobile Chromium.
 - TypeScript, Prisma validation, production/standalone build and repository lint with zero errors/warnings.
-- Successful PostgreSQL 16 and 18 jobs, including compiled collection, outage, local STARTTLS OTP, refund and content-publication checks.
+- Actual CLI upgrade/invalid-data rollback and seven measured query-plan checks, plus compiled schema protection, collection, outage, local STARTTLS OTP, refund and content-publication checks.
 
-These counts describe that completed commit and agree with the final local checkpoint. Both PostgreSQL job logs were inspected, rather than inferring test coverage from a green badge. See the implementation notes and log for the exact scope. Test elapsed times are not marketplace performance measurements. Earlier failed runs are retained in the audit record rather than presented as successful checks.
+These counts describe the complete CI-verified source commit. The earlier local full gate passed 1,280 tests; the expanded focused invariant suite then passed 28 cases, including seven additional boundary cases now included in CI's full 1,287-test run. Both PostgreSQL job logs were inspected, rather than inferring coverage from a green badge. See the [database rollout and evidence runbook](docs/DATABASE_INVARIANTS_RUNBOOK.md) for the exact scope. Test elapsed times are not marketplace performance measurements. Earlier failed runs are retained rather than presented as successful checks.
 
 For the mandatory full database gate, create a **separate loopback control database** named `audit_*`, with an account permitted to create disposable test databases, and privately set `TEST_DATABASE_URL` to it. The runner creates and drops only its own random database, applies actual migrations, seeds twice, runs the entire Jest suite and rejects skipped tests. It does not reset/migrate the supplied control database.
 
 ```sh
+npm run test:database-upgrade
+npm run test:database-plans
 npm run test:isolated
 npm run test:native
 npx tsc --noEmit
 npx prisma validate
 npm run lint
 npm run build
+npm run smoke:database-invariants
 npm run smoke:site-content
 npx playwright install chromium firefox webkit
 npm run test:browser
@@ -197,7 +200,7 @@ npm run test:browser
 
 Follow the [release verification runbook](docs/RELEASE_VERIFICATION.md) for the full compiled/provider checks and CI matrix. Running plain `npm test` without the guarded test database can skip database suites and is not release evidence. Browser/smoke runners use disposable synthetic accounts and local protocol fixtures; application code does not import those fixtures or fake provider success.
 
-No production migration, deployment, hosted money transfer, outbound customer email or main-branch merge has been performed by this audit. The exposed historical SMTP credential still requires the owner's provider-side revocation; removing a fallback from source does not revoke it.
+At the source-verification checkpoint, no main-branch merge had yet been performed. No production migration, deployment, hosted money transfer or outbound customer email was performed by this audit. The exposed historical SMTP credential still requires the owner's provider-side revocation confirmation; removing a fallback from source does not revoke it.
 
 ## Contributing and attribution
 

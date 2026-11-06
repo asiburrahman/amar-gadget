@@ -1,7 +1,7 @@
 # AUD-049: database invariants and rollout rehearsal
 
-**Status: implementation under verification; AUD-049 remains open.** The tracked
-count remains 49/51 until the complete local and PostgreSQL 16/18 CI gates pass.
+**Status: AUD-049 complete and CI-verified on b9cf24f, 6 November 2026.** The
+tracked count is 50/51 after the local and PostgreSQL 16/18 CI gates passed.
 AUD-051 is the separate, still-unconfirmed owner SMTP credential revocation.
 No production migration, provider payment, deployment or main merge is claimed.
 
@@ -172,7 +172,7 @@ npm run smoke:site-content
 npm run test:browser
 ```
 
-Observed so far (verification still active):
+Historical local verification checkpoints (before source CI closure below):
 
 - Real CLI baseline 37, read-only valid/invalid/wrong-target preflight, blocked
   invalid-role and duplicate-code upgrade, full DDL rollback, explicit known
@@ -219,6 +219,21 @@ Readiness has its documented five-second cache; compiled tests observe that
 bound before asserting drift and recovery without process restart.
 
 ## Main merge and external action
+
+### Observed source CI closure
+
+[Run 42205423702](https://github.com/asiburrahman/amar-gadget/actions/runs/42205423702)
+completed successfully on b9cf24f90a2aa2ce8623499ddbc00b8014cfb6ab. Repository lint
+and both database jobs passed. Downloaded logs for PostgreSQL 16 job
+127850716057 and PostgreSQL 18 job 127850716398 were inspected: each contains
+174 suites / 1,287 tests with no skips, 16 native tests, 40 browser cases,
+actual CLI upgrade/atomic invalid-data rejection, all seven measured plans,
+TypeScript/schema/build and all compiled protection/provider/content/outage
+checks. Migration 38 is now published; do not edit its SQL or earlier history.
+
+The earlier local 1,280-test full gate and later 28-case expanded invariant
+suite are distinct checkpoints; the source CI ran all 1,287 tests together.
+The historical failures above are retained, not relabeled as green results.
 
 The owner explicitly authorized merging into main after implementation and
 required verification. Fetch and inspect main/branch ancestry, preserve any
